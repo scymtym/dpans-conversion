@@ -1,11 +1,9 @@
-(cl:defpackage #:dpans-conversion
+(cl:defpackage #:dpans-conversion.parser
   (:use
    #:cl)
 
   (:local-nicknames
    (#:a   #:alexandria)
-
-   (#:env #:computation.environment)
 
    (#:bp  #:architecture.builder-protocol))
 

@@ -1,4 +1,4 @@
-(cl:in-package #:dpans-conversion)
+(cl:in-package #:dpans-conversion.html)
 
 ;;;
 
@@ -96,14 +96,6 @@
                       relations))))))
     (bp:walk-nodes builder #'visit body)))
 
-(expand 'list
-        (bp:node ('list :foo :bar 1 :baz 2)
-          (1 (:fez . 1) (bp:node ('list :whoop)))
-          (* (:doo . *) (list (bp:node ('list :other)) (bp:node ('list :argument)))))
-        (list (bp:node ('list :thing))))
-
-(expand 'list (test "\\secref#1") (list (bp:node ('list :word :content "foo"))))
-
 (defvar *math?* nil) ; TODO hack
 
 (defun render-to-file (tree file environment &key (use-mathjax        t)
@@ -159,7 +151,7 @@
                                                   (t
                                                    (append body
                                                            (list (bp:node (builder :block)
-                                                                   (* (:element . *) (bp:node-relation builder :argument node))))
+                                                                   (* (:element . *) arguments)))
                                         ; (list (bp:node (builder :word :content "{")))
                                         ; (bp:node-relation builder :argument node)
                                         ; (list (bp:node (builder :word :content "}")))
@@ -174,13 +166,18 @@
                                                        (bp:node-relation builder '(:argument . *) node))))
                                    (cxml:text (format nil "\\~A~@[{~{~A~}}~] " name arguments)))
                                  nil)
+                                ((and (member name '("vtop" "hbox") :test #'string=)
+                                      arguments)
+                                 (values (bp:node (builder :splice :expansion-of node)
+                                           (* (:element . *) arguments))
+                                         :splice '() '(:element)))
                                 ((member name '("newif" "overfullrule" "pageno"
                                                 "Head" "HeadI" "longbookline"
                                                 "DocumentNumber" "vfill" "vfil" "hfill" "hfil" "noalign"
-                                                "eject" "break"
+                                                "eject" "break" "vtop"
                                                 "newskip" "newdimen" "hsize" "topskip"
                                                 "leftskip" "parindent" "parskip"
-                                                "hbox" "fullhsize" "vskip" "hskip" "parfillskip" "relax"
+                                                "setbox" "hbox" "fullhsize" "vskip" "hskip" "parfillskip" "relax"
                                                 "obeylines" "rightskip" "noindent" "hangindent" "negthinspace"
                                                 "quad" "penalty" "Vskip" "medbreak"
                                                 "bye")
@@ -652,7 +649,7 @@
                         (:bracket-group
                          (funcall recurse))
                         ;; Ignored
-                        ((:input :comment :define-section))))
+                        ((:input :comment :define-section :editor-note :reviewer-note))))
                  (pop stack))))
       (bp:walk-nodes builder (bp:peeking #'peek (a:curry #'visit :top)) tree))))
 
@@ -706,17 +703,19 @@
 
 (defun parse-and-include (file)
   (format t "~V@TParsing ~A~%" (* 2 *include-depth*) (pathname-name file))
-  (include (parse-file file :root-kind (if (zerop *include-depth*) :file :included-file))))
+  (include (dpans-conversion.parser::parse-file file :root-kind (if (zerop *include-depth*) :file :included-file))))
 
 ;;;
 
 (defclass toc-section ()
   ((%name     :initarg  :name
+              :type     (or null string)
               :reader   name)
    (%parent   :initarg  :parent
               :reader   parent
               :initform nil)
    (%children :initarg  :children
+              :type     list
               :accessor children
               :initform '())))
 
@@ -788,7 +787,7 @@
     (flet ((process-file (input output)
              (format t "Processing file ~A~%" input)
              (with-simple-restart (continue "Skip ~A" input)
-               (render-to-file (parse-file input) output env
+               (render-to-file (dpans-conversion.parser::parse-file input) output env
                                :use-mathjax        nil
                                :modify-environment t))))
       (process-file "data/dpANS3/setup-title.tex"    "/tmp/output/setup-title.html")
@@ -805,7 +804,22 @@
                              (with-simple-restart (continue "Skip ~A" input)
                                (parse-and-include input))))
              (toc   (build-toc files)))
-        (:inspect (vector env files toc) :new-inspector? t)
+        (:inspect (vector env
+                          (architecture.builder-protocol.visualization::as-tree
+                           (first files) 'list)
+                          (architecture.builder-protocol.visualization::as-query
+                           (first files) 'list :editor-note)
+                          (architecture.builder-protocol.visualization::as-query
+                           (dpans-conversion.transform::apply-transforms
+                            (list ; (make-instance 'dpans-conversion.transform::strip-comments)
+                                  (make-instance 'dpans-conversion.transform::expand-macros :environment env :debug-expansion '("includeDictionary"))
+                                  ; (make-instance 'dpans-conversion.transform::strip-tex-commands)
+                                  )
+                            (first files))
+                           'list
+                           :editor-note)
+                          toc)
+                  :new-inspector? t)
         (map nil (lambda (file)
                    (let* ((filename (getf (bp:node-initargs 'list file) :filename))
                           (name     (pathname-name filename))
@@ -821,12 +835,3 @@
                                        :debug-expansion debug-expansion))))
              files)))))
 
-(:inspect
- (architecture.builder-protocol.visualization::as-tree
-  (parse-file "data/dpANS3/concept-glossary.tex") 'list)
- :new-inspector? t)
-
-; (render-to-file *chapter-one* "/tmp/test.html")
-; (render-to-file *concept-tokens* "/tmp/test.html")
-; (render-to-file *dict-arrays*  "/tmp/test.html")
-; (render-to-file *dict-reader*  "/tmp/test.html")

@@ -1,4 +1,4 @@
-(cl:in-package #:dpans-conversion)
+(cl:in-package #:dpans-conversion.parser)
 
 (defgrammar dpans
   (:cached? nil)
@@ -8,11 +8,24 @@
 
 ;;; Lexical stuff
 
+(defrule end-of-line ()
+  (or #\Newline (not :any)))
+
+(defrule whitespace/in-line+ ()
+  (+ (or #\Space #\Tab)))
+
+(defrule comment-line ()
+    (bounds (start end)
+      (seq #\% (* (<<- content (and (not (end-of-line)) :any))) (end-of-line)))
+  (let ((content (coerce (nreverse content) 'string)))
+    (bp:node* (:comment-line :content content :source (cons start end)))))
+
 (defrule comment ()
     (bounds (start end)
-      (seq #\% (* (<<- content (and (not #\Newline) :any))) #\Newline))
-  (let ((content (coerce (nreverse content) 'string)))
-    (bp:node* (:comment :source (cons start end) :content content))))
+      (seq (<<- lines (comment-line))
+           (* (seq (? (whitespace/in-line+)) (<<- lines (comment-line))))))
+  (bp:node* (:comment :source (cons start end))
+    (* (:line . *) (nreverse lines))))
 
 (defrule skippable ()
     (or #\Space #\Tab #\Newline (comment))
@@ -81,10 +94,6 @@
                                 :any))))
   (bp:node* (:word :content (coerce (nreverse (remove nil characters)) 'string))))
 
-(test "\\def\\curly #1{{$\\{$}#1\\/{$\\}$}}")
-
-(test "\\/")
-
 (defrule paragraph-break ()
   (bounds (start end) (seq #\Newline (* (or #\Space #\Tab)) #\Newline))
   (bp:node* (:paragraph-break :source (cons start end))))
@@ -152,8 +161,6 @@
 (define-group bracket-group :bracket-group #\[  #\])
 (define-group math-group    :math          #\$  #\$)
 (define-group math-display  :math-display  "$$" "$$")
-
-(test "$$ foo/bar $$")
 
 (defrule text ()
     (+ (or (seq #\{
@@ -263,8 +270,6 @@
                       (bp:node* (:figref :source (cons start end))
                         (1 (:name . 1) (bp:node* (:word :content name))))))))
 
-(test "\\seefigure\\StdCharsThree.")
-
 (defrule secref ()
   (bounds (start end)
           (seq "\\secref" (or (seq #\\ (<- name (identifier)))
@@ -282,16 +287,6 @@
     (1 (:name . 1) (if (stringp name)
                        (bp:node* (:word :content name))
                        name))))
-
-(defun test (input &key (expression '(document "filename" :file)))
-  (bp:with-builder ('list)
-    (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-      (nth-value 2 (parser.packrat:parse expression input)))))
-
-(test "For information about extensions and subsets, \\seesection\\LanguageExtensions\\
-and \\secref\\LanguageSubsets.")
-
-(test "\\secref\\LanguageSubsets." :expression '(secref))
 
 (define-command keyref ; lambda list keyword reference
   (1 :name (element)))
@@ -394,9 +389,6 @@ and \\secref\\LanguageSubsets.")
                 (or ,@(map 'list #'list rules))))))))
   (define))
 
-(test "\\allowotherkeys" :expression '(lambda-list-keyword))
-(test "\\optional" :expression '(lambda-list-keyword))
-
 (defrule definition-special-operator ()
     (bounds (start end)
       (seq "\\" "Defspec" (? (or (seq "WithValues" (? "Newline")) "NoReturn"))
@@ -416,8 +408,8 @@ and \\secref\\LanguageSubsets.")
            (? (seq (skippable*) #\{     (* (<<- return-values (element))) (skippable*) #\}))))
   (bp:node* (:function-definition :source (cons start end))
     (1 (:name . *)         name)
-    (* (:argument . *)     arguments)
-    (* (:return-value . *) return-values)))
+    (* (:argument . *)     (nreverse arguments))
+    (* (:return-value . *) (nreverse return-values))))
 
 (defrule definition-defun/multi ()
     (bounds (start end)
@@ -426,20 +418,9 @@ and \\secref\\LanguageSubsets.")
            (skippable*) #\{ (* (<<- return-values (element)))            (skippable*) #\}
            (skippable*) #\{ (* (seq "\\entry{" (<<- names (element)) #\} (skippable*))) #\}))
   (bp:node* (:function-definition :source (cons start end))
-    (* (:name . *)         names)
-    (* (:argument . *)     arguments)
-    (* (:return-value . *) return-values)))
-
-(test "\\DefunMultiWithValues {number {\\opt} divisor} {quotient, remainder}
-      {\\entry{floor}
-      \\entry{ffloor}
-      \\entry{ceiling}
-      \\entry{fceiling}
-      \\entry{truncate}
-      \\entry{ftruncate}
-      \\entry{round}
-      \\entry{fround}}
-" :expression '(definition-defun))
+    (* (:name         . *) (nreverse names))
+    (* (:argument     . *) (nreverse arguments))
+    (* (:return-value . *) (nreverse return-values))))
 
 (defrule definition-defmacro ()
     (bounds (start end)
@@ -448,9 +429,9 @@ and \\secref\\LanguageSubsets.")
               (seq (skippable*) #\{     (* (<<- arguments     (element))) (skippable*) #\})
            (? (seq (skippable*) #\{     (* (<<- return-values (element))) (skippable*) #\}))))
   (bp:node* (:macro-definition :source (cons start end))
-    (1 (:name . 1)         name)
-    (* (:argument . *)     arguments)
-    (* (:return-value . *) return-values)))
+    (1 (:name         . 1) name)
+    (* (:argument     . *) (nreverse arguments))
+    (* (:return-value . *) (nreverse return-values))))
 
 (defrule definition-type ()
   (bounds (start end)
@@ -469,40 +450,29 @@ and \\secref\\LanguageSubsets.")
 
 (define-command (bnf-rule :command-name "auxbnf")
   (1  :name    (word)) ; TODO
-  (1* :element (element)))
-
-(test "{\\def\\TVar{\\curly{\\param{var} | \\down{pattern}}}\\def\\starTVar{\\star{\\TVar}}
-\\auxbnf{reqvars}{\\starTVar}      }")
-
-(test "\\auxbnf{reqvars}{\\starTVar}" :expression '(bnf-rule))
-
-(test "\\auxbnf{keyvars}{\\lbrac{\\key} \\star{\\KeyVarValueSuppliedP}\\CR
-\\xbrac\\brac{\\allowotherkeys}\\rbrac}
-")
-
+  (1* :element (or (row-terminator) (element))))
 
 ;;;
 
-(test "\\showtwo{Sample Setf Expansion of a SUBSEQ Form}{
-\\f{(g0004 g0005 g0006)}               & ;list of temporary variables    \\cr
-}")
-
 (defrule coloumn-separator ()
-  #\&
+    #\&
   (bp:node* (:column-separator)))
+
+(defrule row-terminator ()
+  (seq #\\ (or "cr" "CR") (:transform (seq) nil)))
 
 (define-command (none :command-name "None"))
 
 (defrule table-cell/inner ()
     (bounds (start end)
-      (seq (* (<<- elements (and (not (or #\& "\\span" "\\cr")) (element))))
+      (seq (* (<<- elements (and (not (or #\& "\\span" (row-terminator))) (element))))
            (or #\& (<- span (:transform "\\span" 2))))) ; TODO should compute this
   (bp:node* (:cell :span span :source (cons start end))
     (* :element (nreverse elements))))
 
 (defrule table-cell/last ()
     (bounds (start end)
-      (seq (* (<<- elements (and (not "\\cr") (element)))) "\\cr"))
+      (seq (* (<<- elements (and (not (row-terminator)) (element)))) (row-terminator)))
   (bp:node* (:cell :source (cons start end))
     (* :element (nreverse elements))))
 
@@ -644,11 +614,14 @@ and \\secref\\LanguageSubsets.")
                                          (seq (skippable*) (<- item (or (issue) (list-item))) (skippable*))
                                          item)))
 
+(defrule enumeration-item-keyword ()
+  (seq "\\item" (? "item") #\{ (+ (guard digit-char-p)) ".}"))
+
 (defrule enumeration-item ()
     (bounds (start end)
-      (seq "\\itemitem{" (+ (guard digit-char-p)) ".}"
+      (seq (enumeration-item-keyword)
            (skippable*)
-           (* (<<- body (and (not (or "\\itemitem" "\\endlist")) (element))))))
+           (* (<<- body (and (not (or (enumeration-item-keyword) "\\endlist")) (element))))))
   (bp:node* (:enumeration-item :source (cons start end))
     (* (:body . *) (nreverse body))))
 
@@ -657,35 +630,6 @@ and \\secref\\LanguageSubsets.")
                                :element (:transform
                                          (seq (skippable*) (<- item (or (issue) (enumeration-item))) (skippable*))
                                          item)))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse
-     '(item-list)
-     "\\beginlist
-
-\\itemitem{\\bull} If a generic function of the given name already exists,
-the existing generic function object is modified.  Methods specified
-by the current \\macref{defgeneric} form are added, and any methods in the
-existing generic function that were defined by a previous \\macref{defgeneric}
-form are removed.  Methods added by the current \\macref{defgeneric}
-form might replace methods defined by \\macref{defmethod},
-\\macref{defclass}, \\macref{define-condition}, or \\macref{defstruct}.
-No other methods in the generic function are affected
-or replaced.
-
-\\itemitem{\\bull} If the given name names
-    an \\term{ordinary function},
-    a  \\term{macro},
- or a \\term{special operator},
-an error is signaled.
-
-\\itemitem{\\bull} Otherwise a generic function is created with the
-methods specified by the method definitions in the \\macref{defgeneric}
-form.
-
-\\endlist
-")))
 
 (defrule definition-item ()
     (bounds (start end)
@@ -707,46 +651,47 @@ form.
                                      :element (:transform
                                                (seq (skippable*) (<- item (or (issue) (definition-item))) (skippable*))
                                                item)))
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse
-     '(definition-list)
-     "\\beginlist
-
-\\itemitem{a \\term{symbol}}
-
-     denotes a \\term{parameter specializer} which is the \\term{class}
-     named by that \\term{symbol}.
-
-\\endlist
-")))
 
 (defrule issue ()
-  (bounds (start end)
-    (seq "\\issue" #\{ (<- name (word)) #\} (? #\Newline)
-         (* (<<- elements (and (not "\\endissue") (element))))
-         "\\endissue" #\{ (<- name (word)) #\} (? #\Newline)))
+    (bounds (start end)
+      (seq "\\issue" #\{ (<- name (word)) #\} (? #\Newline)
+           (* (<<- elements (and (not "\\endissue") (element))))
+           "\\endissue" #\{ (<- name (word)) #\} (? #\Newline)))
   (bp:node* (:issue :source (cons start end))
     (1 :name name)
     (* :element (nreverse elements))))
 
-(test "\\issue{DECLARATION-SCOPE:NO-HOISTING}
-\\issue{WITH-ADDED-METHODS:DELETE}
-\\endissue{WITH-ADDED-METHODS:DELETE}
-\\endissue{DECLARATION-SCOPE:NO-HOISTING}")
+(defrule editor-note ()
+    (bounds (start end)
+      (seq "\\editornote{" (+ (<<- editor (and (not #\:) :any))) #\:
+           (+ (<<- content (and (not #\}) :any)))
+           #\}))
+  (let ((editor  (coerce (nreverse editor) 'string))
+        (content (coerce (nreverse content) 'string)))
+    (bp:node* (:editor-note :editor  editor
+                            :content content
+                            :bounds  (cons start end)))))
 
+(defrule reviewer ()
+  (bounds (start end)
+          (seq "\\reviewer{" (? (seq (+ (<<- reviewer (and (not (or #\: #\})) :any))) #\:))
+               (+ (<<- content (and (not #\}) :any)))
+               #\}))
+  (let ((reviewer (coerce (nreverse reviewer) 'string))
+        (content  (coerce (nreverse content) 'string)))
+    (bp:node* (:reviewer-note :reviewer reviewer
+                              :content  content
+                              :bounds   (cons start end)))))
 
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse
-     '(issue)
-     "\\issue{foo}
-bla bla
-\\endissue{foo}")))
+(defrule label-name ()
+    (bounds (start end)
+      (seq (* (<<- content (and (not ":") :any))) #\: (? #\:)))
+  (let ((content (coerce (nreverse content) 'string)))
+    (bp:node* (:word :content content :bounds (cons start end)))))
 
 (defrule label ()
     (bounds (start end)
-      (seq "\\label" (skippable*) (<- name (word)) ; "::"
+      (seq "\\label" (skippable*) (<- name (label-name))
            (skippable*) (* (<<- elements (and (not (or "\\label" "\\endcom" "\\endissue"))
                                               (element))))))
   (bp:node* (:part :bounds (cons start end))
@@ -754,13 +699,10 @@ bla bla
     (* (:element . *) (nreverse elements))))
 
 (defrule component-symbol ()
-    (bounds (start end)
-      (+ (<<- characters (and (not (or #\Space #\Tab #\, #\})) :any))))
+  (bounds (start end)
+          (+ (<<- characters (and (not (or #\Space #\Tab #\, #\})) :any))))
   (let ((name (coerce (nreverse characters) 'string)))
-   (bp:node* (:symbol :name name :source (cons start end)))))
-
-(test "\\begincom{foo}
-\\endcom" :expression '(com))
+    (bp:node* (:symbol :name name :source (cons start end)))))
 
 (defrule com ()         ; TODO split name into multiple names at comma
     (bounds (start end)
@@ -773,23 +715,6 @@ bla bla
   (bp:node* (:component :source (cons start end))
     (* (:name . *)    names)
     (* (:element . *) (nreverse elements))))
-
-(test "\\begincom{floor, ffloor, ceiling, fceiling,
-      truncate, ftruncate, round, fround}\\ftype{Function}
-
-      \\label Syntax::
-
-\\DefunMultiWithValues {number {\\opt} divisor} {quotient, remainder}
-  {\\entry{floor}
-   \\entry{ffloor}
-   \\entry{ceiling}
-   \\entry{fceiling}
-   \\entry{truncate}
-   \\entry{ftruncate}
-   \\entry{round}
-   \\entry{fround}}
-
-\\endcom")
 
 (defrule define-section ()
     (bounds (start end)
@@ -814,76 +739,6 @@ bla bla
 (define-command gentry
   (1  :name (word))
   (*> :body (glossary-entry-body) :open-delimiter nil :close-delimiter nil))
-
-#+no (bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse
-     '(gentry)
-     "\\gentry{active} \\Adjective\\
-  1. (of a \\term{handler}, a \\term{restart}, or a \\term{catch tag})
-     having been \\term{established} but not yet \\term{disestablished}.
-  2. (of an \\term{element} of an \\term{array})
-     having an index that is greater than or equal to zero,
-     but less than the \\term{fill pointer} (if any).
-     For an \\term{array} that has no \\term{fill pointer},
-     all \\term{elements} are considered \\term{active}.
-
-")))
-
-#+no (bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse
-     '(gentry)
-     "\\gentry{explicit use} \\Noun\\ (of a \\term{variable} $V$ in a \\term{form} $F$)
-  a reference to $V$ that is directly apparent in the normal semantics of $F$;
-  \\ie that does not expose any undocumented details of the
-      \\term{macro expansion} of the \\term{form} itself.
-  References to $V$ exposed by expanding \\term{subforms} of $F$ are, however,
-  considered to be \\term{explicit uses} of $V$.
-
-")))
-
-#+no (bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse
-     '(gentry)
-
-     "\\gentry{()} \\pronounced{\\Stress{nil}}, \\Noun\\
-  an alternative notation for writing the symbol~\\nil, used to emphasize
-  the use of \\term{nil} as an \\term{empty list}.
-
-")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse '(other-command-application) "\\gexample{The characters \\f{\\#\\\\A} and \\f{\\#\\\\a} have case,
-	    but the character \\f{\\#\\\\\\$} has no case.}")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse '(block*) "{The characters \\f{\\#\\\\A} and \\f{\\#\\\\a} have case,
-	    but the character \\f{\\#\\\\\\$} has no case.}")))
-
-
-(:inspect (nth-value 2
-           (bp:with-builder ('list)
-             (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-               (parser.packrat:parse
-                '(document)
-                "\\gentry{case} \\Noun\\ (of a \\term{character})
-  the property of being either \\term{uppercase} or \\term{lowercase}.
-  Not all \\term{characters} have \\term{case}.
-  \\gexample{The characters \\f{\\#\\\\A} and \\f{\\#\\\\a} have case,
-	    but the character \\f{\\#\\\\\\$} has no case.}
-  \\Seesection\\CharactersWithCase\\ and \\thefunction{both-case-p}.
-
-\\gentry{catch} \\Noun\\
-  an \\term{exit point} which is \\term{established} by a \\specref{catch}
-  \\term{form} within the \\term{dynamic scope} of its body,
-  which is named by a \\term{catch tag},
-  and to which control and \\term{values} may be \\term{thrown}.
-
-")))) :new-inspector? t)
 
 ;;;
 
@@ -920,9 +775,6 @@ bla bla
     (* (:argument . *) (nreverse arguments))
     (* (:body     . *) (nreverse body))))
 
-(test "\\def\\EV{{\\penalty20000}{$\\rightarrow$}{\\penalty20000}}")
-
-
 (defrule let-macro ()
   (bounds (start end)
           (seq "\\let"
@@ -935,79 +787,6 @@ bla bla
         (body (coerce (nreverse body) 'string)))
     (bp:node* (:definition :name name :source (cons start end))
       (1 (:body . *) (bp:node* (:word :content body))))))
-
-(test "\\let\\normaltype=\\elevenpoint")
-(test "\\gdef\\Ctwo#1\\!#2
-      {\\hangindent1pc\\rm #1\\dotleader#2\\hskip-5pc\\null\\par}")
-
-#+no (bp:with-builder ('list)
-       (parser.packrat:parse  '(def) "\\def\\CLtL{{\\it Common Lisp: The Language\\/}}"))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse
-     '(def) "\\def\\Thetypes #1{The \\term{types} \\typeref{#1}}")))
-
-(test "\\def\\DefunMultiWithValues
-#1 #2 #3{{\\let\\vtop=\\Vtop
-\\def\\entry##1{##1&\\cr}
-\\def\\blankline{\\vksip 5pt}
-\\halign{\\hskip\\leftskip\\function ## {\\arg #1}\\hfil&\\quad\\EV\\ {\\arg #2}##\\cr#3}}
-\\Vskip\\normalparskip!}"
-      :expression '(def))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse
-     '(def) "\\def\\ang#1{{$\\langle$}{\\it #1\\/}{$\\rangle$\\/}}")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse
-     '(def) "\\def\\keyref#1{\\clref{\\&#1}}")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse
-     '(def) "\\def\\newterm #1{{\\bit #1\\/}\\idxterm{#1}}")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse
-     '(let-macro) "\\let\\sub_	")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse
-     '(document)
-     "% -*- Mode: TeX -*-
-\\overfullrule 0pt
-\\let\\sub_		%subscripts
-% fonts
-")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse
-     '(document :file :file)
-     "\\def\\beginchapter#1#2#3#4{\\xbeginchapter{#1}{\\bookline}{#2}{#2}{#3}{#4}\\par
-\\endTitlePage}")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse
-     '(let-macro)
-     "\\let\\captext\\empty}")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse '(document) "\\let\\vv=\\vtop")))
-
-(test "\\f{foo}")
-(test "\\f{(and $T\\sub 1$ $\\ldots$ $T\\sub n$)}")
-(test "{(and $T\\sub 1$ $\\ldots$ $T\\sub n$)}" :expression '(block*))
-(test "see \\chapref#1")
-(test "\\pageno=0")
 
 (defrule other-command-application ()
     (bounds (start end)
@@ -1065,24 +844,8 @@ bla bla
   (let ((name (if see?
                   (concatenate 'string "see" name)
                   name)))
-    ; (when (equal name "endissue") (break))
     (bp:node* (:other-command-application :name name :source (cons start end))
       (* (:argument . *) arguments))))
-
-(test "$$\\hbox{\\interleave{$O$}}$$")
-
-(test "\\def\\OV{{\\penalty20000}{$\\buildrel{or}\\over\\rightarrow$}{\\penalty20000}}")
-
-(test "\\def\\EV{{\\penalty20000}{$\\rightarrow$}{\\penalty20000}}")
-(test "\\def\\afterheaderbreak{\\penalty100000 }")
-(test "100000" :expression '(element))
-
-(test "\\newskip  \\normalleftskip	\\normalleftskip   = 10pc")
-
-(test "\\newif \\iftt
-      \\newif \\ifbf
-      \\newif \\ifsphy \\sphyfalse
-")
 
 (defrule element ()
   (or (comment)
@@ -1115,7 +878,11 @@ bla bla
       (definition-list)
 
       (code)
+      
       (issue)
+      (editor-note)
+      (reviewer)
+      
       (label)
       (none)
       (com)
@@ -1185,145 +952,15 @@ bla bla
     (substitute #\¶ #\Newline raw)))
 
 (defun parse-file (file &key (root-kind :file))
-  (let ((input (a:read-file-into-string file)))
+  (let* ((input    (a:read-file-into-string file))
+         (filename (enough-namestring file))) ; TODO allow specifying base 
     (bp:with-builder ('list)
       (multiple-value-bind (result position value)
-          (parser.packrat:parse `(document ,file ,root-kind) input)
+          (parser.packrat:parse `(document ,filename ,root-kind) input)
         (ecase result
           ((t)    value)
           (:fatal (let ((snippet (make-snippet input position position)))
                     (error "At ~A [~A]: ~A" position snippet value))))))))
 
-(let ((input (alexandria:read-file-into-string "data/dpANS3/setup.tex")))
-  (bp:with-builder ('list)
-    (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-      (parser.packrat:parse '(document) input))))
-
-(let ((input (alexandria:read-file-into-string "data/dpANS3/setup-version.tex")))
-  (bp:with-builder ('list)
-    (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-      (parser.packrat:parse '(document) input))))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse '(displaythree) "\\displaythree{Readtable defined names}{
-*readtable*&readtable-case\\cr
-copy-readtable&readtablep\\cr
-get-dispatch-macro-character&set-dispatch-macro-character\\cr
-get-macro-character&set-macro-character\\cr
-make-dispatch-macro-character&set-syntax-from-char\\cr
-}")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse
-     '(tablefigsix)
-     "\\tablefigsix{Standard Character Subrepertoire (Part 1 of 3: Latin Characters)}%
-{Graphic ID}{Glyph}{Description}
-{Graphic ID}{Glyph}{Description}{
-  LA01  &  \\f{a}  &  small a    & LN01  &  \\f{n}  &  small n    \\cr
-}")))
 
 
-(let ((input (alexandria:read-file-into-string "data/dpANS3/chap-0.tex")))
-  (bp:with-builder ('list)
-    (let ((parser.packrat.grammar.base::*debug-stream* nil ; *standard-output*
-                                                       ))
-      (parser.packrat:parse '(document) input))))
-
-(defparameter *chapter-one*
-  (let ((input (alexandria:read-file-into-string "data/dpANS3/concept-syntax.tex")))
-    (bp:with-builder ('list)
-      (let ((parser.packrat.grammar.base::*debug-stream* nil ; *standard-output*
-                                                         ))
-        (nth-value 2 (parser.packrat:parse '(document) input))))))
-
-(defparameter *dict-arrays*
-  (let ((input (alexandria:read-file-into-string "data/dpANS3/dict-arrays.tex")))
-    (bp:with-builder ('list)
-      (let ((parser.packrat.grammar.base::*debug-stream* nil ; *standard-output*
-                                                         ))
-        (nth-value 2 (parser.packrat:parse '(document) (subseq input 0 30000)))))))
-
-(defparameter *dict-reader*
-  (let ((input (alexandria:read-file-into-string "data/dpANS3/dict-reader.tex")))
-    (bp:with-builder ('list)
-      (let ((parser.packrat.grammar.base::*debug-stream* nil ; *standard-output*
-                                                         ))
-        (nth-value 2 (parser.packrat:parse '(document) input))))))
-
-(defparameter *concept-tokens*
-  (let ((input (alexandria:read-file-into-string "data/dpANS3/concept-filenames.tex")))
-    (bp:with-builder ('list)
-      (let ((parser.packrat.grammar.base::*debug-stream* nil ; *standard-output*
-                                                         ))
-        (nth-value 2 (parser.packrat:parse '(document) input))))))
-
-(let ((input (alexandria:read-file-into-string "data/dpANS3/concept-syntax.tex")))
-  (bp:with-builder ('list)
-    (let ((parser.packrat.grammar.base::*debug-stream* nil ; *standard-output*
-                                                       ))
-      (clouseau:inspect
-       (architecture.builder-protocol.visualization::as-tree
-        (nth-value 2 (parser.packrat:parse '(document) input))
-        'list)
-       :new-process t))))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse '(document) "\\beginSubsection{Foo}
-\\endSubsection")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse '(document) "\\tabletwo{Abbreviation}{Meaning}{
-\\entry{\\Adjective}{adjective}
-\\entry{\\Adverb}{adverb}
-\\entry{\\ANSI}{compatible with one or more ANSI standards}
-\\entry{\\Computers}{computers}
-\\entry{\\Idiomatic}{idiomatic}
-\\entry{\\IEEE}{compatible with one or more IEEE standards}
-\\entry{\\ISO}{compatible with one or more ISO standards}
-\\entry{\\Mathematics}{mathematics}
-\\entry{\\Traditional}{traditional}
-\\entry{\\Noun}{noun}
-\\entry{\\Verb}{verb}
-\\entry{\\TransitiveVerb}{transitive verb}
-}")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse '(entry) "\\entry{\\Adjective}{adjective}")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse '(def) "\\def\\chapline{}")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse '(document) "\verb!foobar!foo \\{\\}")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse '(document) "where $0 \le i\sub{j} < d\sub{j}$,")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse '(document) "That is, a \term{class}~$C$ has the \term{proper name}~$S$ if $S=$")))
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse '(showthree) "\\showthree{Recommended Minimum Floating-Point Precision and Exponent Size}{
-Short  & 13 bits & 5 bits\\cr
-Single & 24 bits & 8 bits\\cr
-Double & 50 bits & 8 bits\\cr
-Long   & 50 bits & 8 bits\\cr
-}
-")))
-
-
-
-(bp:with-builder ('list)
-  (let ((parser.packrat.grammar.base::*debug-stream* *standard-output*))
-    (parser.packrat:parse '(element) "{\\obeylines\\gdef\\Ctwo#1\\!#2
-{\\hangindent1pc\\rm #1\\dotleader#2\\null\\par}}")))
