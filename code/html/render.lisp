@@ -179,7 +179,7 @@
                                                 "leftskip" "parindent" "parskip"
                                                 "setbox" "hbox" "fullhsize" "vskip" "hskip" "parfillskip" "relax"
                                                 "obeylines" "rightskip" "noindent" "hangindent" "negthinspace"
-                                                "quad" "penalty" "Vskip" "medbreak"
+                                                "quad" "penalty" "Vskip" "medbreak" "goodbreak"
                                                 "bye")
                                          :test 'string=)
                                  nil)
@@ -435,6 +435,19 @@
                                                (cxml:text "|"))))
                                     (br))
                               (bp:node-relation builder '(:name . *) node)))
+                        (:setf-definition
+                         (map nil (lambda (name)
+                                    (span "setf-definition"
+                                          (lambda ()
+                                            (cxml:text "(setf (") ; TODO
+                                            (span "name"          (lambda ()
+                                                                    (cxml:text (evaluate-to-string builder name))))
+                                            (span "lambda-list"   (a:curry recurse :relations '((:argument . *))))
+                                            (cxml:text ") ")
+                                            (span "new-value"   (a:curry recurse :relations '((:new-value . 1))))
+                                            (cxml:text ")")))
+                                    (br))
+                              (bp:node-relation builder '(:name . *) node)))
                         (:macro-definition
                          (span "function-definition"
                                (lambda ()
@@ -454,6 +467,8 @@
                                  (span "name"        (a:curry recurse :relations '((:name . 1))))
                                  (span "lambda-list" (a:curry recurse :relations '((:element . *)))))) ; TODO relation name
                          (br))
+
+                        
 
                         (:index)        ; drop index stuff here
 
@@ -547,6 +562,7 @@
                            (funcall recurse :relations '((:name . 1))))
                          (funcall recurse :relations '(:element)))
                         (:non-breaking-space (cxml:unescaped "&nbsp;")) ; TODO
+                        (:emdash (cxml:unescaped "&mdash;"))
                         (:paragraph-break (cxml:with-element "br"))
                         ;; Tables
                         ( :define-figure

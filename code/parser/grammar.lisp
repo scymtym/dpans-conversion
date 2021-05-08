@@ -18,13 +18,13 @@
     (bounds (start end)
       (seq #\% (* (<<- content (and (not (end-of-line)) :any))) (end-of-line)))
   (let ((content (coerce (nreverse content) 'string)))
-    (bp:node* (:comment-line :content content :source (cons start end)))))
+    (bp:node* (:comment-line :content content :bounds (cons start end)))))
 
 (defrule comment ()
     (bounds (start end)
       (seq (<<- lines (comment-line))
            (* (seq (? (whitespace/in-line+)) (<<- lines (comment-line))))))
-  (bp:node* (:comment :source (cons start end))
+  (bp:node* (:comment :bounds (cons start end))
     (* (:line . *) (nreverse lines))))
 
 (defrule skippable ()
@@ -64,8 +64,7 @@
   (coerce (nreverse content) 'string))
 
 (defrule name ()
-    (bounds (start end) (seq "\\" (<- name (identifier))))
-  (bp:node* (:name :name name :bounds (cons start end))))
+    (bounds (start end) (seq "\\" (<- name (identifier)))) (bp:node* (:name :name name :bounds (cons start end))))
 
 (defrule spacing-command ()
     (seq #\\ (or #\, #\: #\> #\; ; spaces
@@ -74,7 +73,11 @@
 
 (defrule non-breaking-space ()
     (bounds (start end) #\~)
-  (bp:node* (:non-breaking-space :source (cons start end))))
+  (bp:node* (:non-breaking-space :bounds (cons start end))))
+
+(defrule emdash ()
+    (bounds (start end) (:transform "---" nil))
+  (bp:node* (:emdash :bounds (cons start end))))
 
 (defrule escaped-character ()
     (seq #\\ (<- character (or #\\ #\@ #\= #\Space #\' #\[ #\]
@@ -96,7 +99,7 @@
 
 (defrule paragraph-break ()
   (bounds (start end) (seq #\Newline (* (or #\Space #\Tab)) #\Newline))
-  (bp:node* (:paragraph-break :source (cons start end))))
+  (bp:node* (:paragraph-break :bounds (cons start end))))
 
 (defrule verb ()
     (seq "\\verb" delimiter
@@ -111,7 +114,7 @@
 (defrule bf ()
     (bounds (start end)
       (seq "\\bf" (* (<<- elements (and (not (or #\} #\&)) (element))))))
-  (bp:node* (:bold :source (cons start end))
+  (bp:node* (:bold :bounds (cons start end))
     (* :element (nreverse elements))))
 
 (define-command (bold :kind :bold)
@@ -126,7 +129,7 @@
 (defrule it ()
     (bounds (start end)
       (seq "{\\it" (* (<<- elements (and (not #\}) (element)))) #\}))
-  (bp:node* (:italic :source (cons start end))
+  (bp:node* (:italic :bounds (cons start end))
     (* :element (nreverse elements))))
 
 (define-command f ; "fixed", that is monospace font
@@ -135,13 +138,13 @@
 (defrule tt ()
     (bounds (start end)
       (seq "{\\tt" (* (<<- elements (and (not #\}) (element)))) #\}))
-  (bp:node* (:typewriter :source (cons start end))
+  (bp:node* (:typewriter :bounds (cons start end))
     (* :element (nreverse elements))))
 
 (defrule rm ()
   (bounds (start end)
           (seq "{\\rm" (* (<<- elements (and (not #\}) (element)))) #\}))
-  (bp:node* (:roman :source (cons start end))
+  (bp:node* (:roman :bounds (cons start end))
     (* :element (nreverse elements))))
 
 (define-command hbox
@@ -154,7 +157,7 @@
               (* (<<- elements (and (not ,close-delimiter) (element))))
               (skippable*) ,close-delimiter)
               (:transform (seq) nil)) ; HACK
-     (bp:node* (,kind :source (cons start end))
+     (bp:node* (,kind :bounds (cons start end))
        (* (:element . *) (nreverse elements)))))
 
 (define-group block*        :block         #\{  #\})
@@ -226,7 +229,7 @@
                      ,@(map 'list #'make-argument-expression arguments)
                      (:transform (seq) nil) ; HACK
                      ))
-             (bp:node* (,kind :source (cons start end))
+             (bp:node* (,kind :bounds (cons start end))
                ,@(map 'list #'make-argument-result arguments variables))))))))
 
 (defrule input ()
@@ -236,7 +239,7 @@
            (* (<<- name (and (not (skippable)) :any)))
            (terminator)))
   (let ((name (coerce (nreverse name) 'string)))
-    (bp:node* (:input :name name :source (cons start end)))))
+    (bp:node* (:input :name name :bounds (cons start end)))))
 
 (define-command term
   (1 :name (word)))
@@ -256,25 +259,25 @@
     (bounds (start end)
       (seq "\\" (<- which (or #\s #\S)) "ee" (or "section" "chapter") "\\"
            (<- name (identifier))))
-  (bp:node* (:block :source (cons start end))
+  (bp:node* (:block :bounds (cons start end))
     (* :element (list (bp:node* (:word :content (concatenate 'string (string which) "ee ")))
-                      (bp:node* (:secref :source (cons start end))
+                      (bp:node* (:secref :bounds (cons start end))
                         (1 (:name . 1) (bp:node* (:word :content name))))))))
 
 (defrule seefig ()
     (bounds (start end)
       (seq "\\" (<- which (or #\s #\S)) "ee" "figure" "\\"
            (<- name (identifier))))
-  (bp:node* (:block :source (cons start end))
+  (bp:node* (:block :bounds (cons start end))
     (* :element (list (bp:node* (:word :content (concatenate 'string (string which) "ee ")))
-                      (bp:node* (:figref :source (cons start end))
+                      (bp:node* (:figref :bounds (cons start end))
                         (1 (:name . 1) (bp:node* (:word :content name))))))))
 
 (defrule secref ()
   (bounds (start end)
           (seq "\\secref" (or (seq #\\ (<- name (identifier)))
                               (<- name (argument)))))
-  (bp:node* (:secref :source (cons start end))
+  (bp:node* (:secref :bounds (cons start end))
     (1 (:name . 1) (if (stringp name)
                        (bp:node* (:word :content name)) ; TODO word is a hack
                        name))))
@@ -283,7 +286,7 @@
   (bounds (start end)
     (seq "\\chapref" (or (seq #\\ (<- name (identifier)))
                          (<- name (argument)))))
-  (bp:node* (:secref :source (cons start end))
+  (bp:node* (:secref :bounds (cons start end))
     (1 (:name . 1) (if (stringp name)
                        (bp:node* (:word :content name))
                        name))))
@@ -317,7 +320,7 @@
       (seq "\\" (or #\f #\F) "igref"
            (skippable*) (or (seq #\{ (<- name (element)) (skippable*) #\})
                             (seq #\\ (<- name (identifier))))))
-  (bp:node* (:figref :source (cons start end))
+  (bp:node* (:figref :bounds (cons start end))
     (1 (:name . 1) (if (stringp name)
                        (bp:node* (:word :content name))
                        name))))
@@ -326,7 +329,7 @@
   (bounds (start end)
     (seq "\\misc" (? "ref")
          (skippable*) #\{ (<- name (element)) (skippable*) #\}))
-  (bp:node* (:miscref :source (cons start end))
+  (bp:node* (:miscref :bounds (cons start end))
     (1 (:name . 1) name)))
 
 (defrule reference ()
@@ -395,7 +398,7 @@
                   (seq (skippable*) (? #\{) (<-  name          (element))     (skippable*) (? #\}))
                   (seq (skippable*) #\{     (* (<<- arguments     (element))) (skippable*) #\})
                (? (seq (skippable*) #\{     (* (<<- return-values (element))) (skippable*) #\}))))
-  (bp:node* (:special-operator-definition :source (cons start end))
+  (bp:node* (:special-operator-definition :bounds (cons start end))
     (1 (:name . 1)         name)
     (* (:argument . *)     arguments)
     (* (:return-value . *) return-values)))
@@ -406,7 +409,7 @@
               (seq (skippable*) (? #\{) (<-  name          (element))     (skippable*) (? #\}))
               (seq (skippable*) #\{     (* (<<- arguments     (element))) (skippable*) #\})
            (? (seq (skippable*) #\{     (* (<<- return-values (element))) (skippable*) #\}))))
-  (bp:node* (:function-definition :source (cons start end))
+  (bp:node* (:function-definition :bounds (cons start end))
     (1 (:name . *)         name)
     (* (:argument . *)     (nreverse arguments))
     (* (:return-value . *) (nreverse return-values))))
@@ -417,7 +420,7 @@
            (skippable*) #\{ (* (<<- arguments     (element)))            (skippable*) #\}
            (skippable*) #\{ (* (<<- return-values (element)))            (skippable*) #\}
            (skippable*) #\{ (* (seq "\\entry{" (<<- names (element)) #\} (skippable*))) #\}))
-  (bp:node* (:function-definition :source (cons start end))
+  (bp:node* (:function-definition :bounds (cons start end))
     (* (:name         . *) (nreverse names))
     (* (:argument     . *) (nreverse arguments))
     (* (:return-value . *) (nreverse return-values))))
@@ -428,7 +431,7 @@
               (seq (skippable*) (? #\{) (<-  name          (element))     (skippable*) (? #\}))
               (seq (skippable*) #\{     (* (<<- arguments     (element))) (skippable*) #\})
            (? (seq (skippable*) #\{     (* (<<- return-values (element))) (skippable*) #\}))))
-  (bp:node* (:macro-definition :source (cons start end))
+  (bp:node* (:macro-definition :bounds (cons start end))
     (1 (:name         . 1) name)
     (* (:argument     . *) (nreverse arguments))
     (* (:return-value . *) (nreverse return-values))))
@@ -438,9 +441,31 @@
           (seq "\\" "Deftype"
                (seq (skippable*) (? #\{) (<-  name        (element))     (skippable*) (? #\}))
                (seq (skippable*) #\{     (* (<<- elements (element))) (skippable*) #\})))
-  (bp:node* (:type-definition :source (cons start end))
+  (bp:node* (:type-definition :bounds (cons start end))
     (1 (:name . 1)    name)
-    (* (:element . *) elements)))
+    (* (:element . *) (nreverse elements))))
+
+(defrule definition-setf ()
+    (bounds (start end)
+      (seq "\\" "Defsetf"
+           (skippable*) (<- name (element))
+           (skippable*) #\{ (* (<<- arguments  (element))) (skippable*) #\}
+           (skippable*) #\{ (<- new-value (element)) (skippable*) #\}))
+  (bp:node* (:setf-definition :bounds (cons start end))
+    (1 (:name      . *) name)
+    (* (:argument  . *) (nreverse arguments))
+    (1 (:new-value . 1) new-value)))
+
+(defrule definition-setf/multi ()
+  (bounds (start end)
+    (seq "\\" "DefsetfMulti"
+         (skippable*) #\{ (* (<<- arguments  (element))) (skippable*) #\}
+         (skippable*) #\{ (<- new-value (element)) (skippable*) #\}
+         (skippable*) #\{ (* (seq "\\entry{" (<<- names (element)) #\} (skippable*))) #\}))
+  (bp:node* (:setf-definition :bounds (cons start end))
+    (* (:name      . *) names)
+    (* (:argument  . *) (nreverse arguments))
+    (1 (:new-value . 1) new-value)))
 
 (define-command param
   (1 :name (element)))
@@ -467,24 +492,24 @@
     (bounds (start end)
       (seq (* (<<- elements (and (not (or #\& "\\span" (row-terminator))) (element))))
            (or #\& (<- span (:transform "\\span" 2))))) ; TODO should compute this
-  (bp:node* (:cell :span span :source (cons start end))
+  (bp:node* (:cell :span span :bounds (cons start end))
     (* :element (nreverse elements))))
 
 (defrule table-cell/last ()
     (bounds (start end)
       (seq (* (<<- elements (and (not (row-terminator)) (element)))) (row-terminator)))
-  (bp:node* (:cell :source (cons start end))
+  (bp:node* (:cell :bounds (cons start end))
     (* :element (nreverse elements))))
 
 (defrule table-row ()
     (bounds (start end)
       (seq (* (<<- cells (table-cell/inner))) (<<- cells (table-cell/last)) (skippable*)))
-  (bp:node* (:row :source (cons start end))
+  (bp:node* (:row :bounds (cons start end))
     (* :cell (nreverse cells))))
 
 (defrule header ()
     (bounds (start end) (<<- elements (element)))
-  (bp:node* (:header :source (cons start end))
+  (bp:node* (:header :bounds (cons start end))
     (* :element (nreverse elements))))
 
 (define-command displaytwo
@@ -563,7 +588,7 @@
                                         ,element)))
                   ,end-string
                   (:transform (seq) nil))) ; HACK
-         (bp:node* (,kind :source (cons start end))
+         (bp:node* (,kind :bounds (cons start end))
            ,@(when name? `((1 (:name . 1) name)))
            (* :element (nreverse elements)))))))
 
@@ -579,7 +604,7 @@
                    (and (not (seq "\\" "end" (or #\c #\C) "hapter")) (element))))
            (seq "\\" "end" (or #\c #\C) "hapter")
            (:transform (seq) nil)))
-  (bp:node* (:chapter :source (cons start end))
+  (bp:node* (:chapter :bounds (cons start end))
     (1 (:id   . 1)  id)
     (1 (:name . 1)  name)
     (1 (:name2 . 1) name2)
@@ -604,7 +629,7 @@
       (seq (item-keyword)
            (skippable*)
            (seq (* (<<- body (and (not (or (item-keyword) "\\endlist")) (element)))))))
-  (bp:node* (:list-item :source (cons start end))
+  (bp:node* (:list-item :bounds (cons start end))
     (* (:body . *) (nreverse body))))
 
 
@@ -622,7 +647,7 @@
       (seq (enumeration-item-keyword)
            (skippable*)
            (* (<<- body (and (not (or (enumeration-item-keyword) "\\endlist")) (element))))))
-  (bp:node* (:enumeration-item :source (cons start end))
+  (bp:node* (:enumeration-item :bounds (cons start end))
     (* (:body . *) (nreverse body))))
 
 (define-environment (enumeration-list :keyword "list"
@@ -637,7 +662,7 @@
            (seq (skippable*) #\{ (* (<<- key (element))) (skippable*) #\})
            (skippable*)
            (* (<<- body (and (not (or "\\itemitem" "\\endlist")) (element))))))
-  (bp:node* (:definition-item :source (cons start end))
+  (bp:node* (:definition-item :bounds (cons start end))
     (* (:key  . *) (nreverse key))
     (* (:body . *) (nreverse body))))
 
@@ -657,17 +682,26 @@
       (seq "\\issue" #\{ (<- name (word)) #\} (? #\Newline)
            (* (<<- elements (and (not "\\endissue") (element))))
            "\\endissue" #\{ (<- name (word)) #\} (? #\Newline)))
-  (bp:node* (:issue :source (cons start end))
+  (bp:node* (:issue :bounds (cons start end))
     (1 :name name)
     (* :element (nreverse elements))))
+
+(defrule balanced-content ()
+    (* (or (seq (<<- content #\{)
+                (<<- content (balanced-content))
+                (<<- content #\}))
+           (<<- content (and (not #\}) :any))))
+  (with-output-to-string (stream)
+    (map nil (lambda (fragment)
+               (princ fragment stream))
+         (a:flatten (nreverse content)))))
 
 (defrule editor-note ()
     (bounds (start end)
       (seq "\\editornote{" (+ (<<- editor (and (not #\:) :any))) #\:
-           (+ (<<- content (and (not #\}) :any)))
+           (<- content (balanced-content))
            #\}))
-  (let ((editor  (coerce (nreverse editor) 'string))
-        (content (coerce (nreverse content) 'string)))
+  (let ((editor (coerce (nreverse editor) 'string)))
     (bp:node* (:editor-note :editor  editor
                             :content content
                             :bounds  (cons start end)))))
@@ -675,10 +709,9 @@
 (defrule reviewer ()
   (bounds (start end)
           (seq "\\reviewer{" (? (seq (+ (<<- reviewer (and (not (or #\: #\})) :any))) #\:))
-               (+ (<<- content (and (not #\}) :any)))
+               (<- content (balanced-content))
                #\}))
-  (let ((reviewer (coerce (nreverse reviewer) 'string))
-        (content  (coerce (nreverse content) 'string)))
+  (let ((reviewer (coerce (nreverse reviewer) 'string)))
     (bp:node* (:reviewer-note :reviewer reviewer
                               :content  content
                               :bounds   (cons start end)))))
@@ -702,7 +735,7 @@
   (bounds (start end)
           (+ (<<- characters (and (not (or #\Space #\Tab #\, #\})) :any))))
   (let ((name (coerce (nreverse characters) 'string)))
-    (bp:node* (:symbol :name name :source (cons start end)))))
+    (bp:node* (:symbol :name name :bounds (cons start end)))))
 
 (defrule com ()         ; TODO split name into multiple names at comma
     (bounds (start end)
@@ -712,20 +745,20 @@
            (* (<<- elements (and (not "\\endcom") (element))))
            "\\endcom"))
   (format t "      Parsed component ~{~A~^, ~}~%" names)
-  (bp:node* (:component :source (cons start end))
+  (bp:node* (:component :bounds (cons start end))
     (* (:name . *)    names)
     (* (:element . *) (nreverse elements))))
 
 (defrule define-section ()
     (bounds (start end)
       (seq "\\DefineSection" #\{ (<- name (word)) #\}))
-  (bp:node* (:define-section :source (cons start end))
+  (bp:node* (:define-section :bounds (cons start end))
     (1 (:name . 1) name)))
 
 (defrule define-figure ()
     (bounds (start end)
       (seq "\\DefineFigure" #\{ (<- name (word)) #\}))
-  (bp:node* (:define-figure :source (cons start end))
+  (bp:node* (:define-figure :bounds (cons start end))
     (1 (:name . 1) name)))
 
 ;;;
@@ -771,7 +804,7 @@
            (skippable*) #\{ (* (<<- body (or (argument) (element)))) #\} ; TODO (argument) is basically wrong here
            (:transform (seq) nil) ; HACK work around bug
            ))
-  (bp:node* (:definition :name name :source (cons start end))
+  (bp:node* (:definition :name name :bounds (cons start end))
     (* (:argument . *) (nreverse arguments))
     (* (:body     . *) (nreverse body))))
 
@@ -785,7 +818,7 @@
                    (+ (<<- body (and (not (or (skippable) #\})) :any))))))
   (let (                     ; (name (coerce (nreverse name) 'string))
         (body (coerce (nreverse body) 'string)))
-    (bp:node* (:definition :name name :source (cons start end))
+    (bp:node* (:definition :name name :bounds (cons start end))
       (1 (:body . *) (bp:node* (:word :content body))))))
 
 (defrule other-command-application ()
@@ -844,7 +877,7 @@
   (let ((name (if see?
                   (concatenate 'string "see" name)
                   name)))
-    (bp:node* (:other-command-application :name name :source (cons start end))
+    (bp:node* (:other-command-application :name name :bounds (cons start end))
       (* (:argument . *) arguments))))
 
 (defrule element ()
@@ -906,6 +939,7 @@
       (definition-defun/multi) (definition-defun)
       (definition-defmacro)
       (definition-type)
+      (definition-setf/multi) (definition-setf)
       (param)
       (kwd)
       (bnf-rule)
@@ -937,6 +971,7 @@
       (math-group)
 
       (non-breaking-space)
+      (emdash)
       (paragraph-break)
       (word)
 
@@ -944,7 +979,7 @@
 
 (defrule document (filename root-kind) ; TODO file
     (bounds (start end) (* (<<- elements (element))))
-  (bp:node* (root-kind :filename filename :source (cons start end))
+  (bp:node* (root-kind :filename filename :bounds (cons start end))
     (* :element (nreverse elements))))
 
 (defun make-snippet (input start end)
