@@ -636,7 +636,7 @@
 (define-environment (item-list :keyword "list"
                                :name?   nil
                                :element (:transform
-                                         (seq (skippable*) (<- item (or (issue) (list-item))) (skippable*))
+                                         (seq (skippable*) (<- item (or (issue-annotation) (list-item))) (skippable*))
                                          item)))
 
 (defrule enumeration-item-keyword ()
@@ -653,7 +653,7 @@
 (define-environment (enumeration-list :keyword "list"
                                :name?   nil
                                :element (:transform
-                                         (seq (skippable*) (<- item (or (issue) (enumeration-item))) (skippable*))
+                                         (seq (skippable*) (<- item (or (issue-annotation) (enumeration-item))) (skippable*))
                                          item)))
 
 (defrule definition-item ()
@@ -674,80 +674,8 @@
 (define-environment (definition-list :keyword "list"
                                      :name?   nil
                                      :element (:transform
-                                               (seq (skippable*) (<- item (or (issue) (definition-item))) (skippable*))
+                                               (seq (skippable*) (<- item (or (issue-annotation) (definition-item))) (skippable*))
                                                item)))
-
-(defrule issue ()
-    (bounds (start end)
-      (seq "\\issue" #\{ (<- name (word)) #\} (? #\Newline)
-           (* (<<- elements (and (not "\\endissue") (element))))
-           "\\endissue" #\{ (<- name (word)) #\} (? #\Newline)))
-  (bp:node* (:issue :bounds (cons start end))
-    (1 :name name)
-    (* :element (nreverse elements))))
-
-(defrule balanced-content ()
-    (* (or (seq (<<- content #\{)
-                (<<- content (balanced-content))
-                (<<- content #\}))
-           (<<- content (and (not #\}) :any))))
-  (with-output-to-string (stream)
-    (map nil (lambda (fragment)
-               (princ fragment stream))
-         (a:flatten (nreverse content)))))
-
-(defrule editor-note ()
-    (bounds (start end)
-      (seq "\\editornote{" (+ (<<- editor (and (not #\:) :any))) #\:
-           (<- content (balanced-content))
-           #\}))
-  (let ((editor (coerce (nreverse editor) 'string)))
-    (bp:node* (:editor-note :editor  editor
-                            :content content
-                            :bounds  (cons start end)))))
-
-(defrule reviewer ()
-  (bounds (start end)
-          (seq "\\reviewer{" (? (seq (+ (<<- reviewer (and (not (or #\: #\})) :any))) #\:))
-               (<- content (balanced-content))
-               #\}))
-  (let ((reviewer (coerce (nreverse reviewer) 'string)))
-    (bp:node* (:reviewer-note :reviewer reviewer
-                              :content  content
-                              :bounds   (cons start end)))))
-
-(defrule label-name ()
-    (bounds (start end)
-      (seq (* (<<- content (and (not ":") :any))) #\: (? #\:)))
-  (let ((content (coerce (nreverse content) 'string)))
-    (bp:node* (:word :content content :bounds (cons start end)))))
-
-(defrule label ()
-    (bounds (start end)
-      (seq "\\label" (skippable*) (<- name (label-name))
-           (skippable*) (* (<<- elements (and (not (or "\\label" "\\endcom" "\\endissue"))
-                                              (element))))))
-  (bp:node* (:part :bounds (cons start end))
-    (1 (:name . 1)    name)
-    (* (:element . *) (nreverse elements))))
-
-(defrule component-symbol ()
-  (bounds (start end)
-          (+ (<<- characters (and (not (or #\Space #\Tab #\, #\})) :any))))
-  (let ((name (coerce (nreverse characters) 'string)))
-    (bp:node* (:symbol :name name :bounds (cons start end)))))
-
-(defrule com ()         ; TODO split name into multiple names at comma
-    (bounds (start end)
-      (seq "\\begincom{"
-           (+ (seq (<<- names (component-symbol)) (? (seq #\, (skippable*)))))
-           #\}
-           (* (<<- elements (and (not "\\endcom") (element))))
-           "\\endcom"))
-  (format t "      Parsed component ~{~A~^, ~}~%" names)
-  (bp:node* (:component :bounds (cons start end))
-    (* (:name . *)    names)
-    (* (:element . *) (nreverse elements))))
 
 (defrule define-section ()
     (bounds (start end)
@@ -760,18 +688,6 @@
       (seq "\\DefineFigure" #\{ (<- name (word)) #\}))
   (bp:node* (:define-figure :bounds (cons start end))
     (1 (:name . 1) name)))
-
-;;;
-
-(defrule glossary-entry-body ()
-  (* (<<- elements (and (not (or (paragraph-break)
-                                 "\\endissue")) ; HACK
-                          (element))))
-  (nreverse elements))
-
-(define-command gentry
-  (1  :name (word))
-  (*> :body (glossary-entry-body) :open-delimiter nil :close-delimiter nil))
 
 ;;;
 
@@ -912,13 +828,13 @@
 
       (code)
       
-      (issue)
+      (issue-annotation)
       (editor-note)
       (reviewer)
       
       (label)
       (none)
-      (com)
+      (component)
 
       (term)
       (newterm)
