@@ -9,11 +9,15 @@
   (bp:make+finish-node+relations
    builder kind initargs
    (map 'list (lambda (relation)
-                (multiple-value-bind (relation* cardinality)
-                    (bp:normalize-relation relation)
-                  (declare (ignore relation*))
-                  (let ((right (first (funcall recurse :relations (list relation)))))
-                    (list cardinality relation right))))
+                (typecase relation
+                  ((or symbol (cons symbol atom))
+                   (multiple-value-bind (relation* cardinality)
+                       (bp:normalize-relation relation)
+                     (declare (ignore relation*))
+                     (let ((right (first (funcall recurse :relations (list relation)))))
+                       (list cardinality relation right))))
+                  ((cons t (cons t (cons t null)))
+                   relation)))
         relations)))
 
 (defmethod transform-node ((transform default-reconstitute-mixin) recurse
