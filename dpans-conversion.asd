@@ -26,6 +26,7 @@
                 :serial     t
                 :components ((:file       "package")
                              (:file       "protocol")
+                             (:file       "utilities")
                              (:file       "mixins")
                              (:file       "strip-comments")
                              (:file       "strip-tex-commands")
