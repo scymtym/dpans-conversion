@@ -92,7 +92,8 @@
 
 (defrule word ()
     (+ (<<- characters (or (escaped-character)
-                           (and (not (or #\{ #\} #\\ #\% #\& #\$ #\~ #\# ; #\.
+                           (and (not (or #\{ #\} #\\ #\% #\& #\$ #\~ ; #\.
+                                         (seq #\# (+ (guard digit digit-char-p)))
                                          (paragraph-break))) ; TODO make non-result version
                                 :any))))
   (bp:node* (:word :content (coerce (nreverse (remove nil characters)) 'string))))
@@ -794,7 +795,7 @@
                   (concatenate 'string "see" name)
                   name)))
     (bp:node* (:other-command-application :name name :bounds (cons start end))
-      (* (:argument . *) arguments))))
+      (* (:argument . *) (nreverse arguments)))))
 
 (defrule element ()
   (or (comment)
