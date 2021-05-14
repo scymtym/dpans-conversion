@@ -1,4 +1,7 @@
 (defsystem "dpans-conversion"
+  :author     "Jan Moringen <jmoringe@techfak.uni-bielefeld.de>"
+  :license    "GPLv3"
+
   :depends-on ("parser.packrat"
                "parser.packrat.grammar.string"
 
