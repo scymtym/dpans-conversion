@@ -8,15 +8,14 @@
 
 (defun evaluate-to-string (builder node)
   (labels ((rec (node)
-             (case (bp:node-kind builder node)
-               (:word
-                (return-from evaluate-to-string
-                  (getf (bp:node-initargs builder node) :content)))
-               (:symbol
-                (return-from evaluate-to-string
-                  (getf (bp:node-initargs builder node) :name)))
-               (t
-                (map nil #'rec (bp:node-relation builder :element node))))))
+             (cond ((a:when-let ((content (getf (bp:node-initargs builder node) :content)))
+                      (return-from evaluate-to-string content)))
+                   ((eq (bp:node-kind builder node) :symbol)             ; TODO name
+                    (return-from evaluate-to-string
+                      (let ((initargs (bp:node-initargs builder node)))
+                        (values (getf initargs :name) (getf initargs :setf?)))))
+                   (t
+                    (map nil #'rec (bp:node-relation builder :element node))))))
     (rec node)))
 
 (defun node-name (node)
@@ -36,7 +35,7 @@
     ("Local Macro"               :macro)
     ("Function"                  :function)
     ("Local Function"            :function)
-    ("Accessor"                  :function)
+    ("Accessor"                  (values :function t))
     ("Standard Generic Function" :function)
     ("Special Operator"          :special-operator)
     ("Variable"                  :variable)
@@ -73,4 +72,3 @@
          (subseq string 0 (1- (length string))))
         (t
          string)))
-

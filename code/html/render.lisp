@@ -498,10 +498,10 @@
                                              ("Accessor"                  "function")
                                              ("Standard Generic Function" "function")
                                              ("Special Operator"          "special-operator")
-                                             ("Special Form"              "special-operator") ; TODO why does this exist?
                                              ("Variable"                  "variable")
                                              ("Constant Variable"         "constant")
-                                             ("Declaration"               "declaration"))))
+                                             ("Declaration"               "declaration")
+                                             ("Restart"                   "restart"))))
                            (format t "~V@TGenerating component ~{~A~^, ~}~%"
                                    (* 2 (length file-stack))
                                    (map 'list (a:curry #'evaluate-to-string builder) names))

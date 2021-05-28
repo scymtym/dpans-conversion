@@ -1,24 +1,29 @@
 (cl:in-package #:dpans-conversion.transform)
 
-(defclass build-references (default-reconstitute-mixin)
+(defclass build-references (builder-mixin
+                            default-reconstitute-mixin)
   ((%environment :reader   environment
                  :initform (make-instance 'env:lexical-environment :parent **meta-environment**))
-   (%mode        :accessor mode
+   (%stage       :accessor stage
                  :initform :record)))
 
 ;;; Dispatch
 
 (defmethod transform-node ((transform build-references) recurse
                            relation relation-args node (kind (eql :file)) relations
-                           &key &allow-other-keys)
-  (call-next-method)
-  (setf (mode transform) :link)
-  (call-next-method))
+                           &key include-depth &allow-other-keys)
+  (case include-depth
+    (0
+     (call-next-method)
+     (setf (stage transform) :link)
+     (call-next-method))
+    (t
+     (call-next-method))))
 
 (defmethod transform-node ((transform build-references) recurse
                            relation relation-args node kind relations
                            &rest initargs &key &allow-other-keys)
-  (case (mode transform)
+  (case (stage transform)
     (:record
      (with-simple-restart (continue "Do not record ~A node" kind)
        (apply #'record-node transform
@@ -40,30 +45,34 @@
                       relation relation-args node kind relations
                       &key &allow-other-keys))
 
-;;;
+;;; Recording stage
+
+(defun record (name namespace node transform)
+  (format t "Recording ~24A ~A~%" namespace name)
+  (let ((environment (environment transform)))
+    (when (env:lookup name namespace environment :if-does-not-exist nil)
+      (error "Duplicate ~A name ~A" namespace name)) ; TODO annotations
+    (setf (env:lookup name namespace environment) node)))
 
 (defmethod record-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :chapter)) relations
                         &key &allow-other-keys)
-  (let ((builder 'list))
-    (let ((id (evaluate-to-string
-               builder (bp:node-relation builder '(:name3 . 1) node))))
-      (setf (env:lookup id :section (environment transform)) node))))
+  (let* ((builder (builder transform))
+         (id      (evaluate-to-string
+                   builder (bp:node-relation builder '(:name3 . 1) node))))
+    (record id :section node transform)))
 
 (macrolet
     ((define (kind)
        `(defmethod record-node ((transform build-references) recurse
                                 relation relation-args node (kind (eql ,kind)) relations
                                 &key &allow-other-keys)
-          (let ((builder 'list))
-            (let* ((id-node (find-child-of-kind builder :define-section node))
-                   (id      (if id-node
-                                (node-name id-node)
-                                (remove #\Space (node-name node)))))
-              (when (env:lookup id :section (environment transform)
-                                   :if-does-not-exist nil)
-                (error "Duplicate id ~A" id))
-              (setf (env:lookup id :section (environment transform)) node))))))
+          (let* ((builder (builder transform))
+                 (id-node (find-child-of-kind builder :define-section node))
+                 (id      (if id-node
+                              (node-name id-node)
+                              (remove #\Space (node-name node)))))
+            (record id :section node transform)))))
   (define :section)
   (define :sub-section)
   (define :sub-sub-section)
@@ -73,38 +82,46 @@
 (defmethod record-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :component)) relations
                         &key &allow-other-keys)
-  (let ((builder 'list))
-    (let* ((names     (bp:node-relation builder '(:name . *) node))
-           (ftype     (node-name (find-child-of-kind builder :ftype node)))
-           (namespace (namespace<-ftype ftype)))
-      (map nil (lambda (name)
-                 (let ((name (evaluate-to-string builder name)))
-                   (setf (env:lookup name namespace (environment transform)) node)))
-           names))))
+  (let* ((builder   (builder transform))
+         (names     (bp:node-relation builder '(:name . *) node))
+         (ftype     (node-name (find-child-of-kind builder :ftype node)))
+         (namespace (namespace<-ftype ftype)))
+    (map nil (lambda (name)
+               (multiple-value-bind (name setf?)
+                   (evaluate-to-string builder name) ; TODO make a function
+                 (let ((key (if setf?
+                                `(setf ,name)
+                                name)))
+                  (record key namespace node transform))))
+         names)))
 
 (defmethod record-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :gentry)) relations
                         &key &allow-other-keys)
   (let ((name (string-downcase (node-name node))))
-    (setf (env:lookup name :glossary (environment transform)) node)))
+    (record name :glossary node transform)))
 
-;;;
+;;; Link stage
 
-(defmethod link-node ((transform build-references) recurse
-                      relation relation-args node (kind (eql :secref)) relations
-                      &key &allow-other-keys)
-  (env:lookup (node-name node) :section (environment transform)))
+(labels ((lookup (name namespace transform)
+           (let* ((environment (environment transform))
+                  (name        (string-downcase name))
+                  (stem        (stemmify name)))
+             (if (eq name stem)
+                 (env:lookup name namespace environment)
+                 (or (env:lookup name namespace environment
+                                 :if-does-not-exist nil)
+                     (env:lookup stem namespace environment)))))
+         (link (name namespace transform)
+           (let ((builder (builder transform)))
+             (bp:node (builder :reference :kind namespace)
+               (bp:? (:target . bp:?) (lookup name namespace transform))))))
 
-(flet ((link (name namespace transform)
-         (let* ((environment (environment transform))
-                (name        (string-downcase name))
-                (stem        (stemmify name)))
-           (if (eq name stem)
-               (env:lookup name namespace environment)
-               (or (env:lookup name namespace environment
-                               :if-does-not-exist nil)
-                   (env:lookup stem namespace environment))))))
-  
+  (defmethod link-node ((transform build-references) recurse
+                        relation relation-args node (kind (eql :secref)) relations
+                        &key &allow-other-keys)
+    (link (node-name node) :section transform))
+
   (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :typeref)) relations
                         &key &allow-other-keys)
@@ -124,7 +141,7 @@
                         relation relation-args node (kind (eql :funref)) relations
                         &key &allow-other-keys)
     (link (node-name node) :function transform))
-  
+
   (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :macref)) relations
                         &key &allow-other-keys)

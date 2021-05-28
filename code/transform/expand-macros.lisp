@@ -1,6 +1,7 @@
 (cl:in-package #:dpans-conversion.transform)
 
-(defclass expand-macros (default-reconstitute-mixin
+(defclass expand-macros (builder-mixin
+                         default-reconstitute-mixin
                          environment-mixin
                          file-tracking-mixin)
   ((%debug-definition? :initarg  :debug-definition?
