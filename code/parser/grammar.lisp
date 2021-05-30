@@ -64,7 +64,8 @@
   (coerce (nreverse content) 'string))
 
 (defrule name ()
-    (bounds (start end) (seq "\\" (<- name (identifier)))) (bp:node* (:name :name name :bounds (cons start end))))
+    (bounds (start end) (seq "\\" (<- name (identifier))))
+  (bp:node* (:name :name name :bounds (cons start end))))
 
 (defrule spacing-command ()
     (seq #\\ (or #\, #\: #\> #\; ; spaces
@@ -75,9 +76,9 @@
     (bounds (start end) #\~)
   (bp:node* (:non-breaking-space :bounds (cons start end))))
 
-(defrule emdash ()
-    (bounds (start end) (:transform "---" nil))
-  (bp:node* (:emdash :bounds (cons start end))))
+(defrule mdash ()
+    (bounds (start end) (seq "--" (? (<- third #\-))))
+  (bp:node* ((if third :emdash :endash) :bounds (cons start end))))
 
 (defrule escaped-character ()
     (seq #\\ (<- character (or #\\ #\@ #\= #\Space #\' #\[ #\]
@@ -93,7 +94,7 @@
 (defrule word ()
     (+ (<<- characters (or (escaped-character)
                            (and (not (or #\{ #\} #\\ #\% #\& #\$ #\~ ; #\.
-                                         (seq #\# (+ (guard digit digit-char-p)))
+                                         (seq (+ #\#) (+ (guard digit digit-char-p)))
                                          (paragraph-break))) ; TODO make non-result version
                                 :any))))
   (bp:node* (:word :content (coerce (nreverse (remove nil characters)) 'string))))
@@ -101,6 +102,63 @@
 (defrule paragraph-break ()
   (bounds (start end) (seq #\Newline (* (or #\Space #\Tab)) #\Newline))
   (bp:node* (:paragraph-break :bounds (cons start end))))
+
+;;; Markup
+
+(defmacro define-group (name kind open-delimiter close-delimiter)
+  `(defrule ,name ()
+       (bounds (start end)
+         (seq ,open-delimiter (skippable*)
+              (* (<<- elements (and (not ,close-delimiter) (element))))
+              (skippable*) ,close-delimiter)
+         (:transform (seq) nil)) ; HACK
+     (bp:node* (,kind :bounds (cons start end))
+       (* (:element . *) (nreverse elements)))))
+
+(defmacro define-command (name-and-options &body arguments)
+  (destructuring-bind (name &key (kind         (a:make-keyword name))
+                                 (command-name (string-downcase name)))
+      (a:ensure-list name-and-options)
+    (let ((variables '()))
+      (flet ((make-argument-expression (argument)
+               (destructuring-bind (cardinality relation expression
+                                    &key (open-delimiter  #\{)
+                                         (close-delimiter #\}))
+                   argument
+                 (let ((variable (gensym (string relation))))
+                   (a:appendf variables (list variable))
+                   `(seq
+                     ,@(flet ((one (expression)
+                                `(,@(when open-delimiter
+                                      `((skippable*) ,open-delimiter))
+                                  ,expression
+                                  ,@(when close-delimiter
+                                      `((skippable*) ,close-delimiter)))))
+                         (case cardinality
+                           (1  (one `(<- ,variable ,expression)))
+                           (1* (one `(* (<<- ,variable ,expression))))
+                           (*  `((* (seq ,@(one `(<<- ,variable ,expression))))))
+                           (*> (one `(<- ,variable ,expression)))
+                           (t  `((* (seq ,@(one `(<<- ,variable ,expression)))
+                                    ,cardinality ,cardinality)))))))))
+             (make-argument-result (argument variable)
+               (destructuring-bind (cardinality relation expression
+                                    &key &allow-other-keys)
+                   argument
+                 (declare (ignore expression))
+                 (case cardinality
+                   (1  `(,cardinality (,relation . 1) ,variable))
+                   (*> `(*            (,relation . *) ,variable))
+                   (t  `(*            (,relation . *) (nreverse ,variable)))))))
+        (let ((keyword (format nil "\\~A" command-name)))
+          `(defrule ,name ()
+               (bounds (start end)
+                 (seq ,keyword
+                      ,@(map 'list #'make-argument-expression arguments)
+                      (:transform (seq) nil) ; HACK
+                      ))
+             (bp:node* (,kind :bounds (cons start end))
+               ,@(map 'list #'make-argument-result arguments variables))))))))
 
 (defrule verb ()
     (seq "\\verb" delimiter
@@ -151,16 +209,6 @@
 (define-command hbox
   (1* :element (element)))
 
-(defmacro define-group (name kind open-delimiter close-delimiter)
-  `(defrule ,name ()
-       (bounds (start end)
-         (seq ,open-delimiter (skippable*)
-              (* (<<- elements (and (not ,close-delimiter) (element))))
-              (skippable*) ,close-delimiter)
-              (:transform (seq) nil)) ; HACK
-     (bp:node* (,kind :bounds (cons start end))
-       (* (:element . *) (nreverse elements)))))
-
 (define-group block*        :block         #\{  #\})
 (define-group bracket-group :bracket-group #\[  #\])
 (define-group math-group    :math          #\$  #\$)
@@ -187,51 +235,6 @@
            "\\endcode"))
   (let ((content (coerce (nreverse content) 'string)))
     (bp:node* (:code :content content :bounds (cons start end)))))
-
-(defmacro define-command (name-and-options &body arguments)
-  (destructuring-bind (name &key (kind         (a:make-keyword name))
-                                 (command-name (string-downcase name)))
-      (a:ensure-list name-and-options)
-    (let ((variables '()))
-      (flet ((make-argument-expression (argument)
-               (destructuring-bind (cardinality relation expression
-                                    &key (open-delimiter  #\{)
-                                         (close-delimiter #\}))
-                   argument
-                 (let ((variable (gensym (string relation))))
-                   (a:appendf variables (list variable))
-                   `(seq
-                     ,@(flet ((one (expression)
-                                `(,@(when open-delimiter
-                                      `((skippable*) ,open-delimiter))
-                                  ,expression
-                                  ,@(when close-delimiter
-                                      `((skippable*) ,close-delimiter)))))
-                         (case cardinality
-                           (1  (one `(<- ,variable ,expression)))
-                           (1* (one `(* (<<- ,variable ,expression))))
-                           (*  `((* (seq ,@(one `(<<- ,variable ,expression))))))
-                           (*> (one `(<- ,variable ,expression)))
-                           (t  `((* (seq ,@(one `(<<- ,variable ,expression)))
-                                    ,cardinality ,cardinality)))))))))
-             (make-argument-result (argument variable)
-               (destructuring-bind (cardinality relation expression
-                                    &key &allow-other-keys)
-                   argument
-                 (declare (ignore expression))
-                 (case cardinality
-                   (1  `(,cardinality (,relation . 1) ,variable))
-                   (*> `(*            (,relation . *) ,variable))
-                   (t  `(*            (,relation . *) (nreverse ,variable)))))))
-        (let ((keyword (format nil "\\~A" command-name)))
-          `(defrule ,name ()
-               (bounds (start end)
-                (seq ,keyword
-                     ,@(map 'list #'make-argument-expression arguments)
-                     (:transform (seq) nil) ; HACK
-                     ))
-             (bp:node* (,kind :bounds (cons start end))
-               ,@(map 'list #'make-argument-result arguments variables))))))))
 
 (defrule input ()
     (bounds (start end)
@@ -366,117 +369,6 @@
               (defrule index ()
                 (or ,@(map 'list #'list rules))))))))
   (define))
-
-;;;
-
-(macrolet
-    ((define ()
-       (let ((rules '()))
-         (flet ((one-keyword (keyword
-                              &key (rule-name (a:symbolicate '#:lambda-list-keyword- keyword))
-                                   (command   (remove #\- (string-downcase keyword))))
-                  (let ((string (concatenate 'string "\\" command))
-                        (which  (a:make-keyword keyword)))
-                    (push rule-name rules)
-                    `(defrule ,rule-name ()
-                       (bounds (start end)
-                               (seq ,string (and (not (identifier)) (seq)) (:transform (seq) nil))) ; HACK
-                       (bp:node* (:lambda-list-keyword :which  ,which
-                                                       :bounds (cons start end)))))))
-           `(progn
-              ,@(map 'list #'one-keyword '(#:allow-other-keys
-                                           #:aux #:body #:environment #:key
-                                           #:optional #:rest #:whole))
-              ,(one-keyword '#:optional :rule-name 'lambda-list-keyword-opt
-                                        :command   "opt")
-              (defrule lambda-list-keyword ()
-                (or ,@(map 'list #'list rules))))))))
-  (define))
-
-(defrule definition-special-operator ()
-    (bounds (start end)
-      (seq "\\" "Defspec" (? (or (seq "WithValues" (? "Newline")) "NoReturn"))
-                  (seq (skippable*) (? #\{) (<-  name          (element))     (skippable*) (? #\}))
-                  (seq (skippable*) #\{     (* (<<- arguments     (element))) (skippable*) #\})
-               (? (seq (skippable*) #\{     (* (<<- return-values (element))) (skippable*) #\}))))
-  (bp:node* (:special-operator-definition :bounds (cons start end))
-    (1 (:name . 1)         name)
-    (* (:argument . *)     arguments)
-    (* (:return-value . *) return-values)))
-
-(defrule definition-defun ()
-    (bounds (start end)
-      (seq "\\" "Defun" (? (or (seq "WithValues" (? "Newline")) "NoReturn"))
-              (seq (skippable*) (? #\{) (<-  name          (element))     (skippable*) (? #\}))
-              (seq (skippable*) #\{     (* (<<- arguments     (element))) (skippable*) #\})
-           (? (seq (skippable*) #\{     (* (<<- return-values (element))) (skippable*) #\}))))
-  (bp:node* (:function-definition :bounds (cons start end))
-    (1 (:name . *)         name)
-    (* (:argument . *)     (nreverse arguments))
-    (* (:return-value . *) (nreverse return-values))))
-
-(defrule definition-defun/multi ()
-    (bounds (start end)
-      (seq "\\DefunMultiWithValues"
-           (skippable*) #\{ (* (<<- arguments     (element)))            (skippable*) #\}
-           (skippable*) #\{ (* (<<- return-values (element)))            (skippable*) #\}
-           (skippable*) #\{ (* (seq "\\entry{" (<<- names (element)) #\} (skippable*))) #\}))
-  (bp:node* (:function-definition :bounds (cons start end))
-    (* (:name         . *) (nreverse names))
-    (* (:argument     . *) (nreverse arguments))
-    (* (:return-value . *) (nreverse return-values))))
-
-(defrule definition-defmacro ()
-    (bounds (start end)
-      (seq "\\" "Defmac" (? (or (seq "WithValues" (? "Newline")) "NoReturn"))
-              (seq (skippable*) (? #\{) (<-  name          (element))     (skippable*) (? #\}))
-              (seq (skippable*) #\{     (* (<<- arguments     (element))) (skippable*) #\})
-           (? (seq (skippable*) #\{     (* (<<- return-values (element))) (skippable*) #\}))))
-  (bp:node* (:macro-definition :bounds (cons start end))
-    (1 (:name         . 1) name)
-    (* (:argument     . *) (nreverse arguments))
-    (* (:return-value . *) (nreverse return-values))))
-
-(defrule definition-type ()
-  (bounds (start end)
-          (seq "\\" "Deftype"
-               (seq (skippable*) (? #\{) (<-  name        (element))     (skippable*) (? #\}))
-               (seq (skippable*) #\{     (* (<<- elements (element))) (skippable*) #\})))
-  (bp:node* (:type-definition :bounds (cons start end))
-    (1 (:name . 1)    name)
-    (* (:element . *) (nreverse elements))))
-
-(defrule definition-setf ()
-    (bounds (start end)
-      (seq "\\" "Defsetf"
-           (skippable*) (<- name (element))
-           (skippable*) #\{ (* (<<- arguments  (element))) (skippable*) #\}
-           (skippable*) #\{ (<- new-value (element)) (skippable*) #\}))
-  (bp:node* (:setf-definition :bounds (cons start end))
-    (1 (:name      . *) name)
-    (* (:argument  . *) (nreverse arguments))
-    (1 (:new-value . 1) new-value)))
-
-(defrule definition-setf/multi ()
-  (bounds (start end)
-    (seq "\\" "DefsetfMulti"
-         (skippable*) #\{ (* (<<- arguments  (element))) (skippable*) #\}
-         (skippable*) #\{ (<- new-value (element)) (skippable*) #\}
-         (skippable*) #\{ (* (seq "\\entry{" (<<- names (element)) #\} (skippable*))) #\}))
-  (bp:node* (:setf-definition :bounds (cons start end))
-    (* (:name      . *) names)
-    (* (:argument  . *) (nreverse arguments))
-    (1 (:new-value . 1) new-value)))
-
-(define-command param
-  (1 :name (element)))
-
-(define-command (kwd :kind :keyword)
-  (1 :name (element)))
-
-(define-command (bnf-rule :command-name "auxbnf")
-  (1  :name    (word)) ; TODO
-  (1* :element (or (row-terminator) (element))))
 
 ;;;
 
@@ -798,11 +690,13 @@
       (* (:argument . *) (nreverse arguments)))))
 
 (defrule element ()
-  (or (comment)
+  (or ;; Lexical stuff
+      (comment)
       (spacing-command)
       (verb)
       (indexed-char)
 
+      ;; Markup
       (b) (bf) (bold)
       (i) (ital) (it)
       (f)
@@ -812,6 +706,7 @@
 
       (input)
 
+      ;; Semantic
       (head)
       (head1)
       (chapter)
@@ -828,12 +723,12 @@
       (definition-list)
 
       (code)
-      
+
       (issue-annotation)
       (editor-note)
       (reviewer)
-      
-      (label)
+
+      (component-label)
       (none)
       (component)
 
@@ -852,15 +747,15 @@
       (index)
 
       (lambda-list-keyword)
-      (definition-special-operator)
-      (definition-defun/multi) (definition-defun)
-      (definition-defmacro)
-      (definition-type)
-      (definition-setf/multi) (definition-setf)
+      (call-syntax-special-operator)
+      (call-syntax-defun/multi) (call-syntax-defun)
+      (call-syntax-defgen) (call-syntax-defmeth) (specialized-parameter)
+      (call-syntax-defmacro)
+      (call-syntax-type)
+      (call-syntax-setf/multi) (call-syntax-setf)
       (param)
       (kwd)
       (bnf-rule)
-
 
       (coloumn-separator) ; TODO only in table or command definition
       (displaytwo)
@@ -888,31 +783,15 @@
       (math-group)
 
       (non-breaking-space)
-      (emdash)
+      (mdash)
       (paragraph-break)
       (word)
 
       (skippable+)))
 
-(defrule document (filename root-kind) ; TODO file
+(defrule document (filename include-depth) ; TODO file
     (bounds (start end) (* (<<- elements (element))))
-  (bp:node* (root-kind :filename filename :bounds (cons start end))
+  (bp:node* (:file :filename      filename
+                   :include-depth (or include-depth 0)
+                   :bounds        (cons start end))
     (* :element (nreverse elements))))
-
-(defun make-snippet (input start end)
-  (let ((raw (subseq input (max 0 (- start 20)) (min (length input) (+ end 20)))))
-    (substitute #\¶ #\Newline raw)))
-
-(defun parse-file (file &key (root-kind :file))
-  (let* ((input    (a:read-file-into-string file))
-         (filename (enough-namestring file))) ; TODO allow specifying base 
-    (bp:with-builder ('list)
-      (multiple-value-bind (result position value)
-          (parser.packrat:parse `(document ,filename ,root-kind) input)
-        (ecase result
-          ((t)    value)
-          (:fatal (let ((snippet (make-snippet input position position)))
-                    (error "At ~A [~A]: ~A" position snippet value))))))))
-
-
-

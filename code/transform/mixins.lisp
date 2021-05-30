@@ -107,4 +107,5 @@
       ((transform file-tracking-mixin) recurse
        relation relation-args node (ekind (eql :included-file)) relations
        &key filename &allow-other-keys)
+    (break "should not happen")
     (do-it #'call-next-method transform filename)))

@@ -1,0 +1,295 @@
+/* General defaults */
+
+body {
+    width: 60%;
+    margin-left: 20%
+}
+
+body {
+    margin:40px auto;
+    line-height:1.4;
+    font-size:16px;
+    color:#444;
+    padding:0 10px
+}
+
+h1,h2,h3 {
+    line-height:1.2
+}
+
+.sidenote {
+    display: block;
+    float: right;
+    width: 30%;
+    border: 2px solid #888;
+    margin: 20px;
+    padding: 3px;
+}
+
+th {
+    text-align: left;
+}
+
+/* Meta TODO remove when finished*/
+
+.error {
+    color: red;
+}
+
+/* Typographic */
+
+.explicit-bold {
+    font-weight: bold;
+}
+
+.explicit-italic {
+    font-style: italic;
+}
+
+.explicit-mono {
+    font-family: monospace;
+}
+
+.explicit-roman {
+    font-style: normal;
+}
+
+/* Semantic */
+
+.keyword {
+    color: pink;
+    font-family: mono;
+}
+
+.lambda-list-keyword {
+    color: brown;
+    font-family: mono;
+}
+
+.term,.newterm,.f {
+    color: #400000;
+    text-decoration: none;
+    font-style: italic;
+}
+
+.section-reference {
+}
+
+.lambda-list-keyword-reference {
+    color: brown;
+    font-family: mono;
+}
+
+.type-reference {
+    color: forestgreen;
+    font-family: mono;
+}
+
+.declaration-reference {
+    color: darkorange;
+    font-family: mono;
+}
+
+.special-operator-reference {
+    color: violet;
+    font-family: mono;
+}
+
+.function-reference {
+    color: darkblue;
+    font-family: mono;
+}
+
+.macro-reference {
+    color: darkviolet;
+    font-family: mono;
+}
+
+.variable-reference {
+    color: darkred;
+    font-family: mono;
+}
+
+.parameter {
+    font-family: mono;
+    font-style: italic;
+}
+
+code {
+    color: purple;
+    font-family: mono;
+}
+
+.name {
+    font-weight: bold;
+}
+
+/* Components */
+
+div.issue {
+    background: lightpink;
+    font-family: mono;
+}
+
+div.component {
+    background: beige;
+}
+
+.none {
+    color: gray;
+    font-style: italic;
+}
+
+.ftype {
+    color: forestgreen;
+    font-family: mono;
+    float: right;
+}
+
+div.component .name {
+    font-family: mono;
+}
+
+div.component > dl > dt {
+    font-weight: bold;
+}
+
+/* Glossary */
+
+.glossary-entry .term:first-child {
+    font-weight: bold;
+}
+
+/* Removable text -- not formally part of the standard */
+
+.removable-text {
+    color: #777;
+
+    border-color: #aaa;
+    border-left-style: dashed;
+    border-right-style: dashed;
+    border-width: 3px;
+    border-radius: 5px;
+
+    padding: 0px 3px 0px 3px;
+    margin-left: 0px 6px 0px 6px;
+}
+.removable-text .removable-text-tooltip {
+    visibility: hidden;
+
+    color: #444;
+    background: #aaa;
+    border-style: solid;
+    border-width: 1px;
+    border-color: #444;
+    border-radius: 4px;
+
+    padding: 4px 4px;
+
+    position: absolute;
+    z-index: 1;
+}
+.removable-text:hover > .removable-text-tooltip {
+    visibility: visible;
+}
+
+/* Notes */
+
+.reviewer-note {
+    color: red;
+}
+.reviewer-note .reviewer {
+    font-style: italic;
+}
+.reviewer-note > .reviewer-note-tooltip::before {
+    content: "Reviewer Note ";
+}
+.reviewer-note > .reviewer-note-tooltip {
+    visibility: hidden;
+
+    color: #444;
+    background: pink;
+    border-style: solid;
+    border-width: 1px;
+    border-color: red;
+    border-radius: 4px;
+
+    padding: 4px 4px;
+
+    position: absolute;
+    z-index: 1;
+}
+.reviewer-note:hover > .reviewer-note-tooltip {
+    visibility: visible;
+}
+
+.editor-note {
+    color: blue;
+}
+.editor-note .editor {
+    font-style: italic;
+}
+.editor-note > .editor-note-tooltip::before {
+    content: "Editor Note by ";
+}
+.editor-note > .editor-note-tooltip {
+    visibility: hidden;
+
+    color: #444;
+    background: lightblue;
+    border-style: solid;
+    border-width: 1px;
+    border-color: blue;
+    border-radius: 4px;
+
+    padding: 4px 4px;
+
+    position: absolute;
+    z-index: 1;
+}
+.editor-note:hover > .editor-note-tooltip {
+    visibility: visible;
+}
+
+/* Issue annotations */
+
+.issue-annotation {
+    border-color: blueviolet;
+    border-left-style: solid;
+    border-right-style: solid;
+    border-width: 3px;
+    border-radius: 5px;
+
+    padding: 0px 3px 0px 3px;
+    margin-left: 0px 6px 0px 6px;
+}
+.issue-annotation .issue-reference {
+    visibility: hidden;
+
+    color: #444;
+    background: #aa6bf2;
+    border-style: solid;
+    border-width: 1px;
+    border-color: #8a2be2;
+    border-radius: 4px;
+
+    padding: 4px 4px;
+
+    position: absolute;
+    z-index: 1;
+}
+.issue-annotation:hover > .issue-reference {
+    visibility: visible;
+}
+
+.issue-annotation .issue-annotation {
+    border-color: orangered;
+}
+
+.issue-annotation .issue-annotation .issue-annotation {
+    border-color: greenyellow;
+}
+
+.issue-annotation .issue-annotation .issue-annotation .issue-annotation {
+    border-color: aquamarine;
+}

@@ -9,44 +9,6 @@
      :client  (eclector.examples.highlight::make-minimal-client
                :stream stream))))
 
-;;;
-
-(defun br ()
-  (cxml:with-element "br"))
-
-(defun span (class continuation)
-  (cxml:with-element "span"
-    (cxml:attribute "class" class)
-    (funcall continuation)))
-
-(defun span* (class id continuation)
-  (cxml:with-element "span"
-    (cxml:attribute "class" class)
-    (cxml:attribute "id" id)
-    (funcall continuation)))
-
-(defun div (class continuation)
-  (cxml:with-element "div"
-    (cxml:attribute "class" class)
-    (funcall continuation)))
-
-(defun div* (class id continuation)
-  (cxml:with-element "div"
-    (cxml:attribute "class" class)
-    (cxml:attribute "id" id)
-    (funcall continuation)))
-
-(defun a (url continuation)
-  (cxml:with-element "a"
-    (cxml:attribute "href" url)
-    (funcall continuation)))
-
-(defun a* (url class continuation)
-  (cxml:with-element "a"
-    (cxml:attribute "href" url)
-    (cxml:attribute "class" class)
-    (funcall continuation)))
-
 (defun find-child-of-kind (builder kind node)
   (let ((children (bp:node-relation builder :element node)))
     (find-if (lambda (child)
@@ -65,11 +27,29 @@
                (t
                 (map nil #'rec (bp:node-relation builder :element node))))))
     (rec node)))
+#+sbcl (declaim (sb-ext:deprecated :early ("dpans-conversion" "0.1") (function evaluate-to-string)))
+
+(defun tooltip (container-class tooltip-class
+                tooltip-continuation content-continuation
+                &key (element 'div))
+  (funcall element container-class
+           (lambda ()
+             (span tooltip-class tooltip-continuation)
+             (funcall content-continuation))))
+
+(defun removable-text (continuation)
+  (tooltip "removable-text" "removable-text-tooltip"
+           (lambda ()
+             (cxml:text "This passage is ")
+             (a "RemovableText"
+                (lambda () (cxml:text "removable text")))
+             (cxml:text " which is not formerly part of the standard."))
+           continuation))
 
 (defun node-name (node)
   (let* ((builder 'list)
          (name    (bp:node-relation builder '(:name . 1) node)))
-    (evaluate-to-string builder name)))
+    (dpans-conversion.transform::evaluate-to-string builder name)))
 
 (defun expand (builder body macro-level arguments)
   (labels ((visit (recurse relation relation-args node kind relations
@@ -77,22 +57,34 @@
              (case kind
                (:argument
                 (cond ((not (= macro-level level))
-                       node)
+                       (apply #'bp:make+finish-node builder :argument
+                              (list* :level (1- level) (a:remove-from-plist initargs :level))))
                       ((<= 1 number (1+ (length arguments)))
                        (nth (1- number) arguments))
                       (t
                        (bp:node (builder :word :content "missing macro argument"))
-                       ; (error "Missing macro argument")
+                                        ; (error "Missing macro argument")
                        )))
                (t
                 (bp:make+finish-node+relations
                  builder kind initargs
                  (map 'list (lambda (relation)
+                              (typecase relation
+                                ((or symbol (cons symbol atom))
+                                 (multiple-value-bind (relation* cardinality)
+                                     (bp:normalize-relation relation)
+                                   (declare (ignore relation*))
+                                   (let ((right (first (funcall recurse :relations (list relation)))))
+                                     (list cardinality relation right))))
+                                ((cons t (cons t (cons t null)))
+                                 relation)))
+                      relations)
+                 #+no (map 'list (lambda (relation)
                               (multiple-value-bind (relation* cardinality)
                                   (bp:normalize-relation relation)
-                               (ecase cardinality
-                                 (1 (list '1 relation (first (funcall recurse :relations (list relation)))))
-                                 (* (list '* relation (first (funcall recurse :relations (list relation))))))))
+                                (ecase cardinality
+                                  (1 (list '1 relation (first (funcall recurse :relations (list relation)))))
+                                  (* (list '* relation (first (funcall recurse :relations (list relation))))))))
                       relations))))))
     (bp:walk-nodes builder #'visit body)))
 
@@ -156,7 +148,8 @@
                                         ; (bp:node-relation builder :argument node)
                                         ; (list (bp:node (builder :word :content "}")))
                                                            )))))
-                            (when debug-expansion
+                            (when (or (eq debug-expansion t)
+                                      (member name debug-expansion :test #'string=))
                               (format t "  Expanded ~A[~S] -> ~S~%" name arguments expansion))
                             (values (bp:node (builder :splice :expansion-of node)
                                       (* :element expansion))
@@ -202,10 +195,13 @@
                        name
                        content
                        filename
+                       include-depth
+                       which
+                       editor reviewer
                   &allow-other-keys)
                (unwind-protect
                     (progn
-                      (when (> (length stack) 100)
+                      (when (> (length stack) 200)
                         (break))
                       (push (if (eq kind :splice)
                                 (getf (bp:node-initargs builder (getf (bp:node-initargs builder node) :expansion-of)) :name)
@@ -213,73 +209,14 @@
                             stack)
                       (ecase kind
                         (:file
-                         (a:with-output-to-file (stream file
-                                                        :element-type '(unsigned-byte 8)
-                                                        :if-exists :supersede)
-                           (push-file filename)
-                           (cxml:with-xml-output (cxml:make-octet-stream-sink stream :omit-xml-declaration-p t
-                                                                              )
-                             (cxml:unescaped "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">")
-                                        ; (cxml:unescaped "<!DOCTYPE html>")
-                             (cxml:with-element "html"
-                               (cxml:attribute "xmlns" "http://www.w3.org/1999/xhtml")
-                               (cxml:with-element "head"
-                                 (cxml:with-element "link"
-                                   (cxml:attribute "rel" "stylesheet")
-                                   (cxml:attribute "type" "text/css")
-                                   (cxml:attribute "href" "style.css"))
-                                 (when use-mathjax
-                                   (cxml:with-element "script"
-                                     (cxml:attribute "src" "https://polyfill.io/v3/polyfill.min.js?features=es6")
-                                     (cxml:text " "))
-                                   (cxml:with-element "script"
-                                     (cxml:attribute "id" "MathJax-script")
-                                     (cxml:attribute "src" "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js")
-                                     (cxml:text " ")))
-                                 (when use-sidebar
-                                   (cxml:with-element "link"
-                                     (cxml:attribute "rel" "stylesheet")
-                                     (cxml:attribute "href" "https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css")
-                                     (cxml:attribute "integrity" "sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6")
-                                     (cxml:attribute "crossorigin" "anonymous"))
-                                   (cxml:with-element "link"
-                                     (cxml:attribute "rel" "stylesheet")
-                                     (cxml:attribute "href" "https://cdn.rawgit.com/afeld/bootstrap-toc/v1.0.1/dist/bootstrap-toc.min.css"))))
-                               (cxml:with-element "body"
-                                 (cxml:attribute "data-spy" "scroll")
-                                 (cxml:attribute "data-target" "#toc")
-                                 (when use-sidebar
-                                   (cxml:with-element "script"
-                                     (cxml:attribute "src" "https://code.jquery.com/jquery-3.6.0.min.js")
-                                     (cxml:text " "))
-                                   (cxml:with-element "script"
-                                     (cxml:attribute "src" "https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js")
-                                     (cxml:attribute "integrity" "sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf")
-                                     (cxml:attribute "crossorigin" "anonymous")
-
-                                     (cxml:text " "))
-                                   (cxml:with-element "script"
-                                     (cxml:attribute "src" "https://cdn.rawgit.com/afeld/bootstrap-toc/v1.0.1/dist/bootstrap-toc.min.js")
-                                     (cxml:text " ")))
-                                 (cxml:with-element "div"
-                                   (cxml:attribute "class" "container")
-                                   (cxml:with-element "div"
-                                     (cxml:attribute "class" "row")
-                                     (cxml:with-element "div"
-                                       (cxml:attribute "class" "col-sm-3")
-                                       (cxml:with-element "nav"
-                                         (cxml:attribute "id" "toc")
-                                         (cxml:attribute "data-toggle" "toc")
-                                         (cxml:attribute "class" "sticky-top")
-                                         (cxml:text " ")))
-                                     (cxml:with-element "div"
-                                       (cxml:attribute "class" "col-sm-9")
-                                       (funcall recurse)))))))))
-                        (:included-file
                          (push-file filename)
                          (unwind-protect
-                              (with-simple-restart (continue "Skip included file ~S" filename)
-                                (funcall recurse))
+                              (if (zerop include-depth)
+                                  (with-html-document (stream file :use-mathjax use-mathjax
+                                                                   :use-sidebar use-sidebar)
+                                    (funcall recurse))
+                                  (with-simple-restart (continue "Skip included file ~S" filename)
+                                    (funcall recurse)))
                            (pop-file)))
                         ;; Evaluation
                         (:definition
@@ -408,67 +345,106 @@
                                (lambda ()
                                  (cxml:text (format nil "&~(~A~)"
                                                     (getf (bp:node-initargs builder node) :which))))))
-                        (:special-operator-definition
-                         (span "special-operator-definition"
+                        (:specialized-parameter
+                         (span "specialized-parameter"
                                (lambda ()
-                                 (span "name"          (a:curry recurse :relations '((:name . 1))))
-                                 (span "lambda-list"   (a:curry recurse :relations '((:argument . *))))
+                                 (cxml:text "(")
+                                 (span "name" (a:curry recurse :relations '((:name . 1))))
                                  (cxml:unescaped "&nbsp;")
-                                 (cxml:text "\\( \\rightarrow \\)")
-                                 (cxml:unescaped "&nbsp;")
-                                 (if (member :return-value relations :key #'car)
-                                     (span "return-values" (a:curry recurse :relations '((:return-value . *))))
-                                     (cxml:text "|"))))
-                         (br))
-                        (:function-definition
-                         (map nil (lambda (name)
-                                   (span "function-definition"
-                                         (lambda ()
-                                           (span "name"          (lambda ()
-                                                                   (cxml:text (evaluate-to-string builder name))))
-                                           (span "lambda-list"   (a:curry recurse :relations '((:argument . *))))
-                                           (cxml:unescaped "&nbsp;")
-                                           (cxml:text "\\( \\rightarrow \\)")
-                                           (cxml:unescaped "&nbsp;")
-                                           (if (member :return-value relations :key #'car)
-                                               (span "return-values" (a:curry recurse :relations '((:return-value . *))))
-                                               (cxml:text "|"))))
-                                    (br))
-                              (bp:node-relation builder '(:name . *) node)))
+                                 (let* ((class (bp:node-relation builder '(:specializer . 1) node))
+                                        (name  (dpans-conversion.transform::evaluate-to-string builder class)) ; TODO  repeated in TYPEREF
+                                        (url   (format nil "#type-~A" name)))
+                                   (unless name (break "~A" node))
+                                   (a* url "type-reference" (a:curry recurse :relations '((:specializer . 1)))))
+                                 (cxml:text ")"))))
+                        (:call-syntax
+                         (ecase which
+                           (:special-operator ; TODO rename to ...-syntax
+                            (span "special-operator-definition"
+                                  (lambda ()
+                                    (span "name"          (a:curry recurse :relations '((:name . *))))
+                                    (cxml:text " ")
+                                    (span "lambda-list"   (a:curry recurse :relations '((:argument . *))))
+                                    (cxml:unescaped "&nbsp;")
+                                    (cxml:text "\\( \\rightarrow \\)")
+                                    (cxml:unescaped "&nbsp;")
+                                    (if (member :return-value relations :key #'car)
+                                        (span "return-values" (a:curry recurse :relations '((:return-value . *))))
+                                        (cxml:text "|"))))
+                            (br))
+                           (:function
+                            (map nil (lambda (name)
+                                       (span "function-definition"
+                                             (lambda ()
+                                               (span "name"          (lambda ()
+                                                                       (cxml:text (dpans-conversion.transform::evaluate-to-string
+                                                                                   builder name))))
+                                               (cxml:text " ")
+                                               (span "lambda-list"   (a:curry recurse :relations '((:argument . *))))
+                                               (cxml:unescaped "&nbsp;")
+                                               (cxml:text "\\( \\rightarrow \\)")
+                                               (cxml:unescaped "&nbsp;")
+                                               (if (member :return-value relations :key #'car)
+                                                   (span "return-values" (a:curry recurse :relations '((:return-value . *))))
+                                                   (cxml:text "|"))))
+                                       (br))
+                                 (bp:node-relation builder '(:name . *) node)))
+                           (:generic-function
+                            (span "function-definition"
+                                  (lambda ()
+                                    (span "name"          (a:curry recurse :relations '((:name . *))))
+                                    (cxml:text " ")
+                                    (span "lambda-list"   (a:curry recurse :relations '((:argument . *))))
+                                    (cxml:unescaped "&nbsp;")
+                                    (cxml:text "\\( \\rightarrow \\)")
+                                    (cxml:unescaped "&nbsp;")
+                                    (if (member :return-value relations :key #'car)
+                                        (span "return-values" (a:curry recurse :relations '((:return-value . *))))
+                                        (cxml:text "|"))))
+                            (br))
+                           (:method
+                               (span "method"
+                                (lambda ()
+                                  (span "name"        (a:curry recurse :relations '((:name . *))))
+                                  (span "lambda-list" (a:curry recurse :relations '((:argument . *))))))
+                             (br))
+                           (:macro
+                            (span "function-definition"
+                                  (lambda ()
+                                    (span "name"          (a:curry recurse :relations '((:name . 1))))
+                                    (cxml:text " ")
+                                    (span "lambda-list"   (a:curry recurse :relations '((:argument . *))))
+                                    (cxml:unescaped "&nbsp;")
+                                    (cxml:text "\\( \\rightarrow \\)")
+                                    (cxml:unescaped "&nbsp;")
+                                    (if (member :return-value relations :key #'car)
+                                        (span "return-values" (a:curry recurse :relations '((:return-value . *))))
+                                        (cxml:text "|"))))
+                            (br))))
                         (:setf-definition
                          (map nil (lambda (name)
                                     (span "setf-definition"
                                           (lambda ()
                                             (cxml:text "(setf (") ; TODO
                                             (span "name"          (lambda ()
-                                                                    (cxml:text (evaluate-to-string builder name))))
+                                                                    (cxml:text (dpans-conversion.transform::evaluate-to-string
+                                                                                builder name))))
+                                            (cxml:text " ")
                                             (span "lambda-list"   (a:curry recurse :relations '((:argument . *))))
                                             (cxml:text ") ")
                                             (span "new-value"   (a:curry recurse :relations '((:new-value . 1))))
                                             (cxml:text ")")))
                                     (br))
                               (bp:node-relation builder '(:name . *) node)))
-                        (:macro-definition
-                         (span "function-definition"
-                               (lambda ()
-                                 (span "name"          (a:curry recurse :relations '((:name . 1))))
-                                 (span "lambda-list"   (a:curry recurse :relations '((:argument . *))))
-                                 (cxml:unescaped "&nbsp;")
-                                 (cxml:text "\\( \\rightarrow \\)")
-                                 (cxml:unescaped "&nbsp;")
-                                 (if (member :return-value relations :key #'car)
-                                     (span "return-values" (a:curry recurse :relations '((:return-value . *))))
-                                     (cxml:text "|"))))
-                         (br))
-
                         (:type-definition
                          (span "type-definition"
                                (lambda ()
                                  (span "name"        (a:curry recurse :relations '((:name . 1))))
+                                 (cxml:text " ")
                                  (span "lambda-list" (a:curry recurse :relations '((:element . *)))))) ; TODO relation name
                          (br))
 
-                        
+
 
                         (:index)        ; drop index stuff here
 
@@ -476,93 +452,124 @@
                         (:ftype )
                         (:none (span "none" (lambda () (cxml:text "None"))))
                         (:part
-                         (cxml:with-element "dl" ; TODO one dl for all parts?
-                           (cxml:with-element "dt"
-                             (funcall recurse :relations '((:name . 1))))
-                           (cxml:with-element "dd"
-                             (funcall recurse :relations '((:element . *))))))
+                         (let* ((name (bp:node-relation builder '(:name . 1) node))
+                                (name (dpans-conversion.transform::evaluate-to-string
+                                       builder name)))
+                           (flet ((do-it ()
+                                    (cxml:with-element "dl" ; TODO one dl for all parts?
+                                      (cxml:with-element "dt"
+                                        (funcall recurse :relations '((:name . 1))))
+                                      (cxml:with-element "dd"
+                                        (funcall recurse :relations '((:element . *)))))))
+                             (if (find-if (a:rcurry #'a:starts-with-subseq name)
+                                          '("Note" "Example" "Pronunciation" "See Also"))
+                                 (removable-text #'do-it)
+                                 (do-it)))))
                         (:component
                          (let* ((names     (bp:node-relation builder '(:name . *) node))
                                 (ftype     (node-name (find-child-of-kind builder :ftype node)))
-                                (namespace (a:eswitch (ftype :test #'string=)
-                                             ("Symbol"                    "symbol")
-                                             ("Class"                     "type")
-                                             ("System Class"              "type")
-                                             ("Condition Type"            "type")
-                                             ("Type"                      "type")
-                                             ("Type Specifier"            "type")
-                                             ("Macro"                     "macro")
-                                             ("Local Macro"               "macro") ; TODO what?
-                                             ("Function"                  "function")
-                                             ("Local Function"            "function") ; TODO what?
-                                             ("Accessor"                  "function")
-                                             ("Standard Generic Function" "function")
-                                             ("Special Operator"          "special-operator")
-                                             ("Variable"                  "variable")
-                                             ("Constant Variable"         "constant")
-                                             ("Declaration"               "declaration")
-                                             ("Restart"                   "restart"))))
+                                (namespace (dpans-conversion.transform::namespace<-ftype ftype)))
                            (format t "~V@TGenerating component ~{~A~^, ~}~%"
                                    (* 2 (length file-stack))
                                    (map 'list (a:curry #'evaluate-to-string builder) names))
                            (br)
                            (div "component"
                                 (lambda ()
+                                  (when (bp:node-relation builder '(:issue . *) node)
+                                    (div "issues" (lambda ()
+                                                    (cxml:text "Issues: ")
+                                                    (funcall recurse :relations '((:issue . *))))))
                                   (map nil (lambda (name next-name)
-                                             (let ((name (evaluate-to-string builder name)))
+                                             (multiple-value-bind (name setf?)
+                                                 (dpans-conversion.transform::evaluate-to-string builder name)
                                                (cxml:with-element "a"
-                                                 (cxml:attribute "id" (format nil "~A-~A"
+                                                 (cxml:attribute "id" (format nil "~(~A~)-~A"
                                                                               namespace
                                                                               name))
                                                  (cxml:text " ")) ; HACK
-                                               (span "name" (lambda () (cxml:text name)))
+                                               (span "name" (lambda ()
+                                                              (when setf?
+                                                                (cxml:text "(setf") ; TODO make a function
+                                                                (cxml:unescaped "&nbsp;"))
+                                                              (cxml:text name)
+                                                              (when setf?
+                                                                (cxml:text ")"))))
                                                (when next-name
                                                  (cxml:text ", "))))
                                        names (append (rest names) '(nil)))
                                   (span "ftype" (lambda () (cxml:text ftype)))
                                   (funcall recurse :relations '((:element . *)))))
                            (br)))
-                        (:issue
-                         (funcall recurse :relations '(:element))
-                         #+no (progn
-                                (br)
-                                (div "issue"
-                                     (lambda ()
-                                       (span "name" (lambda ()
-                                                      (cxml:text "Issue ")
-                                                      (funcall recurse :relations '(:name))))
-                                       (br)
-                                       (funcall recurse :relations '(:element))))
-                                (br)))
+                        (:issue-annotation
+                         (div "issue-annotation"
+                              (lambda ()
+                                (span "issue-reference"
+                                      (lambda ()
+                                        (cxml:text "Issue: ")
+                                        (let ((name (dpans-conversion.transform::evaluate-to-string
+                                                     builder (bp:node-relation builder '(:name . 1) node) )))
+                                          (cxml:text name))))
+                                (funcall recurse :relations '(:element)))))
+                        (:editor-note
+                         (tooltip "editor-note" "editor-note-tooltip"
+                                  (lambda ()
+                                    (span "editor" (lambda () (cxml:text editor)))
+                                    (cxml:text ": ")
+                                    (cxml:text content))
+                                  (lambda () (cxml:text "‣"))
+                                  :element 'span))
+                        (:reviewer-note
+                         (tooltip "reviewer-note" "reviewer-note-tooltip"
+                                  (lambda ()
+                                    (when reviewer
+                                      (span "reviewer" (lambda () (cxml:text reviewer))))
+                                    (cxml:text ": ")
+                                    (cxml:text content))
+                                  (lambda () (cxml:text "‣"))
+                                  :element 'span))
                         ;; Structure
                         ((:head :head1)
                          (span "title" recurse)
                          (br))
                         ((:chapter)
-                         (cxml:with-element "h1"
-                           (let* ((id     (evaluate-to-string
-                                           builder (bp:node-relation builder '(:name3 . 1) node)))
-                                  (anchor (format nil "section-~A" id)))
-                             (cxml:attribute "id" anchor))
-                           (funcall recurse :relations '((:name . 1))))
-                         (funcall recurse :relations '(:element)))
+                         (let* ((number   (dpans-conversion.transform::evaluate-to-string
+                                           builder (bp:node-relation builder '(:id . 1) node)))
+                                (filename (format nil "/tmp/output/chapter-~A.html" number)))
+                           (with-html-document (stream filename :use-mathjax use-mathjax
+                                                                :use-sidebar use-sidebar)
+                             (cxml:with-element "h1"
+                               (let* ((id     (dpans-conversion.transform::evaluate-to-string
+                                               builder (bp:node-relation builder '(:name3 . 1) node)))
+                                      (anchor (format nil "section-~A" id)))
+                                 (cxml:attribute "id" anchor))
+                               (funcall recurse :relations '((:name . 1))))
+                             (funcall recurse :relations '(:element)))))
                         ((:section :sub-section :sub-sub-section :sub-sub-sub-section :sub-sub-sub-sub-section)
-                         (cxml:with-element (ecase kind
-                                              (:section "h2")
-                                              (:sub-section "h3")
-                                              (:sub-sub-section "h4")
-                                              (:sub-sub-sub-section "h5")
-                                              (:sub-sub-sub-sub-section "h6"))
-                           (let* ((id-node (find-child-of-kind builder :define-section node))
-                                  (id      (if id-node
-                                               (node-name id-node)
-                                               (remove #\Space (node-name node))))
-                                  (anchor  (format nil "section-~A" id)))
-                             (cxml:attribute "id" anchor))
-                           (funcall recurse :relations '((:name . 1))))
-                         (funcall recurse :relations '(:element)))
+                         (flet ((do-it ()
+                                  (cxml:with-element (ecase kind
+                                                       (:section "h2")
+                                                       (:sub-section "h3")
+                                                       (:sub-sub-section "h4")
+                                                       (:sub-sub-sub-section "h5")
+                                                       (:sub-sub-sub-sub-section "h6"))
+                                    (let* ((id-node (find-child-of-kind builder :define-section node))
+                                           (id      (if id-node
+                                                        (node-name id-node)
+                                                        (remove #\Space (node-name node))))
+                                           (anchor  (format nil "section-~A" id)))
+                                      (cxml:attribute "id" anchor))
+                                    (funcall recurse :relations '((:name . 1))))
+                                  (funcall recurse :relations '(:element))))
+                           (let* ((name (bp:node-relation builder '(:name . 1) node))
+                                  (name (dpans-conversion.transform::evaluate-to-string
+                                         builder name)))
+                             (if (find-if (a:rcurry #'a:starts-with-subseq name)
+                                          '("Note" "Example"))
+                                 (removable-text #'do-it)
+                                 (do-it)))))
                         (:non-breaking-space (cxml:unescaped "&nbsp;")) ; TODO
                         (:emdash (cxml:unescaped "&mdash;"))
+                        (:endash (cxml:unescaped "&ndash;"))
                         (:paragraph-break (cxml:with-element "br"))
                         ;; Tables
                         ( :define-figure
@@ -574,31 +581,31 @@
                         ((:displaytwo :displaythree :displayfour :displayfive)
                          (cxml:with-element "table"
                            #+no (let* ((id-node (find-child-of-kind builder :define-figure node))
-                                  (id      (when id-node
-                                             (node-name id-node)))
-                                  (anchor  (format nil "figure-~A" id)))
-                             (when id (break))
-                             (cxml:attribute "id" anchor))
+                                       (id      (when id-node
+                                                  (node-name id-node)))
+                                       (anchor  (format nil "figure-~A" id)))
+                                  (when id (break))
+                                  (cxml:attribute "id" anchor))
                            ;; TODO caption and header
                            (funcall recurse :relations '(:row)
                                             :function  (a:curry #'visit :code))))
                         ((:showtwo :showthree)
                          (cxml:with-element "table"
                            #+no (let* ((id-node (find-child-of-kind builder :define-figure node))
-                                  (id      (when id-node
-                                             (node-name id-node)))
-                                  (anchor  (format nil "figure-~A" id)))
-                             (when id (break))
-                             (cxml:attribute "id" anchor))
+                                       (id      (when id-node
+                                                  (node-name id-node)))
+                                       (anchor  (format nil "figure-~A" id)))
+                                  (when id (break))
+                                  (cxml:attribute "id" anchor))
                            ;; TODO caption and header
                            (funcall recurse :relations '(:row))))
                         ((:tablefigtwo :tablefigthree :tablefigfour :tablefigsix)
                          (cxml:with-element "table"
                            #+no (let* ((id-node (find-child-of-kind builder :define-figure node))
-                                  (id      (when id-node
-                                             (node-name id-node)))
-                                  (anchor  (format nil "figure-~A" id)))
-                             (cxml:attribute "id" anchor))
+                                       (id      (when id-node
+                                                  (node-name id-node)))
+                                       (anchor  (format nil "figure-~A" id)))
+                                  (cxml:attribute "id" anchor))
                            ;; TODO caption
                            (cxml:with-element "thead"
                              (funcall recurse :relations '(:header)))
@@ -665,7 +672,7 @@
                         (:bracket-group
                          (funcall recurse))
                         ;; Ignored
-                        ((:input :comment :define-section :editor-note :reviewer-note))))
+                        ((:input :comment :define-section))))
                  (pop stack))))
       (bp:walk-nodes builder (bp:peeking #'peek (a:curry #'visit :top)) tree))))
 
@@ -689,7 +696,7 @@
                      &rest initargs &key filename name &allow-other-keys)
                (declare (ignore relation relation-args))
                (case kind
-                 ((:file :included-file)
+                 (:file
                   (setf filename* filename)
                   (reconstitute recurse node kind relations initargs))
                  ((:input)
@@ -708,7 +715,7 @@
                  (:other-command-application
                   (if (equal name "includeDictionary")
                       (let* ((argument (first (bp:node-relation builder :argument node)))
-                             (name     (evaluate-to-string builder argument)))
+                             (name     (dpans-conversion.transform::evaluate-to-string builder argument)))
                         (with-simple-restart (continue "Skip include ~A" name)
                           (let ((*include-depth* (1+ *include-depth*)))
                             (parse-and-include (merge-pathnames name filename*)))))
@@ -719,7 +726,7 @@
 
 (defun parse-and-include (file)
   (format t "~V@TParsing ~A~%" (* 2 *include-depth*) (pathname-name file))
-  (include (dpans-conversion.parser::parse-file file :root-kind (if (zerop *include-depth*) :file :included-file))))
+  (include (dpans-conversion.parser::parse-tex-file 'list file :include-depth *include-depth*)))
 
 ;;;
 
@@ -752,11 +759,12 @@
 (defmethod section-number ((section toc-chapter))
   (list (id section)))
 
-(defun build-toc (files)
+(defun build-toc (tree)
   (let* ((builder 'list)
          (root    (make-instance 'toc-section :name nil))
          (stack   (list root)))
     (labels ((visit (recurse relation relation-args node kind relations &rest initargs)
+               (declare (ignore relation relation-args relations initargs))
                (case kind
                  ((:chapter)
                   (let* ((top     (first stack))
@@ -781,10 +789,8 @@
                   (funcall recurse)
                   (pop stack))
                  (t
-                  (funcall recurse))))
-             (one-file (file)
-               (bp:walk-nodes builder #'visit file)))
-      (map nil #'one-file files))
+                  (funcall recurse)))))
+      (bp:walk-nodes builder #'visit tree))
     (setf (children root) (sort (children root) (lambda (left right)
                                                   (cond ((notevery #'digit-char-p right)
                                                          t)
@@ -803,7 +809,7 @@
     (flet ((process-file (input output)
              (format t "Processing file ~A~%" input)
              (with-simple-restart (continue "Skip ~A" input)
-               (render-to-file (dpans-conversion.parser::parse-file input) output env
+               (render-to-file (dpans-conversion.parser::parse-tex-file 'list input) output env
                                :use-mathjax        nil
                                :modify-environment t))))
       (process-file "data/dpANS3/setup-title.tex"    "/tmp/output/setup-title.html")
@@ -811,31 +817,41 @@
       (process-file "data/dpANS3/setup-document.tex" "/tmp/output/setup-document.html")
       (process-file "data/dpANS3/setup-terms.tex"    "/tmp/output/setup-terms.html")
       ;; (:inspect env :new-inspector? t)
-      (let* ((files (loop :for input :in (append (directory "data/dpANS3/chap-0.tex")
-                                                 ;; (directory "data/dpANS3/chap-[0123456789][0123456789].tex")
-                                                 ;; (directory "data/dpANS3/dict-*.tex")
-                                                 ;; (directory "data/dpANS3/concept-*.tex")
-                                                 )
-                          :collect
-                             (with-simple-restart (continue "Skip ~A" input)
-                               (parse-and-include input))))
-             (toc   (build-toc files)))
+      (let* ((tree        (dpans-conversion::parse-dpans 'list #P "~/code/cl/common-lisp/dpans-conversion/data/dpANS3/chap-0.tex"
+                                                         :root-directory "~/code/cl/common-lisp/dpans-conversion/"))
+             (toc         (build-toc tree))
+             (transformed (dpans-conversion.transform::apply-transforms
+                           (list ;; (make-instance 'dpans-conversion.transform::strip-comments)
+                            ;; (make-instance 'dpans-conversion.transform::expand-macros :environment env :debug-expansion '("includeDictionary"))
+                            ;; (make-instance 'dpans-conversion.transform::strip-tex-commands)
+                            ; (make-instance 'dpans-conversion.transform::attach-issue-references)
+                            ; (make-instance 'dpans-conversion.transform::build-references :builder 'list)
+                            ; (make-instance 'dpans-conversion.transform::verify)
+                            )
+                           tree)))
+
         (:inspect (vector env
                           (architecture.builder-protocol.visualization::as-tree
-                           (first files) 'list)
+                           tree 'list)
                           (architecture.builder-protocol.visualization::as-query
-                           (first files) 'list :editor-note)
+                           tree 'list :editor-note)
                           (architecture.builder-protocol.visualization::as-query
                            (dpans-conversion.transform::apply-transforms
-                            (list ; (make-instance 'dpans-conversion.transform::strip-comments)
-                                  (make-instance 'dpans-conversion.transform::expand-macros :environment env :debug-expansion '("includeDictionary"))
-                                  ; (make-instance 'dpans-conversion.transform::strip-tex-commands)
-                                  )
-                            (first files))
+                            (list
+                                        ; (make-instance 'dpans-conversion.transform::strip-comments)
+                             (make-instance 'dpans-conversion.transform::expand-macros :builder         'list
+                                                                                       :environment     env
+                                                                                       :debug-expansion '("includeDictionary"))
+                                        ; (make-instance 'dpans-conversion.transform::strip-tex-commands)
+
+                             )
+                            tree)
                            'list
                            :editor-note)
+                          (architecture.builder-protocol.visualization::as-query
+                           transformed 'list :component)
                           toc)
-                  :new-inspector? t)
+         :new-inspector? t)
         (map nil (lambda (file)
                    (let* ((filename (getf (bp:node-initargs 'list file) :filename))
                           (name     (pathname-name filename))
@@ -849,5 +865,5 @@
                                        :use-sidebar     use-sidebar
                                        :use-mathjax     use-mathjax
                                        :debug-expansion debug-expansion))))
-             files)))))
-
+             (list transformed) ;; files
+             )))))

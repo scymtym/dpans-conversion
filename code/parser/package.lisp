@@ -19,4 +19,8 @@
   (:import-from #:parser.packrat.grammar.sequence
    #:?
    #:seq
-   #:bounds))
+   #:bounds)
+
+  (:export
+   #:parse-tex-file
+   #:parse-issue-file))

@@ -17,9 +17,13 @@
                 :pathname   "code/parser"
                 :serial     t
                 :components ((:file       "package")
+                             ;; TeX sources
                              (:file       "grammar")
                              (:file       "semantic")
-                             (:file       "issues")))
+                             ;; Issues
+                             (:file       "issues")
+                             ;; Interface
+                             (:file       "protocol")))
 
                (:module     "transform"
                 :pathname   "code/transform"
@@ -27,14 +31,28 @@
                 :components ((:file       "package")
                              (:file       "protocol")
                              (:file       "utilities")
+                             (:file       "environment")
                              (:file       "mixins")
+
+                             (:file       "include-files")
+                             (:file       "build-references")
                              (:file       "strip-comments")
                              (:file       "strip-tex-commands")
                              (:file       "expand-macros")))
 
                (:module     "html"
                 :pathname   "code/html"
+                :depends-on ("transform")
                 :serial     t
                 :components ((:file       "package")
                              (:file       "environment")
-                             (:file       "render")))))
+                             (:file       "html")
+                             (:file       "render")
+                             (:file       "render-issue")))
+
+               (:module     "interface"
+                :pathname   "code"
+                :depends-on ("parser")
+                :serial     t
+                :components ((:file       "package")
+                             (:file       "interface")))))
