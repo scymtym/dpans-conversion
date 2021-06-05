@@ -214,20 +214,6 @@
 (define-group math-group    :math          #\$  #\$)
 (define-group math-display  :math-display  "$$" "$$")
 
-(defrule text ()
-    (+ (or (seq #\{
-                (<<- blocks (:transform (seq)
-                              (prog1
-                                  (when block
-                                    (list :block (coerce (nreverse block) 'string)))
-                                (setf block '()))))
-                (? (<<- blocks (element)))
-                #\})
-           (<<- block (and (not (or #\{ #\} #\\ #\%)) :any))))
-  (let ((last-block (when block
-                      (list :block (coerce (nreverse block) 'string)))))
-    (nreverse (remove nil (list* last-block blocks)))))
-
 (defrule code ()
     (bounds (start end)
       (seq "\\code" #\Newline
@@ -776,7 +762,7 @@
       (def) (argument) ; TODO
       (let-macro)
       (other-command-application)
-                                        ; (text)
+
       (block*)
       (bracket-group)
       (math-display)
