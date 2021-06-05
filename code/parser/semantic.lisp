@@ -54,6 +54,17 @@
     (1 (:name    . 1) name)
     (* (:element . *) (nreverse elements))))
 
+;;; Name
+
+(defrule component-name () ; TODO rename to just name? or to symbol?
+  (bounds (start end)
+    (or (seq (<- setf? (:transform "(setf " t))
+             (+ (<<- characters (and (not #\)) :any))) #\))
+        (+ (or #\$ ; Read 1$-$ as 1-
+               (<<- characters (and (not (or #\Space #\Tab #\, #\{ #\})) :any))))))
+  (let ((name (coerce (nreverse characters) 'string)))
+    (bp:node* (:symbol :name name :setf? setf? :bounds (cons start end)))))
+
 ;;; Syntax
 
 (macrolet
@@ -83,7 +94,7 @@
 (defrule call-syntax-special-operator ()
     (bounds (start end)
       (seq "\\" "Defspec" (? (or (seq "WithValues" (? "Newline")) "NoReturn"))
-           (seq (skippable*) (? #\{) (<-  name          (element))     (skippable*) (? #\}))
+           (seq (skippable*) (? #\{) (<-  name          (component-name))     (skippable*) (? #\}))
            (seq (skippable*) #\{     (* (<<- arguments     (element))) (skippable*) #\})
            (? (seq (skippable*) #\{     (* (<<- return-values (element))) (skippable*) #\}))))
   (bp:node* (:call-syntax :which :special-operator :bounds (cons start end))
@@ -94,9 +105,9 @@
 (defrule call-syntax-defun ()
     (bounds (start end)
       (seq "\\" "Defun" (? (or (seq "WithValues" (? "Newline")) "NoReturn"))
-           (seq (skippable*) (? #\{) (<-  name          (element))     (skippable*) (? #\}))
-           (seq (skippable*) #\{     (* (<<- arguments     (element))) (skippable*) #\})
-           (? (seq (skippable*) #\{     (* (<<- return-values (element))) (skippable*) #\}))))
+           (seq (skippable*) (? #\{) (<-  name          (component-name))     (skippable*) (? #\}))
+           (seq (skippable*) #\{ (* (<<- arguments     (element))) (skippable*) #\})
+           (? (seq (skippable*) #\{ (* (<<- return-values (element))) (skippable*) #\}))))
   (bp:node* (:call-syntax :which :function :bounds (cons start end))
     (1 (:name         . *) name)
     (* (:argument     . *) (nreverse arguments))
@@ -107,7 +118,7 @@
       (seq "\\DefunMultiWithValues"
            (skippable*) #\{ (* (<<- arguments     (element)))            (skippable*) #\}
            (skippable*) #\{ (* (<<- return-values (element)))            (skippable*) #\}
-           (skippable*) #\{ (* (seq "\\entry{" (<<- names (element)) #\} (skippable*))) #\}))
+           (skippable*) #\{ (* (seq "\\entry{" (<<- names (component-name)) #\} (skippable*))) #\}))
   (bp:node* (:call-syntax :which :function :bounds (cons start end))
     (* (:name         . *) (nreverse names))
     (* (:argument     . *) (nreverse arguments))
@@ -156,7 +167,7 @@
       (seq "\\" "Deftype"
            (seq (skippable*) (? #\{) (<-  name        (element))     (skippable*) (? #\}))
            (seq (skippable*) #\{     (* (<<- elements (element))) (skippable*) #\})))
-  (bp:node* (:type-definition :bounds (cons start end))
+  (bp:node* (:call-syntax :which :type :bounds (cons start end))
     (1 (:name    . 1) name)
     (* (:element . *) (nreverse elements))))
 
@@ -166,7 +177,7 @@
            (skippable*) (<- name (element))
            (skippable*) #\{ (* (<<- arguments  (element))) (skippable*) #\}
            (skippable*) #\{ (<- new-value (element)) (skippable*) #\}))
-  (bp:node* (:setf-definition :bounds (cons start end))
+  (bp:node* (:call-syntax :which :setf :bounds (cons start end))
     (1 (:name      . *) name)
     (* (:argument  . *) (nreverse arguments))
     (1 (:new-value . 1) new-value)))
@@ -177,7 +188,7 @@
            (skippable*) #\{ (* (<<- arguments  (element))) (skippable*) #\}
            (skippable*) #\{ (<- new-value (element)) (skippable*) #\}
            (skippable*) #\{ (* (seq "\\entry{" (<<- names (element)) #\} (skippable*))) #\}))
-  (bp:node* (:setf-definition :bounds (cons start end))
+  (bp:node* (:call-syntax :which :setf :bounds (cons start end))
     (* (:name      . *) names)
     (* (:argument  . *) (nreverse arguments))
     (1 (:new-value . 1) new-value)))
@@ -212,14 +223,6 @@
   (bp:node* (:part :bounds (cons start end))
     (1 (:name . 1)    name)
     (* (:element . *) (nreverse elements))))
-
-(defrule component-name ()
-    (bounds (start end)
-      (or (seq (<- setf? (:transform "(setf " t))
-               (+ (<<- characters (and (not #\)) :any))) #\))
-          (+ (<<- characters (and (not (or #\Space #\Tab #\, #\})) :any)))))
-  (let ((name (coerce (nreverse characters) 'string)))
-    (bp:node* (:symbol :name name :setf? setf? :bounds (cons start end)))))
 
 (defun print-component-name (stream name &optional colon? at?)
   (declare (ignore colon? at?))

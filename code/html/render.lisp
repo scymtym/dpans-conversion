@@ -90,10 +90,43 @@
 
 (defvar *math?* nil) ; TODO hack
 
+(defun render-name (name setf?)
+  (span "name" (lambda ()
+                 (when setf?
+                   (cxml:text "(setf")
+                   (cxml:unescaped "&nbsp;"))
+                 (cxml:text name)
+                 (when setf?
+                   (cxml:text ")")))))
+
+(defun render-name-node (builder name)
+  (multiple-value-bind (name setf?)
+      (dpans-conversion.transform::evaluate-to-string builder name)
+    (render-name name setf?)))
+
+(defun render-node-names (builder node)
+  )
+
+(defun builtin-the (environment arguments)
+  (assert (a:length= 1 arguments))
+  (let* ((argument (first arguments))
+         (name     (getf (bp:node-initargs 'list argument) :name)
+                   #+no (dpans-conversion.transform::evaluate-to-string
+                         'list (first arguments))))
+    (assert (eq :other-command-application (bp:node-kind 'list argument)))
+    (break "~A ~A => ~A => ~A" environment arguments name (env:lookup name :macro environment
+                                                                           :if-does-not-exist nil))
+    (a:when-let ((macro (env:lookup name :macro environment :if-does-not-exist nil)))
+      (list (bp:node-relation 'list '(:body . *) macro))
+      '())))
+
 (defun render-to-file (tree file environment &key (use-mathjax        t)
                                                   (use-sidebar        t)
                                                   (debug-expansion    nil)
                                                   (modify-environment nil))
+
+  (setf (env:lookup "the" :macro environment) (lambda (&rest args) (apply 'builtin-the args)))
+
   (let ((builder           'list)
         (stack             '())
         (file-stack        '())
@@ -119,41 +152,46 @@
                              (arguments (bp:node-relation builder '(:argument . *) node)))
                         (a:if-let ((macro (env:lookup name :macro (first environment-stack)
                                                            :if-does-not-exist nil)))
-                          (let* ((body      (bp:node-relation builder '(:body . *) macro))
-                                 (expansion (cond ((equal name "more")
-                                                   arguments)
-                                                  ((and (= (length body) 1)
-                                                        (eq (bp:node-kind builder (first body)) :other-command-application)
-                                                        arguments)
+                          (if (functionp macro)
+                              (let ((expansion (funcall macro environment arguments)))
+                                (values (bp:node (builder :splice :expansion-of node)
+                                          (* :element expansion))
+                                        :splice '() '(:element)))
+                              (let* ((body      (bp:node-relation builder '(:body . *) macro))
+                                     (expansion (cond ((equal name "more")
+                                                       arguments)
+                                                      ((and (= (length body) 1)
+                                                            (eq (bp:node-kind builder (first body)) :other-command-application)
+                                                            arguments)
 
-                                                   (let ((name (getf (bp:node-initargs builder (first body)) :name)))
-                                                     (list (bp:node (builder :other-command-application :name name)
-                                                             (* (:argument . *) arguments)))))
-                                                  ((not (member name '("sub")
-                                                                :test #'equal))
-                                                   (let* ((first-parameter (first (bp:node-relation builder :argument macro)))
-                                                          (level           (if first-parameter
-                                                                               (getf (bp:node-initargs builder first-parameter) :level)
-                                                                               1)))
-                                                     (map 'list (lambda (b)
-                                                                  #+no (when (equal name "seesection")
-                                                                         (break "~S ~S ~S ~S => ~S" macro level b arguments (expand builder b level arguments)))
-                                                                  (expand builder b level arguments))
-                                                          body)))
-                                                  (t
-                                                   (append body
-                                                           (list (bp:node (builder :block)
-                                                                   (* (:element . *) arguments)))
+                                                       (let ((name (getf (bp:node-initargs builder (first body)) :name)))
+                                                         (list (bp:node (builder :other-command-application :name name)
+                                                                 (* (:argument . *) arguments)))))
+                                                      ((not (member name '("sub")
+                                                                    :test #'equal))
+                                                       (let* ((first-parameter (first (bp:node-relation builder :argument macro)))
+                                                              (level           (if first-parameter
+                                                                                   (getf (bp:node-initargs builder first-parameter) :level)
+                                                                                   1)))
+                                                         (map 'list (lambda (b)
+                                                                      #+no (when (equal name "seesection")
+                                                                             (break "~S ~S ~S ~S => ~S" macro level b arguments (expand builder b level arguments)))
+                                                                      (expand builder b level arguments))
+                                                              body)))
+                                                      (t
+                                                       (append body
+                                                               (list (bp:node (builder :block)
+                                                                       (* (:element . *) arguments)))
                                         ; (list (bp:node (builder :word :content "{")))
                                         ; (bp:node-relation builder :argument node)
                                         ; (list (bp:node (builder :word :content "}")))
-                                                           )))))
-                            (when (or (eq debug-expansion t)
-                                      (member name debug-expansion :test #'string=))
-                              (format t "  Expanded ~A[~S] -> ~S~%" name arguments expansion))
-                            (values (bp:node (builder :splice :expansion-of node)
-                                      (* :element expansion))
-                                    :splice '() '(:element)))
+                                                               )))))
+                                (when (or (eq debug-expansion t)
+                                          (member name debug-expansion :test #'string=))
+                                  (format t "  Expanded ~A[~S] -> ~S~%" name arguments expansion))
+                                (values (bp:node (builder :splice :expansion-of node)
+                                          (* :element expansion))
+                                        :splice '() '(:element))))
                           (cond (*math?*
                                  (let ((arguments (map 'list (a:curry #'evaluate-to-string builder)
                                                        (bp:node-relation builder '(:argument . *) node))))
@@ -167,22 +205,24 @@
                                 ((member name '("newif" "overfullrule" "pageno"
                                                 "Head" "HeadI" "longbookline"
                                                 "DocumentNumber" "vfill" "vfil" "hfill" "hfil" "noalign"
-                                                "eject" "break" "vtop"
+                                                "eject" "vtop"
                                                 "newskip" "newdimen" "hsize" "topskip"
                                                 "leftskip" "parindent" "parskip"
                                                 "setbox" "hbox" "fullhsize" "vskip" "hskip" "parfillskip" "relax"
                                                 "obeylines" "rightskip" "noindent" "hangindent" "negthinspace"
-                                                "quad" "penalty" "Vskip" "medbreak" "goodbreak"
+                                                "quad" "penalty" "Vskip"
+                                                "break" "smallbreak" "medbreak" "goodbreak"
                                                 "bye")
                                          :test 'string=)
                                  nil)
                                 (t
-                                 #+no (destructuring-bind (start . end) (getf initargs :source)
+                                 #+no (destructuring-bind (&optional start . end) (getf initargs :source)
                                         (cerror "Put error indicator into output"
                                                 "Undefined macro ~S [~A at ~A:~A in ~A]"
                                                 name
-                                                (make-snippet (a:read-file-into-string (first file-stack))
-                                                              start end)
+                                                (when (and start end)
+                                                  (dpans-conversion.parser::make-snippet (a:read-file-into-string (first file-stack))
+                                                                                         start end))
                                                 start end (first file-stack)))
                                  (span "error" (lambda ()
                                                  (cxml:text (format nil "Undefined macro ~S (source: ~S)"
@@ -220,8 +260,13 @@
                            (pop-file)))
                         ;; Evaluation
                         (:definition
-                         (format t "~V@TDefining macro ~S~%" (* 2 (length file-stack)) name)
-                         (setf (env:lookup name :macro (first environment-stack)) node))
+                         (let* ((kind        (getf initargs :kind))
+                                (environment (if t ; TODO make local when result of macro expansion?
+                                                 (a:lastcar environment-stack)
+                                                 (first environment-stack))))
+                           (format t "~V@TDefining ~:[local~;global~] macro ~S~%"
+                                   (* 2 (length file-stack)) nil name)
+                           (setf (env:lookup name :macro environment) node)))
                         (:splice
                          (funcall recurse))
                         (:argument
@@ -272,7 +317,9 @@
                          (let* ((name (node-name node))
                                 (url  (format nil "#lambda-list-keyword-~A" name)))
                            (unless name (break "~A" node))
-                           (a* url "lambda-list-keyword-reference" recurse)))
+                           (a* url "lambda-list-keyword-reference" (lambda ()
+                                                                     (cxml:text "&")
+                                                                     (funcall recurse)))))
                         (:typeref
                          (let* ((name (node-name node))
                                 (url  (format nil "#type-~A" name)))
@@ -327,6 +374,8 @@
                            (funcall recurse :function (a:curry #'visit :math)))
                          (cxml:text " \\]"))
 
+                        (:symbol
+                         (render-name-node builder node))
                         (:param (span "parameter" recurse))
                         (:keyword
                          (span "keyword" (lambda ()
@@ -362,7 +411,7 @@
                            (:special-operator ; TODO rename to ...-syntax
                             (span "special-operator-definition"
                                   (lambda ()
-                                    (span "name"          (a:curry recurse :relations '((:name . *))))
+                                    (a:curry recurse :relations '((:name . *)))
                                     (cxml:text " ")
                                     (span "lambda-list"   (a:curry recurse :relations '((:argument . *))))
                                     (cxml:unescaped "&nbsp;")
@@ -376,9 +425,7 @@
                             (map nil (lambda (name)
                                        (span "function-definition"
                                              (lambda ()
-                                               (span "name"          (lambda ()
-                                                                       (cxml:text (dpans-conversion.transform::evaluate-to-string
-                                                                                   builder name))))
+                                               (render-name-node builder name)
                                                (cxml:text " ")
                                                (span "lambda-list"   (a:curry recurse :relations '((:argument . *))))
                                                (cxml:unescaped "&nbsp;")
@@ -392,7 +439,7 @@
                            (:generic-function
                             (span "function-definition"
                                   (lambda ()
-                                    (span "name"          (a:curry recurse :relations '((:name . *))))
+                                    (a:curry recurse :relations '((:name . *)))
                                     (cxml:text " ")
                                     (span "lambda-list"   (a:curry recurse :relations '((:argument . *))))
                                     (cxml:unescaped "&nbsp;")
@@ -405,46 +452,44 @@
                            (:method
                                (span "method"
                                 (lambda ()
-                                  (span "name"        (a:curry recurse :relations '((:name . *))))
+                                  (a:curry recurse :relations '((:name . *)))
                                   (span "lambda-list" (a:curry recurse :relations '((:argument . *))))))
                              (br))
                            (:macro
                             (span "function-definition"
                                   (lambda ()
-                                    (span "name"          (a:curry recurse :relations '((:name . 1))))
+                                    (a:curry recurse :relations '((:name . 1)))
                                     (cxml:text " ")
-                                    (span "lambda-list"   (a:curry recurse :relations '((:argument . *))))
+                                    (span "lambda-list" (a:curry recurse :relations '((:argument . *))))
                                     (cxml:unescaped "&nbsp;")
                                     (cxml:text "\\( \\rightarrow \\)")
                                     (cxml:unescaped "&nbsp;")
                                     (if (member :return-value relations :key #'car)
                                         (span "return-values" (a:curry recurse :relations '((:return-value . *))))
                                         (cxml:text "|"))))
-                            (br))))
-                        (:setf-definition
-                         (map nil (lambda (name)
-                                    (span "setf-definition"
-                                          (lambda ()
-                                            (cxml:text "(setf (") ; TODO
-                                            (span "name"          (lambda ()
-                                                                    (cxml:text (dpans-conversion.transform::evaluate-to-string
-                                                                                builder name))))
-                                            (cxml:text " ")
-                                            (span "lambda-list"   (a:curry recurse :relations '((:argument . *))))
-                                            (cxml:text ") ")
-                                            (span "new-value"   (a:curry recurse :relations '((:new-value . 1))))
-                                            (cxml:text ")")))
-                                    (br))
-                              (bp:node-relation builder '(:name . *) node)))
-                        (:type-definition
-                         (span "type-definition"
-                               (lambda ()
-                                 (span "name"        (a:curry recurse :relations '((:name . 1))))
-                                 (cxml:text " ")
-                                 (span "lambda-list" (a:curry recurse :relations '((:element . *)))))) ; TODO relation name
-                         (br))
-
-
+                            (br))
+                           (:type
+                            (span "type-definition"
+                                  (lambda ()
+                                    (a:curry recurse :relations '((:name . 1)))
+                                    (cxml:text " ")
+                                    (span "lambda-list" (a:curry recurse :relations '((:element . *)))))) ; TODO relation name
+                            (br))
+                           (:setf
+                            (map nil (lambda (name)
+                                       (span "setf-definition"
+                                             (lambda ()
+                                               (cxml:text "(setf (") ; TODO
+                                               (span "name" (lambda ()
+                                                              (cxml:text (dpans-conversion.transform::evaluate-to-string
+                                                                          builder name))))
+                                               (cxml:text " ")
+                                               (span "lambda-list" (a:curry recurse :relations '((:argument . *))))
+                                               (cxml:text ") ")
+                                               (span "new-value" (a:curry recurse :relations '((:new-value . 1))))
+                                               (cxml:text ")")))
+                                       (br))
+                                 (bp:node-relation builder '(:name . *) node)))))
 
                         (:index)        ; drop index stuff here
 
@@ -475,10 +520,6 @@
                            (br)
                            (div "component"
                                 (lambda ()
-                                  (when (bp:node-relation builder '(:issue . *) node)
-                                    (div "issues" (lambda ()
-                                                    (cxml:text "Issues: ")
-                                                    (funcall recurse :relations '((:issue . *))))))
                                   (map nil (lambda (name next-name)
                                              (multiple-value-bind (name setf?)
                                                  (dpans-conversion.transform::evaluate-to-string builder name)
@@ -487,13 +528,7 @@
                                                                               namespace
                                                                               name))
                                                  (cxml:text " ")) ; HACK
-                                               (span "name" (lambda ()
-                                                              (when setf?
-                                                                (cxml:text "(setf") ; TODO make a function
-                                                                (cxml:unescaped "&nbsp;"))
-                                                              (cxml:text name)
-                                                              (when setf?
-                                                                (cxml:text ")"))))
+                                               (render-name name setf?)
                                                (when next-name
                                                  (cxml:text ", "))))
                                        names (append (rest names) '(nil)))
@@ -675,195 +710,3 @@
                         ((:input :comment :define-section))))
                  (pop stack))))
       (bp:walk-nodes builder (bp:peeking #'peek (a:curry #'visit :top)) tree))))
-
-;;; Include
-
-(defvar *include-depth* 0)
-
-(defun include (tree)
-  (let ((builder 'list)
-        (filename*))
-    (labels ((reconstitute (recurse node kind relations initargs)
-               (bp:make+finish-node+relations
-                builder kind initargs
-                (map 'list (lambda (relation)
-                             (multiple-value-bind (relation* cardinality)
-                                 (bp:normalize-relation relation)
-                               (let ((right (first (funcall recurse :relations (list relation)))))
-                                 (list cardinality relation right))))
-                     relations)))
-             (visit (recurse relation relation-args node kind relations
-                     &rest initargs &key filename name &allow-other-keys)
-               (declare (ignore relation relation-args))
-               (case kind
-                 (:file
-                  (setf filename* filename)
-                  (reconstitute recurse node kind relations initargs))
-                 ((:input)
-                  (cond ((or (member name '("setup" "setup-for-toc")
-                                     :test #'equal)
-                             (a:ends-with-subseq ".fig" name))
-                         nil)
-                        ((a:ends-with-subseq ".tc" name)
-                         (with-simple-restart (continue "Skip include ~A" name)
-                           (let ((*include-depth* (1+ *include-depth*)))
-                             (parse-and-include (merge-pathnames (subseq name 0 (- (length name) 3)) filename*)))))
-                        (t
-                         (with-simple-restart (continue "Skip include ~A" name)
-                           (let ((*include-depth* (1+ *include-depth*)))
-                             (parse-and-include (merge-pathnames name filename*)))))))
-                 (:other-command-application
-                  (if (equal name "includeDictionary")
-                      (let* ((argument (first (bp:node-relation builder :argument node)))
-                             (name     (dpans-conversion.transform::evaluate-to-string builder argument)))
-                        (with-simple-restart (continue "Skip include ~A" name)
-                          (let ((*include-depth* (1+ *include-depth*)))
-                            (parse-and-include (merge-pathnames name filename*)))))
-                      node))
-                 (t
-                  (reconstitute recurse node kind relations initargs)))))
-      (bp:walk-nodes builder #'visit tree))))
-
-(defun parse-and-include (file)
-  (format t "~V@TParsing ~A~%" (* 2 *include-depth*) (pathname-name file))
-  (include (dpans-conversion.parser::parse-tex-file 'list file :include-depth *include-depth*)))
-
-;;;
-
-(defclass toc-section ()
-  ((%name     :initarg  :name
-              :type     (or null string)
-              :reader   name)
-   (%parent   :initarg  :parent
-              :reader   parent
-              :initform nil)
-   (%children :initarg  :children
-              :type     list
-              :accessor children
-              :initform '())))
-
-(defmethod print-object ((object toc-section) stream)
-  (print-unreadable-object (object stream :type t :identity t)
-    (format stream "~{~A~^.~} ~A" (section-number object) (name object))))
-
-(defmethod section-number ((section toc-section))
-  (a:if-let ((parent (parent section)))
-    (let ((position (1+ (position section (children parent)))))
-      (append (section-number parent) (list position)))
-    '()))
-
-(defclass toc-chapter (toc-section)
-  ((%id :initarg  :id
-        :reader   id)))
-
-(defmethod section-number ((section toc-chapter))
-  (list (id section)))
-
-(defun build-toc (tree)
-  (let* ((builder 'list)
-         (root    (make-instance 'toc-section :name nil))
-         (stack   (list root)))
-    (labels ((visit (recurse relation relation-args node kind relations &rest initargs)
-               (declare (ignore relation relation-args relations initargs))
-               (case kind
-                 ((:chapter)
-                  (let* ((top     (first stack))
-                         (id      (getf (bp:node-initargs
-                                         builder (bp:node-relation builder '(:id . 1) node))
-                                        :content))
-                         (name    (node-name node))
-                         (section (make-instance 'toc-chapter :name   name
-                                                              :parent top
-                                                              :id     id)))
-                    (a:appendf (children top) (list section))
-                    (push section stack))
-                  (funcall recurse)
-                  (pop stack))
-                 ((:section :sub-section :sub-sub-section :sub-sub-sub-section :sub-sub-sub-sub-section)
-                  (let* ((top     (first stack))
-                         (name    (node-name node))
-                         (section (make-instance 'toc-section :name   name
-                                                              :parent top)))
-                    (a:appendf (children top) (list section))
-                    (push section stack))
-                  (funcall recurse)
-                  (pop stack))
-                 (t
-                  (funcall recurse)))))
-      (bp:walk-nodes builder #'visit tree))
-    (setf (children root) (sort (children root) (lambda (left right)
-                                                  (cond ((notevery #'digit-char-p right)
-                                                         t)
-                                                        ((notevery #'digit-char-p left)
-                                                         nil)
-                                                        ((let ((left  (parse-integer left))
-                                                               (right (parse-integer right)))
-                                                           (< left right)))))
-                                :key #'id))
-    root))
-
-(defun do-it (&key (use-mathjax     t)
-                   (use-sidebar     nil)
-                   (debug-expansion nil))
-  (let ((env (make-instance 'env:lexical-environment :parent **meta-environment**)))
-    (flet ((process-file (input output)
-             (format t "Processing file ~A~%" input)
-             (with-simple-restart (continue "Skip ~A" input)
-               (render-to-file (dpans-conversion.parser::parse-tex-file 'list input) output env
-                               :use-mathjax        nil
-                               :modify-environment t))))
-      (process-file "data/dpANS3/setup-title.tex"    "/tmp/output/setup-title.html")
-      (process-file "data/dpANS3/setup-aux.tex"      "/tmp/output/setup-aux.html")
-      (process-file "data/dpANS3/setup-document.tex" "/tmp/output/setup-document.html")
-      (process-file "data/dpANS3/setup-terms.tex"    "/tmp/output/setup-terms.html")
-      ;; (:inspect env :new-inspector? t)
-      (let* ((tree        (dpans-conversion::parse-dpans 'list #P "~/code/cl/common-lisp/dpans-conversion/data/dpANS3/chap-0.tex"
-                                                         :root-directory "~/code/cl/common-lisp/dpans-conversion/"))
-             (toc         (build-toc tree))
-             (transformed (dpans-conversion.transform::apply-transforms
-                           (list ;; (make-instance 'dpans-conversion.transform::strip-comments)
-                            ;; (make-instance 'dpans-conversion.transform::expand-macros :environment env :debug-expansion '("includeDictionary"))
-                            ;; (make-instance 'dpans-conversion.transform::strip-tex-commands)
-                            ; (make-instance 'dpans-conversion.transform::attach-issue-references)
-                            ; (make-instance 'dpans-conversion.transform::build-references :builder 'list)
-                            ; (make-instance 'dpans-conversion.transform::verify)
-                            )
-                           tree)))
-
-        (:inspect (vector env
-                          (architecture.builder-protocol.visualization::as-tree
-                           tree 'list)
-                          (architecture.builder-protocol.visualization::as-query
-                           tree 'list :editor-note)
-                          (architecture.builder-protocol.visualization::as-query
-                           (dpans-conversion.transform::apply-transforms
-                            (list
-                                        ; (make-instance 'dpans-conversion.transform::strip-comments)
-                             (make-instance 'dpans-conversion.transform::expand-macros :builder         'list
-                                                                                       :environment     env
-                                                                                       :debug-expansion '("includeDictionary"))
-                                        ; (make-instance 'dpans-conversion.transform::strip-tex-commands)
-
-                             )
-                            tree)
-                           'list
-                           :editor-note)
-                          (architecture.builder-protocol.visualization::as-query
-                           transformed 'list :component)
-                          toc)
-         :new-inspector? t)
-        (map nil (lambda (file)
-                   (let* ((filename (getf (bp:node-initargs 'list file) :filename))
-                          (name     (pathname-name filename))
-                          (output   (merge-pathnames (make-pathname :name name
-                                                                    :type "html")
-                                                     "/tmp/output/")))
-                     (format t "Generating ~A~%" name)
-                     (ensure-directories-exist output)
-                     (with-simple-restart (continue "Skip ~A" filename)
-                       (render-to-file file output env
-                                       :use-sidebar     use-sidebar
-                                       :use-mathjax     use-mathjax
-                                       :debug-expansion debug-expansion))))
-             (list transformed) ;; files
-             )))))

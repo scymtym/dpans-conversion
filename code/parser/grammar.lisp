@@ -226,9 +226,11 @@
     (bounds (start end)
       (seq "\\input"
            (skippable+)
-           (* (<<- name (and (not (skippable)) :any)))
+           (or (<- argument (argument)) ; HACK
+               (* (<<- name (and (not (skippable)) :any))))
            (terminator)))
-  (let ((name (coerce (nreverse name) 'string)))
+  (let ((name (or argument
+                  (coerce (nreverse name) 'string))))
     (bp:node* (:input :name name :bounds (cons start end)))))
 
 (define-command term
@@ -599,22 +601,30 @@
            (skippable*) #\{ (* (<<- body (or (argument) (element)))) #\} ; TODO (argument) is basically wrong here
            (:transform (seq) nil) ; HACK work around bug
            ))
-  (bp:node* (:definition :name name :bounds (cons start end))
+  (bp:node* (:definition :kind   :def
+                         :name   name
+                         :bounds (cons start end))
     (* (:argument . *) (nreverse arguments))
     (* (:body     . *) (nreverse body))))
 
 (defrule let-macro ()
   (bounds (start end)
-          (seq "\\let"
-               #\\ (<- name (identifier-with-dot))
-                                        ; (* (<<- name (and (not (or #\{ #\} #\\ #\. #\# #\& #\_ (terminator))) :any))) ; TODO maybe use identifier
-               (skippable*) (? #\=)
-               (or (seq #\{ (+ (<<- body (and (not (or (skippable) #\})) :any))) #\})
-                   (+ (<<- body (and (not (or (skippable) #\})) :any))))))
-  (let (                     ; (name (coerce (nreverse name) 'string))
-        (body (coerce (nreverse body) 'string)))
-    (bp:node* (:definition :name name :bounds (cons start end))
+    (seq "\\let"
+         #\\ (<- name (identifier-with-dot))
+         (skippable*) (? #\=)
+         (or (seq #\{ (+ (<<- body (and (not (or (skippable) #\})) :any))) #\})
+             (+ (<<- body (and (not (or (skippable) #\})) :any))))))
+  (let ((body (coerce (nreverse body) 'string)))
+    (bp:node* (:definition :kind   :let
+                           :name   name
+                           :bounds (cons start end))
       (1 (:body . *) (bp:node* (:word :content body))))))
+
+#+no (defrule builtin-the ()
+    (bounds (start end)
+      (seq "\\the" #\\ (<- name (identifier-with-dot))))
+  (bp:node* (:the :bounds (cons start end))
+    (1 (:variable . 1) name)))
 
 (defrule other-command-application ()
     (bounds (start end)
@@ -633,14 +643,17 @@
                              "vfill" "hfill" "eject" "fullhsize" "hbox")
                          (<- name (identifier))))
 
-          (seq "\\" (and (seq (or "DefmacWithValuesNewline" "DefmacWithValues" ; TODO still needed?
-                                  "DefmacNoReturn"
-                                  "DefunWithValues"
-                                  "more"
+          (:transform (seq "\\" (and (seq "Def" (or "fun" "mac" "spec" "gen" "meth" "type" "setf"))
+                                     (<- name (identifier))))
+                      (error "should not happen ~A" name))
+
+          (seq "\\" (and (seq (or "more"
                                   "overfullrule"
                                   "pageno"
                                   "Vskip" "hskip" "vskip"
-                                  "penalty")
+                                  "penalty"
+                                  "sub"
+                                  "the")
                               (or (guard digit-char-p)
                                   (not (identifier))))
                          (<- name (identifier)))
@@ -761,6 +774,7 @@
 
       (def) (argument) ; TODO
       (let-macro)
+      ; (builtin-the)
       (other-command-application)
 
       (block*)

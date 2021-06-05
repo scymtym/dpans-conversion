@@ -4,7 +4,7 @@
                     &key (root-directory (uiop:pathname-directory-pathname root-tex-file)))
   (let ((directory   (uiop:pathname-directory-pathname root-tex-file))
         (environment (make-instance 'env:lexical-environment :parent transform::**meta-environment**)))
-    (flet ((process-setup-file (file)
+    #+no (flet ((process-setup-file (file)
              (let ((filename (merge-pathnames file directory)))
                (parser:parse-tex-file builder filename))))
       (process-setup-file "setup-title.tex")
@@ -40,7 +40,7 @@
                                                   :name     nil
                                                   :type     nil
                                                   :defaults (merge-pathnames
-                                                             (make-pathname :directory '(:up))
+                                                             (make-pathname :directory '(:relative :up))
                                                              root-tex-file))))
   (bp:node (builder :collection)
     (1 (:document . *) (parse-dpans builder root-tex-file
@@ -84,3 +84,72 @@
                                               :defaults output-directory)))
                 (dpans-conversion.html::render-issue issue output)))
         issues)))
+
+(defun do-it (&key (use-mathjax     t)
+                   (use-sidebar     nil)
+                   (debug-expansion nil))
+  (let ((env (make-instance 'env:lexical-environment :parent transform::**meta-environment**)))
+    (flet ((process-file (input output)
+             (format t "Processing file ~A~%" input)
+             (with-simple-restart (continue "Skip ~A" input)
+               (dpans-conversion.html::render-to-file
+                (parser::parse-tex-file 'list input) output env
+                :use-mathjax        nil
+                :modify-environment t))))
+      ;; (process-file "data/dpANS3/setup-title.tex"    "/tmp/output/setup-title.html")
+      ;; (process-file "data/dpANS3/setup-aux.tex"      "/tmp/output/setup-aux.html")
+      ;; (process-file "data/dpANS3/setup-document.tex" "/tmp/output/setup-document.html")
+      ;; (process-file "data/dpANS3/setup-terms.tex"    "/tmp/output/setup-terms.html")
+      ;; (:inspect env :new-inspector? t)
+      (let* ((tree        (parse-dpans 'list #P "~/code/cl/common-lisp/dpans/dpANS3/chap-0.tex"
+                                       :root-directory "~/code/cl/common-lisp/dpans/"))
+             ; (toc         (build-toc tree))
+             (transformed (transform::apply-transforms
+                           (list ;; (make-instance 'dpans-conversion.transform::strip-comments)
+                            ;; (make-instance 'dpans-conversion.transform::expand-macros :environment env :debug-expansion '("includeDictionary"))
+                            ;; (make-instance 'dpans-conversion.transform::strip-tex-commands)
+                                        ; (make-instance 'dpans-conversion.transform::attach-issue-references)
+                                        ; (make-instance 'dpans-conversion.transform::build-references :builder 'list)
+                                        ; (make-instance 'dpans-conversion.transform::verify)
+                            )
+                           tree)))
+
+        (:inspect (vector env
+                          (architecture.builder-protocol.visualization::as-tree
+                           tree 'list)
+                          (architecture.builder-protocol.visualization::as-query
+                           tree 'list :editor-note)
+                          (architecture.builder-protocol.visualization::as-query
+                           (transform::apply-transforms
+                            (list
+                                        ; (make-instance 'dpans-conversion.transform::strip-comments)
+                             (make-instance 'transform::expand-macros :builder         'list
+                                                                      :environment     env
+                                                                      :debug-expansion '("includeDictionary"))
+                                        ; (make-instance 'dpans-conversion.transform::strip-tex-commands)
+
+                             )
+                            tree)
+                           'list
+                           :editor-note)
+                          (architecture.builder-protocol.visualization::as-query
+                           transformed 'list :component)
+                          ; toc
+                          )
+         :new-inspector? t)
+        (map nil (lambda (file)
+                   (let* ((filename (getf (bp:node-initargs 'list file) :filename))
+                          (name     (pathname-name filename))
+                          (output   (merge-pathnames (make-pathname :name name
+                                                                    :type "html")
+                                                     "/tmp/output/")))
+                     (format t "Generating ~A~%" name)
+                     (ensure-directories-exist output)
+                     (with-simple-restart (continue "Skip ~A" filename)
+                       (dpans-conversion.html::render-to-file
+                        file output env
+                        :use-sidebar     use-sidebar
+                        :use-mathjax     use-mathjax
+                        :debug-expansion debug-expansion))))
+             (list transformed) ;; files
+             )))))
