@@ -106,10 +106,10 @@
 ;;; Markup
 
 (defmacro define-group (name kind open-delimiter close-delimiter)
-  `(defrule ,name ()
+  `(defrule ,name (environment)
        (bounds (start end)
          (seq ,open-delimiter (skippable*)
-              (* (<<- elements (and (not ,close-delimiter) (element))))
+              (* (<<- elements (and (not ,close-delimiter) (element environment))))
               (skippable*) ,close-delimiter)
          (:transform (seq) nil)) ; HACK
      (bp:node* (,kind :bounds (cons start end))
@@ -151,7 +151,7 @@
                    (*> `(*            (,relation . *) ,variable))
                    (t  `(*            (,relation . *) (nreverse ,variable)))))))
         (let ((keyword (format nil "\\~A" command-name)))
-          `(defrule ,name ()
+          `(defrule ,name (environment)
                (bounds (start end)
                  (seq ,keyword
                       ,@(map 'list #'make-argument-expression arguments)
@@ -168,46 +168,46 @@
     (bp:node* (:verbatim :content content))))
 
 (define-command (b :kind :bold)
-  (1* :element (element)))
+  (1* :element (element environment)))
 
-(defrule bf ()
+(defrule bf (environment)
     (bounds (start end)
-      (seq "\\bf" (* (<<- elements (and (not (or #\} #\&)) (element))))))
+      (seq "\\bf" (* (<<- elements (and (not (or #\} #\&)) (element environment))))))
   (bp:node* (:bold :bounds (cons start end))
     (* :element (nreverse elements))))
 
 (define-command (bold :kind :bold)
-  (1* :element (element)))
+  (1* :element (element environment)))
 
 (define-command (i :kind :italic)
-  (1* :element (element)))
+  (1* :element (element environment)))
 
 (define-command (ital :kind :italic)
-  (1* :element (element)))
+  (1* :element (element environment)))
 
-(defrule it ()
+(defrule it (environment)
     (bounds (start end)
-      (seq "{\\it" (* (<<- elements (and (not #\}) (element)))) #\}))
+      (seq "{\\it" (* (<<- elements (and (not #\}) (element environment)))) #\}))
   (bp:node* (:italic :bounds (cons start end))
     (* :element (nreverse elements))))
 
 (define-command f ; "fixed", that is monospace font
   (1* :element (element)))
 
-(defrule tt ()
+(defrule tt (environment)
     (bounds (start end)
-      (seq "{\\tt" (* (<<- elements (and (not #\}) (element)))) #\}))
+      (seq "{\\tt" (* (<<- elements (and (not #\}) (element environment)))) #\}))
   (bp:node* (:typewriter :bounds (cons start end))
     (* :element (nreverse elements))))
 
-(defrule rm ()
+(defrule rm (environment)
   (bounds (start end)
-          (seq "{\\rm" (* (<<- elements (and (not #\}) (element)))) #\}))
+    (seq "{\\rm" (* (<<- elements (and (not #\}) (element environment)))) #\}))
   (bp:node* (:roman :bounds (cons start end))
     (* :element (nreverse elements))))
 
 (define-command hbox
-  (1* :element (element)))
+  (1* :element (element environment)))
 
 (define-group block*        :block         #\{  #\})
 (define-group bracket-group :bracket-group #\[  #\])
@@ -318,9 +318,9 @@
                        name))))
 
 (defrule miscref ()
-  (bounds (start end)
-    (seq "\\misc" (? "ref")
-         (skippable*) #\{ (<- name (element)) (skippable*) #\}))
+    (bounds (start end)
+      (seq "\\misc" (? "ref")
+           (skippable*) #\{ (<- name (element)) (skippable*) #\}))
   (bp:node* (:miscref :bounds (cons start end))
     (1 (:name . 1) name)))
 
@@ -360,7 +360,7 @@
 
 ;;;
 
-(defrule coloumn-separator ()
+(defrule column-separator () ; TODO this lexical level stuff
     #\&
   (bp:node* (:column-separator)))
 
@@ -573,36 +573,43 @@
 ;;;
 
 (defrule argument ()
-    (seq (or (seq (+ (<<- level "#"))
-                  (<- number (:transform (guard digit digit-char-p)
-                               (digit-char-p digit))))
-             "##"))
+    (bounds (start end)
+      (or (seq (+ (<<- level #\#))
+               (<- number (:transform (guard digit digit-char-p)
+                                      (digit-char-p digit))))
+          "##")
+      (:transform (seq) nil)) ; HACK work around bug
   (bp:node* (:argument :level  (length level)
-                       :number number)))
+                       :number number
+                       :bounds (cons start end))))
 
 (defrule parameter ()
-    (seq (or (seq (+ (<<- level "#"))
-                  (<- number (:transform (guard digit digit-char-p)
-                               (digit-char-p digit))))
-             "##")
-         (* (<<- delimiter (and (not (or #\# #\{)) :any)))) ; TODO delimiter cannot be newline, i guess
+    (bounds (start end)
+      (seq (or (seq (+ (<<- level #\#))
+                    (<- number (:transform (guard digit digit-char-p)
+                                           (digit-char-p digit))))
+               "##")
+           (* (<<- delimiter (and (not (or #\# #\{)) :any))) ; TODO delimiter cannot be newline, i guess
+           ))
   (let ((delimiter (when delimiter
                      (coerce (nreverse delimiter) 'string))))
     (bp:node* (:argument :level     (length level)
                          :number    number
                          :delimiter delimiter))))
 
-(defrule def ()
+(defrule def (environment)
     (bounds (start end)
-      (seq "\\" (? #\g) "def"
+      (seq (or (seq "\\global" (skippable*) "\\def" (<- global (:transform (seq) t)))
+               (seq "\\" (<- global (? #\g)) "def"))
            #\\ (<- name (identifier-with-dot))
            (* (seq (skippable*) (or (seq #\( (<<- arguments (parameter)) #\)) ; TODO the parens are probably just delimiters
                                     (<<- arguments (parameter)))))
-           (skippable*) #\{ (* (<<- body (or (argument) (element)))) #\} ; TODO (argument) is basically wrong here
+           (skippable*) #\{ (* (<<- body (or (argument) (element environment)))) #\} ; TODO (argument) is basically wrong here
            (:transform (seq) nil) ; HACK work around bug
            ))
   (bp:node* (:definition :kind   :def
                          :name   name
+                         :global global
                          :bounds (cons start end))
     (* (:argument . *) (nreverse arguments))
     (* (:body     . *) (nreverse body))))
@@ -626,9 +633,28 @@
   (bp:node* (:the :bounds (cons start end))
     (1 (:variable . 1) name)))
 
+(defrule user-macro-application (environment)
+    (bounds (start end)
+      (seq #\\ (<- argument-count (:transform (<- name (identifier))
+                                    (print (env:lookup name :macro environment))))
+           (* (seq (skippable*) (<<- arguments (element environment)))
+              argument-count argument-count)))
+  (bp:node* (:other-command-application :name   name
+                                        :bounds (cons start end))
+    (* (:argument . *) (nreverse arguments))))
+
+(let ((env (make-instance 'env:lexical-environment :parent **meta-environment**)))
+  (setf (env:lookup "bar" :macro env) 2)
+  (bp:with-builder ('list)
+    (parser.packrat:parse
+     `(document "somefile" 0 ,env)
+     "\\def\\bar#1#2{foo#1bar#2baz}
+\\bar 1{2}3")))
+
 (defrule other-command-application ()
     (bounds (start end)
-      (or (seq "\\" (<- see? (or #\s #\S)) "ee" (and (seq (or "chapter" "section" "figure" "term")
+      (or (<- (name arguments) (user-macro-application))
+          (seq "\\" (<- see? (or #\s #\S)) "ee" (and (seq (or "chapter" "section" "figure" "term")
                                                           (not (identifier)))
                                                      (<- name (identifier)))
                (<<- arguments (must (or (block*) (element)) "Macro requires an argument")))
@@ -688,7 +714,7 @@
     (bp:node* (:other-command-application :name name :bounds (cons start end))
       (* (:argument . *) (nreverse arguments)))))
 
-(defrule element ()
+(defrule element (environment)
   (or ;; Lexical stuff
       (comment)
       (spacing-command)
@@ -756,7 +782,7 @@
       (kwd)
       (bnf-rule)
 
-      (coloumn-separator) ; TODO only in table or command definition
+      (column-separator) ; TODO only in table or command definition
       (displaytwo)
       (displaythree)
       (displayfour)
@@ -772,15 +798,16 @@
       ;; Glossary
       (gentry)
 
-      (def) (argument) ; TODO
+      (def environment)
+      (argument) ; TODO
       (let-macro)
-      ; (builtin-the)
-      (other-command-application)
+      (user-macro-application environment)
+      ; (other-command-application)
 
-      (block*)
-      (bracket-group)
-      (math-display)
-      (math-group)
+      (block* environment)
+      (bracket-group environment)
+      (math-display environment)
+      (math-group environment)
 
       (non-breaking-space)
       (mdash)
@@ -789,8 +816,8 @@
 
       (skippable+)))
 
-(defrule document (filename include-depth) ; TODO file
-    (bounds (start end) (* (<<- elements (element))))
+(defrule document (filename include-depth environment) ; TODO file
+    (bounds (start end) (* (<<- elements (element environment))))
   (bp:node* (:file :filename      filename
                    :include-depth (or include-depth 0)
                    :bounds        (cons start end))

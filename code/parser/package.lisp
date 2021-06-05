@@ -5,7 +5,8 @@
   (:local-nicknames
    (#:a   #:alexandria)
 
-   (#:bp  #:architecture.builder-protocol))
+   (#:bp  #:architecture.builder-protocol)
+   (#:env #:computation.environment))
 
   (:import-from #:parser.packrat
    #:defgrammar #:in-grammar
