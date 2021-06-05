@@ -94,7 +94,7 @@
 (defrule word ()
     (+ (<<- characters (or (escaped-character)
                            (and (not (or #\{ #\} #\\ #\% #\& #\$ #\~ ; #\.
-                                         (seq (+ #\#) (+ (guard digit digit-char-p)))
+                                         (seq (+ #\#) (+ (guard digit digit-char-p))) ; argument
                                          (paragraph-break))) ; TODO make non-result version
                                 :any))))
   (bp:node* (:word :content (coerce (nreverse (remove nil characters)) 'string))))

@@ -1,7 +1,8 @@
 /* General defaults */
 
 body {
-    width: 60%;
+    width: 80%;
+    max-width: 60em;
     margin-left: 20%
 }
 

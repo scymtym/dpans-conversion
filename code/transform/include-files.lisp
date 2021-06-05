@@ -16,6 +16,14 @@
 #+no (defmacro as-include ((transform) &body body)
   `(call-as-include (lambda () ,@body) ,transform))
 
+(defmethod transform-node ((transform include-files) recurse
+                           relation relation-args node (kind (eql :definition)) relations
+                           &key)
+  ;; Stop at command definitions. The command body could include
+  ;; \input calls, which should not be interpreted now, but when the
+  ;; command is called.
+  node)
+
 (flet ((include-file (transform filename)
          (with-simple-restart (continue "Skip include ~A" filename)
            (let* ((relative (merge-pathnames filename (current-file transform)))
@@ -41,7 +49,7 @@
   (defmethod transform-node ((transform include-files) recurse
                              relation relation-args node (kind (eql :input)) relations
                              &key name &allow-other-keys)
-    (cond ((or (member name '("setup" "setup-for-toc") :test #'equal) ; TODO proper blacklist
+    (cond ((or (member name '("setup" "setup-figures" "setup-sections-for-toc" "setup-tables" "setup-options") :test #'equal) ; TODO proper blacklist
                (a:ends-with-subseq ".fig" name))
            nil)
           ((a:ends-with-subseq ".tc" name)
