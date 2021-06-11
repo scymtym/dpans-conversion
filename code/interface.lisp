@@ -13,11 +13,15 @@
       (process-setup-file "setup-terms.tex"))
     (let* ((relative    (uiop:enough-pathname root-tex-file root-directory))
            (tree        (parser:parse-tex-file builder root-tex-file :filename relative)))
-      (dpans-conversion.transform:apply-transform
-       (make-instance 'transform::include-files :builder        builder
-                                                :environment    environment
-                                                :root-directory root-directory)
-       tree))))
+      (:inspect
+       (architecture.builder-protocol.visualization:as-tree tree 'list)
+       :new-inspector? t)
+      #+no (dpans-conversion.transform:apply-transform
+            (make-instance 'transform::include-files :builder        builder
+                                                     :environment    environment
+                                                     :root-directory root-directory)
+            tree)
+      tree)))
 
 (defun find-issues (directory)
   (let ((candidates (directory (merge-pathnames "passed/*" directory))))
@@ -47,43 +51,46 @@
                                     :root-directory root-directory))
     (* (:document . *) (parse-issues builder issue-files))))
 
-(:inspect
- (architecture.builder-protocol.visualization:as-tree
-  (parse-specification 'list
-                       "~/code/cl/common-lisp/dpans-conversion/data/dpANS3/"
-                       "~/code/cl/common-lisp/dpans/issues/")
-  'list)
- :new-inspector? t)
+(when nil
+  (:inspect
+   (architecture.builder-protocol.visualization:as-tree
+    (parse-specification 'list
+                         "~/code/cl/common-lisp/dpans-conversion/data/dpANS3/"
+                         "~/code/cl/common-lisp/dpans/issues/")
+    'list)
+   :new-inspector? t))
 
 (:inspect
  (parser:parse-issue-file 'list "~/code/cl/common-lisp/dpans/issues/passed/closed-stream-operations")
  :new-inspector? t)
 
-(:inspect
- (architecture.builder-protocol.visualization::as-tree
-  (nth-value
-   1 (parse-specification 'list
-                          "~/code/cl/common-lisp/dpans/dpANS3/"
-                          "~/code/cl/common-lisp/dpans/issues/"))
-  'list)
- :new-inspector? t)
+(when nil
+  (:inspect
+   (architecture.builder-protocol.visualization::as-tree
+    (nth-value
+     1 (parse-specification 'list
+                            "~/code/cl/common-lisp/dpans/dpANS3/"
+                            "~/code/cl/common-lisp/dpans/issues/"))
+    'list)
+   :new-inspector? t))
 
-(multiple-value-bind (document issues)
+(when nil
+  (multiple-value-bind (document issues)
 
- (let ((issues (nth-value
-                1 (parse-specification 'list
-                                       "~/code/cl/common-lisp/dpans/dpANS3/"
-                                       "~/code/cl/common-lisp/dpans/issues/")))
-       (output-directory "/tmp/output/issues/"))
+      (let ((issues (nth-value
+                     1 (parse-specification 'list
+                                            "~/code/cl/common-lisp/dpans/dpANS3/"
+                                            "~/code/cl/common-lisp/dpans/issues/")))
+            (output-directory "/tmp/output/issues/"))
 
-   (ensure-directories-exist output-directory)
-   (map nil (lambda (issue)
-              (let* ((filename (getf (bp:node-initargs 'list issue) :filename))
-                     (output   (make-pathname :name     (pathname-name filename)
-                                              :type     "html"
-                                              :defaults output-directory)))
-                (dpans-conversion.html::render-issue issue output)))
-        issues)))
+        (ensure-directories-exist output-directory)
+        (map nil (lambda (issue)
+                   (let* ((filename (getf (bp:node-initargs 'list issue) :filename))
+                          (output   (make-pathname :name     (pathname-name filename)
+                                                   :type     "html"
+                                                   :defaults output-directory)))
+                     (dpans-conversion.html::render-issue issue output)))
+             issues))))
 
 (defun do-it (&key (use-mathjax     t)
                    (use-sidebar     nil)

@@ -17,9 +17,15 @@
                 :pathname   "code/parser"
                 :serial     t
                 :components ((:file       "package")
+                             (:file       "environment")
+                             (:file       "builtin-macros")
+                             (:file       "meta-grammar")
                              ;; TeX sources
                              (:file       "grammar")
-                             (:file       "semantic")
+                             (:file       "tex-tables")
+
+                             (:file       "dpans-tables")
+                             (:file       "dpans-semantic")
                              ;; Issues
                              (:file       "issues")
                              ;; Interface

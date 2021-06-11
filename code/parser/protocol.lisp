@@ -4,13 +4,35 @@
   (let ((raw (subseq input (max 0 (- start 20)) (min (length input) (+ end 20)))))
     (substitute #\¶ #\Newline raw)))
 
+(defun %parse-tex (builder input environment filename include-depth)
+  (bp:with-builder (builder)
+    (multiple-value-bind (result position value)
+        (parser.packrat:parse `(document ',filename ',include-depth ,environment)
+                              input
+                              :grammar 'dpans)
+      (ecase result
+        ((t)    value)
+        ((nil)  (let ((snippet (make-snippet input position position)))
+                  (error "At ~A [~A]: incomplete parse" position snippet)))
+        (:fatal (let ((snippet (make-snippet input position position)))
+                  (error "At ~A [~A]: ~A" position snippet value)))))))
+
 (defun parse-tex-file (builder file &key (filename     (uiop:enough-pathname
                                                         file *default-pathname-defaults*))
                                          include-depth)
-  (let ((input (a:read-file-into-string file)))
-    (bp:with-builder (builder)
+  (let ((input       (a:read-file-into-string file))
+        (environment (make-instance 'env::lexical-environment :parent **meta-environment**)))
+
+    (setf (env:lookup :global?       :traversal environment) t
+          (env:lookup :current-file  :traversal environment) filename
+          (env:lookup :include-depth :traversal environment) 0)
+    (register-builtin-macros environment)
+
+    (%parse-tex builder input environment filename include-depth)
+    #+no (bp:with-builder (builder)
       (multiple-value-bind (result position value)
-          (parser.packrat:parse `(document ',filename ',include-depth) input
+          (parser.packrat:parse `(document ',filename ',include-depth ,environment)
+                                input
                                 :grammar 'dpans)
         (ecase result
           ((t)    value)
