@@ -1,0 +1,24 @@
+* Introduction
+
+  This module is responsible for parsing the dpANS TeX sources as well
+  as the somewhat structured plain text sources of the X3J13 cleanup
+  issues into abstract syntax trees. The code performs those two
+  parsing tasks by employing two special-purpose parsers:
+
+  + The dpANS TeX sources are parsed using a combination of an
+    incomplete parser for general TeX syntax and specialized parsing
+    rules for semantic markup used in the dpANS TeX sources.
+
+  + The X3J13 cleanup issues are parsed using a specialized parsers
+    for the loosely described plain text-based format the issue files
+    are supposed to conform to (which, to be fair, they mostly do).
+
+* dpANS TeX Parser
+
+* X3J13 Issue Parser
+
+* References
+
+  + http://www.tug.org/utilities/plain/cseq.html
+
+  + https://www.ruhr-uni-bochum.de/TeX/einfuehrung-in-tex.pdf
