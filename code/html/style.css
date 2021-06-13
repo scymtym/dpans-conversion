@@ -18,7 +18,7 @@ h1,h2,h3 {
     line-height:1.2
 }
 
-.sidenote {
+.sidenote { /*used?*/
     display: block;
     float: right;
     width: 30%;
@@ -136,13 +136,12 @@ div.component {
     background: beige;
 }
 
-.none {
-    color: gray;
-    font-style: italic;
+.component .header {
+    background: lightblue;
 }
 
 .ftype {
-    color: forestgreen;
+    color: darkgreen;
     font-family: mono;
     float: right;
 }
@@ -153,6 +152,11 @@ div.component .name {
 
 div.component > dl > dt {
     font-weight: bold;
+}
+
+.none {
+    color: gray;
+    font-style: italic;
 }
 
 /* Glossary */
