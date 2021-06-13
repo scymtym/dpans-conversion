@@ -2,7 +2,7 @@
 
 ;;;
 
-(defgeneric apply-transfrom (transform ast))
+(defgeneric apply-transform (transform ast))
 
 (defgeneric peek-node (transfrom builder relation relation-args node kind))
 
