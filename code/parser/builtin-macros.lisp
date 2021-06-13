@@ -52,7 +52,7 @@
     (register "topskip" 1)
     (register "tabskip" :variable) (register "parskip" '((:variable))) (register "parfillskip" :variable)
     (register "hskip" '((:variable))) (register "vskip" 1) (register "baselineskip" 1)
-    (register "offinterlineskip" 0)
+    (register "offinterlineskip" 0) (register "nointerlineskip" 0)
     (register "hss" 0) (register "vss" 0)
     (register "negthinspace" 0) (register "thinspace" 0) (register "quad" 0) (register "qquad" 0)
     (register "voffset" :variable)

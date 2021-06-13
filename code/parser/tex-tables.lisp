@@ -52,7 +52,8 @@
 (defrule settabs (environment)
     (bounds (start end)
       (seq/ws "\\settabs"
-              (* (seq (skippable*) (<<- rows (settabs-row environment))))))
+              (* (seq (skippable*) (* (and (not "\\+") (element environment)))
+                      (<<- rows (settabs-row environment))))))
   (bp:node* (:table :kind :settabs)
     (* (:row . *) (nreverse rows))))
 

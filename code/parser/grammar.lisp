@@ -81,7 +81,7 @@
 (defrule tilde (environment)
     (bounds (start end) #\~)
   (if (env:lookup "~" :macro environment :if-does-not-exist nil)
-      (bp:node* (:other-command-application :name "~"))
+      (bp:node* (:other-command-application :name "~" :bounds (cons start end)))
       (bp:node* (:non-breaking-space :bounds (cons start end)))))
 
 (defrule mdash ()
@@ -214,9 +214,6 @@
   (bp:node* (:roman :bounds (cons start end))
     (* :element (nreverse elements))))
 
-#+no (define-command hbox
-  (1* :element (element environment)))
-
 (define-group block*        :block         #\{  #\})
 (define-group bracket-group :bracket-group #\[  #\])
 
@@ -256,20 +253,17 @@
                      (merge-pathnames name (env:lookup :current-file :traversal environment))))
          (input    (when filename
                      (a:read-file-into-string filename))))
-    (cond (input
-           (format t "Including ~A -> ~A~%" name filename)
-           (let* ((include-depth   (env:lookup :include-depth :traversal environment
-                                                              :if-does-not-exist 0))
-                  (new-include-depth (1+ include-depth))
-                  (new-environment (env:augmented-environment
-                                    environment
-                                    '((:current-file  . :traversal)
-                                      (:include-depth . :traversal))
-                                    (list filename new-include-depth))))
-             (%parse-tex 'list input new-environment filename new-include-depth)))
-          (t
-           (format t "Not including ~A~%" name)
-           nil))))
+    (when input
+      (format t "Including ~A -> ~A~%" name filename)
+      (let* ((include-depth   (env:lookup :include-depth :traversal environment
+                                                         :if-does-not-exist 0))
+             (new-include-depth (1+ include-depth))
+             (new-environment (env:augmented-environment
+                               environment
+                               '((:current-file  . :traversal)
+                                 (:include-depth . :traversal))
+                               (list filename new-include-depth))))
+        (%parse-tex 'list input new-environment filename new-include-depth)))))
 
 (defrule input (environment)
     (bounds (start end)
@@ -284,7 +278,7 @@
          (bp:node* (:input :name name :bounds (cons start end))))
         (t
          (let* ((name  (coerce (nreverse name) 'string))
-                (name* (cond ((equal name "setup")
+                (name* (cond ((member name '("setup" "index.idx") :test #'string=)
                               nil)
                              ((a:ends-with-subseq "fig" name)
                               nil)
@@ -293,6 +287,8 @@
                              (t
                               name)))
                 (file  (include-file name* environment)))
+           (when (null file)
+             (format t "Not including ~A~%" name))
            (bp:node* (:input :name name :bounds (cons start end))
              (bp:? (:file . bp:?) file))))))
 
@@ -632,34 +628,34 @@
 
 (defrule def (environment)
     (bounds (start end)
-      (seq (or (seq "\\global" (skippable*) "\\def" (<- global (:transform (seq) t))) ; TODO global should be context
+      (seq (or (seq "\\global" (skippable*) "\\def" (<- global? (:transform (seq) t))) ; TODO global should be context
                (seq "\\long" (skippable*) "\\def" (<- long (:transform (seq) t)))
-               (seq "\\" (? (<- global (or #\e #\g #\x))) "def"))
+               (seq "\\" (? (<- global? (or #\e #\g #\x))) "def"))
            (or (seq #\\ (<- name (identifier-with-dot))) ; TODO do we really need with dot here? there is a macro named "etc.", so probably yes
                (<- name (escaped-character)))
            (* (seq (skippable*) (or (seq #\( (<<- arguments (parameter)) #\)) ; TODO the parens are probably just delimiters
                                     (<<- arguments (parameter)))))
            (skippable*)
            (<- new-environment (:transform (seq) (env:augmented-environment environment '((:definition . :traversal)) '(t))))
-           #\{ (* (<<- body (or (argument) (:transform (<- e (element new-environment)) (format t "~A ~A~%" name (getf (bp:node-initargs* e) :bounds)) e)))) #\} ; TODO (argument) is basically wrong here
+           #\{ (* (<<- body (or (argument) (element new-environment)))) #\} ; TODO (argument) is basically wrong here
            (:transform (seq) nil) ; HACK work around bug
            ))
   (let ((name      (string name))
         (arguments (nreverse arguments)))
-    (format t "  New macro ~A/~D~%" name (length arguments))
     (setf (lookup name :macro environment) (list arguments)) ; TODO not for nested definitions
-    (bp:node* (:definition :kind   :def
-                           :name   name
-                           :global global
-                           :bounds (cons start end))
+    (bp:node* (:definition :kind    :def
+                           :name    name
+                           :global? global?
+                           :bounds  (cons start end))
       (* (:argument . *) arguments)
       (* (:body     . *) (nreverse body)))))
 
 (defrule let-macro (environment)
   (bounds (start end)
-    (seq/ws (? (<- global (:transform "\\global" t)))
+    (seq/ws (? (<- global? (:transform "\\global" t)))
             "\\let" (<- name (or (name) :any)) (? #\=)
-            (or (<- rhs (name))
+            (or (<- node (hbox environment))
+                (<- rhs (name))
                 (seq #\{ (+ (<<- body (and (not (or (skippable) #\})) :any))) #\})
                 (+ (<<- body (and (not (or (skippable) #\} "\\fi")) :any)))))) ; TODO fi is a hack
 
@@ -668,22 +664,19 @@
                   (getf (bp:node-initargs* name) :name))))
     (setf (lookup name :macro environment) 0)
 
-    (bp:node* (:definition :kind   :let
-                           :name   name
-                           :global global
-                           :bounds (cons start end))
-      (1 (:body . *) (cond (body
+    (bp:node* (:definition :kind    :let
+                           :name    name
+                           :global? global?
+                           :bounds  (cons start end))
+      (1 (:body . *) (cond (node)
+                           (body
                             (let ((body (coerce (nreverse body) 'string)))
-                              (bp:node* (:word :content body))))
+                                 (bp:node* (:word :content body))))
                            (rhs
-                            (let ((name (getf (bp:node-initargs* rhs) :name)))
-                              (bp:node* (:other-command-application :name name)))))))))
-
-#+no (defrule builtin-the ()
-    (bounds (start end)
-      (seq "\\the" #\\ (<- name (identifier-with-dot))))
-  (bp:node* (:the :bounds (cons start end))
-    (1 (:variable . 1) name)))
+                            (let* ((initargs (bp:node-initargs* rhs))
+                                   (name     (getf initargs :name))
+                                   (bounds   (getf initargs :bounds)))
+                              (bp:node* (:other-command-application :name name :bounds bounds)))))))))
 
 (defun lookup-macro (name environment error?)
   (let* ((definition? (env:lookup :definition :traversal environment
@@ -705,7 +698,6 @@
                             (error "~@(~A~) macro ~A is not defined"
                                    mode name)))))
     (when spec
-      (format t "  Call ~A -> ~S~%" name spec)
       (values (typecase spec
                 (integer (make-list spec :initial-element 't))
                 (list    (first spec)))
@@ -736,16 +728,14 @@
                                   (when (null argument-spec)
                                     (:fail))
                                   (a:if-let ((delimiter (getf (bp:node-initargs* (first argument-spec)) :delimiter)))
-                                    (print (list delimiter (aref delimiter 0) 0))
+                                    (list delimiter (aref delimiter 0) 0)
                                     (:fail))))
                             (<<- arguments (:transform
                                                (seq (* (<<- characters (and (not char) :any)))
                                                     (+ (:transform character
                                                          (if (and (< index (length delimiter))
                                                                   (char= character (aref delimiter index)))
-                                                             (progn
-                                                               (print (list character (aref delimiter index) index))
-                                                               (incf index))
+                                                             (incf index)
                                                              (:fail))))
                                                     (:transform (seq) (unless (= index (length delimiter)) (:fail)))
                                                     #+no (+ (and (:transform c (print (list :@ c)))
@@ -774,8 +764,7 @@
                                                  :if-does-not-exist :normal))
                      (supplied-count (length arguments)))
                  (:fatal (format nil "Too few arguments to ~(~A~) macro ~A. ~D required, but only ~D supplied."
-                                 mode name (+ supplied-count (length argument-spec)) supplied-count))))
-                       (format t "  Call ~A ok~%" name))))
+                                 mode name (+ supplied-count (length argument-spec)) supplied-count)))))))
   (bp:node* (:other-command-application :name   name
                                         :bounds (cons start end))
     (* (:argument . *) (nreverse arguments))))
@@ -857,8 +846,6 @@
          (stem  (subseq name 2))
          (true  (concatenate 'string stem "true"))
          (false (concatenate 'string stem "false")))
-    (format t "  New if ~A -> ~A ~A~%" name true false)
-
     (setf (lookup stem  :if    environment) t
           (lookup true  :macro environment) 0
           (lookup false :macro environment) 0))
@@ -992,7 +979,6 @@
     (bounds (start end)
       (seq/ws (seq "\\new" (or "skip" "dimen")) (<- name (name))))
   (let ((name (getf (bp:node-initargs* name) :name)))
-    (format t "  New skip/dimen ~A~%" name)
     (setf (lookup name :variable environment) t))
   (bp:node* (:newskip :bounds (cons start end))
     (1 (:name . 1) name)))
@@ -1135,12 +1121,16 @@
   (seq/ws "\\" (or "unvbox" "unhbox" "box") (register-reference* environment)))
 
 (defrule hbox (environment)
-  (seq/ws "\\" (or #\h #\v) "box"
-          (or (seq/ws "to" (<- to (name)))
-              (seq/ws "spread" (<- spread (name)))
-              (seq))
-          (? (seq/ws #\{ (* (<<- elements (element environment))) #\}))) ; TODO this is just (block*)
-  (bp:node* (:vbox)
+    (bounds (start end)
+      (seq/ws "\\" (<- kind (or (:transform "hbox" :hbox)
+                                (:transform "vbox" :vbox)
+                                (:transform "vtop" :vtop)))
+              (or (seq/ws "to" (<- to (name)))
+                  (seq/ws "spread" (<- spread (name)))
+                  (seq))
+              (or (seq/ws #\{ (* (<<- elements (element environment))) #\})
+                  (:transform (seq) (bp:node* (:pending-arguments))))))
+  (bp:node* (kind :bounds (cons start end))
     (bp:? (:to      . 1) to)
     (bp:? (:spread  . 1) spread)
     (*    (:element . *) (nreverse elements))))
@@ -1167,19 +1157,52 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
     (1 (:dimension . 1) dimension)))
 
 (defrule hrule (environment)
-    (seq "\\hrule" (* (seq (skippable*) (seq/ws (or "height" "depth" "width")
-                                                (or (<<- arguments (defined-variable environment))
-                                                    (or (<<- arguments (name))
-                                                        (+ (and (not (or "height" "depth" "width"
-                                                                         (skippable)
-                                                                         #\} #\\))
-                                                                (<<- arguments :any)))))))))
-  (format t "  hrule ~A~%" arguments)
-  (bp:node* (:hrule)
-    (* (:argument . *) arguments)))
+  (bounds (start end)
+   (seq "\\hrule" (* (seq (skippable*) (or (seq/ws "height"
+                                                (<- height (or (defined-variable environment)
+                                                               (:transform
+                                                                (bounds (start2 end2)
+                                                                  (+ (<<- characters (and (not (or (skippable) #\} #\\ "depth" "width")) :any))))
+                                                                (prog1
+                                                                    (bp:node* (:word :content (coerce (nreverse characters)'string)
+                                                                                     :bounds  (cons start2 end2)))
+                                                                  (setf characters '()))))))
+                                           (seq/ws "depth"
+                                                   (<- depth (or (defined-variable environment)
+                                                                  (:transform
+                                                                   (bounds (start2 end2)
+                                                                     (+ (<<- characters (and (not (or (skippable) #\} #\\ "height" "width")) :any))))
+                                                                   (prog1
+                                                                       (bp:node* (:word :content (coerce (nreverse characters)'string)
+                                                                                        :bounds  (cons start2 end2)))
+                                                                     (setf characters '()))))))
+                                           (seq/ws "width"
+                                                   (<- width (or (defined-variable environment)
+                                                                 (:transform
+                                                                     (bounds (start2 end2)
+                                                                       (+ (<<- characters (and (not (or (skippable) #\} #\\ "height" "depth")) :any))))
+                                                                   (prog1
+                                                                       (bp:node* (:word :content (coerce (nreverse characters)'string)
+                                                                                        :bounds  (cons start2 end2)))
+                                                                     (setf characters '())))))))))))
+  (bp:node* (:hrule :bounds (cons start end))
+    (bp:? (:height . bp:?) height)
+    (bp:? (:depth  . bp:?) depth)
+    (bp:? (:width  . bp:?) width)))
+
+(when nil
+  (let ((env (make-instance 'env:lexical-environment :parent **meta-environment**)))
+    (register-builtin-macros env)
+    (setf (env:lookup :current-file :traversal env) #P"~/code/cl/common-lisp/dpans/dpANS3/appendix-removed.tex")
+    (setf (env:lookup "fullhsize" :variable env) t)
+    (setf (env:lookup "qquad" :macro env) 0)
+    (bp:with-builder ('list)
+      (parser.packrat:parse
+       `(hrule ,env)
+       "\\hrule height1.5pt width \\fullhsize"))))
 
 (defrule string* (environment)
-    (seq/ws "\\string" (<- name (name)))
+  (seq/ws "\\string" (<- name (name)))
   (bp:node* (:name)
     (1 (:name . 1) name)))
 
@@ -1233,11 +1256,10 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
               (? (seq/ws "\\sc" (<- name2 (name))))))
   (let ((name (getf (bp:node-initargs* name) :name))
         (file (coerce (nreverse file) 'string)))
-    (format t "  font ~A ~A ~A~%" name file name2)
-    ; (setf (lookup name :variable environment) t)
-    (setf (lookup name :macro environment) 0)
-    (print (list name file name2))
-    (bp:node* (:font :bounds (cons start end)))))
+    (setf (lookup name :macro environment) 0))
+
+  (bp:node* (:font :bounds (cons start end))
+    (1 (:name . 1) name)))
 
 (when nil
  (let ((env (make-instance 'env:lexical-environment :parent **meta-environment**)))
@@ -1346,6 +1368,7 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
       (call-syntax environment)
       (param environment)
       (kwd environment)
+      (row-terminator* environment)
       (bnf-rule environment)
 
       (dpans-table environment)

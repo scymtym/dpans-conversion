@@ -337,9 +337,25 @@
 (define-command (kwd :kind :keyword)
     (1 :name (element environment)))
 
-(define-command (bnf-rule :command-name "auxbnf")
-  (1  :name    (word)) ; TODO
-  (1* :element (or (row-terminator) (element environment))))
+(defrule row-terminator* (environment) ; TODO disallow in other contexts?
+    (and (:transform (seq) (env:lookup :bnf-rule :traversal environment
+                                                 :if-does-not-exist nil))
+         "\\CR")
+  nil)
+
+(defrule bnf-rule (environment)
+    (bounds (start end)
+      (seq/ws "\\auxbnf"
+               #\{ (<- name (word)) #\}
+               #\{
+               (and (<- new-environment (:transform (seq)
+                                          (env:augmented-environment
+                                           environment '((:bnf-rule . :traversal)) '(t))))
+                    (* (<<- elements (element new-environment))))
+               #\}))
+  (bp:node* (:bnf-rule :bounds (cons start end))
+    (1 (:name    . 1) name)
+    (* (:element . *) (nreverse elements))))
 
 ;;; Component
 ;;;
@@ -374,10 +390,11 @@
 (defrule component (environment)
     (bounds (start end)
       (seq "\\begincom{"
-           (+ (seq (<<- names (component-name)) (? (seq #\, (skippable*)))))
+           (must (+ (seq (<<- names (component-name)) (? (seq #\, (skippable*)))))
+                 "must be a component name")
            #\}
            (* (<<- elements (and (not "\\endcom") (element environment))))
-           "\\endcom"))
+           (must "\\endcom" "must be a complete component")))
   (format t "      Parsed component ~{~/dpans-conversion.parser::print-component-name/~^, ~}~%" names)
   (bp:node* (:component :bounds (cons start end))
     (* (:name    . *) (nreverse names))
