@@ -123,7 +123,9 @@
 (defun render-to-file (tree file environment &key (use-mathjax        t)
                                                   (use-sidebar        t)
                                                   (debug-expansion    nil)
-                                                  (modify-environment t))
+                                                  (modify-environment t)
+                                                  transform
+                                                  output-directory)
 
   (setf (env:lookup "the" :macro environment) (lambda (&rest args) (apply 'builtin-the args)))
 
@@ -251,15 +253,16 @@
                                 kind)
                             stack)
                       (ecase kind
-                        (:file
+                        #+no (:file
                          (push-file filename)
                          (unwind-protect
                               (if (zerop include-depth)
-                                  (with-html-document (stream file :use-mathjax use-mathjax
-                                                                   :use-sidebar use-sidebar)
+                                  (with-html-document (stream file output-directory
+                                                              :use-mathjax use-mathjax
+                                                              :use-sidebar use-sidebar)
                                     (when use-sidebar
                                       (transform:apply-transform
-                                       (make-instance 'navigation-sidebar :builder builder) node))
+                                       (make-instance 'navigation-sidebar :builder builder :output-directory "/tmp/output/") node))
                                     (div "content" recurse))
                                   (with-simple-restart (continue "Skip included file ~S" filename)
                                     (funcall recurse)))
@@ -558,7 +561,11 @@
                                          (span "ftype" (lambda () (cxml:text ftype)))))
                                   (funcall recurse :relations '((:element . *)))))
                            (br)))
-                        (:issue-annotation
+                        ((:dash
+                          :issue-annotation :editor-note :reviewer-note
+                          :file :title :sub-title :chapter :section)
+                         (apply #'transform:transform-node transform recurse relation relation-args node kind relations initargs))
+                        #+no (:issue-annotation
                          (div "issue-annotation"
                               (lambda ()
                                 (span "issue-reference"
@@ -569,7 +576,7 @@
                                                            builder (bp:node-relation builder '(:name . 1) node) )))
                                                 (cxml:text name))))
                                 (funcall recurse :relations '(:element)))))
-                        (:editor-note
+                        #+no (:editor-note
                          (tooltip "editor-note" "editor-note-tooltip"
                                   (lambda ()
                                     (span "editor" (lambda () (cxml:text editor)))
@@ -577,7 +584,7 @@
                                     (cxml:text content))
                                   (lambda () (cxml:text "‣"))
                                   :element 'span))
-                        (:reviewer-note
+                        #+no (:reviewer-note
                          (tooltip "reviewer-note" "reviewer-note-tooltip"
                                   (lambda ()
                                     (when reviewer
@@ -587,56 +594,8 @@
                                   (lambda () (cxml:text "‣"))
                                   :element 'span))
                         ;; Structure
-                        (:head
-                         (cxml:with-element "h1" (funcall recurse)))
-                        (:head1
-                         (cxml:with-element "h2" (funcall recurse)))
-                        ((:chapter)
-                         (let* ((number   (dpans-conversion.transform::evaluate-to-string
-                                           builder (bp:node-relation builder '(:id . 1) node)))
-                                (filename (format nil "/tmp/output/chapter-~A.html" number)))
-                           (with-html-document (stream filename :use-mathjax use-mathjax
-                                                                :use-sidebar use-sidebar)
-                             (when use-sidebar
-                               (transform:apply-transform
-                                (make-instance 'navigation-sidebar :builder builder) node))
-                             (div "content"
-                                  (lambda ()
-                                    (cxml:with-element "h1"
-                                      (let* ((id     (dpans-conversion.transform::evaluate-to-string
-                                                      builder (bp:node-relation builder '(:name3 . 1) node)))
-                                             (anchor (format nil "section-~A" id)))
-                                        (cxml:attribute "id" anchor))
-                                      (funcall recurse :relations '((:name . 1))))
-                                    (funcall recurse :relations '(:element)))))))
-                        ((:section :sub-section :sub-sub-section :sub-sub-sub-section :sub-sub-sub-sub-section)
-                         (flet ((do-it ()
-                                  (let* ((id-node (find-child-of-kind builder :define-section node))
-                                         (id      (if id-node
-                                                      (node-name id-node)
-                                                      (remove #\Space (node-name node))))
-                                         (anchor  (format nil "section-~A" id)))
-                                    (cxml:with-element "section"
-                                      (cxml:attribute "id" anchor)
-                                      (cxml:with-element (ecase kind
-                                                           (:section "h2")
-                                                           (:sub-section "h3")
-                                                           (:sub-sub-section "h4")
-                                                           (:sub-sub-sub-section "h5")
-                                                           (:sub-sub-sub-sub-section "h6"))
-                                        ; (cxml:attribute "id" anchor)
-                                        (funcall recurse :relations '((:name . 1))))
-                                      (funcall recurse :relations '((:element . *)))))))
-                           (let* ((name (bp:node-relation builder '(:name . 1) node))
-                                  (name (dpans-conversion.transform::evaluate-to-string
-                                         builder name)))
-                             (if (find-if (a:rcurry #'a:starts-with-subseq name)
-                                          '("Note" "Example"))
-                                 (removable-text #'do-it)
-                                 (do-it)))))
+
                         (:non-breaking-space (cxml:unescaped "&nbsp;")) ; TODO
-                        (:emdash (cxml:unescaped "&mdash;"))
-                        (:endash (cxml:unescaped "&ndash;"))
                         (:paragraph-break (cxml:with-element "br"))
                         ;; Tables
                         ( :define-figure

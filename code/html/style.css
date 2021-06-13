@@ -5,11 +5,19 @@ body {
     line-height: 1.4;
     font-size: 16px;
     color: #444;
-    padding: 0 10px
+    padding: 0 10px;
+}
+
+.title {
+    font-size: xx-large;
+}
+
+.subtitle {
+    font-size: x-large;
 }
 
 h1,h2,h3 {
-    line-height:1.2
+    line-height: 1.2;
 }
 
 .sidenote { /*used?*/

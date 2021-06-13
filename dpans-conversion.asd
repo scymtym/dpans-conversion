@@ -64,8 +64,13 @@
                              (:file       "environment")
                              (:file       "html")
                              ;;
-                             (:file       "render")
+                             (:file       "transform")
+                             (:file       "render-structure")
+                             (:file       "render-typography")
+                             (:file       "render-annotations")
                              (:file       "render-issue")
+
+                             (:file       "render")
                              ;; Style and Javascript resources
                              (:static-file "style.css")
                              (:static-file "navigation.js")))
