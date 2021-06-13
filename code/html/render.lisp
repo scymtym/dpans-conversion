@@ -255,7 +255,10 @@
                               (if (zerop include-depth)
                                   (with-html-document (stream file :use-mathjax use-mathjax
                                                                    :use-sidebar use-sidebar)
-                                    (funcall recurse))
+                                    (when use-sidebar
+                                      (transform:apply-transform
+                                       (make-instance 'navigation-sidebar :builder builder) node))
+                                    (div "content" recurse))
                                   (with-simple-restart (continue "Skip included file ~S" filename)
                                     (funcall recurse)))
                            (pop-file)))
@@ -589,13 +592,18 @@
                                 (filename (format nil "/tmp/output/chapter-~A.html" number)))
                            (with-html-document (stream filename :use-mathjax use-mathjax
                                                                 :use-sidebar use-sidebar)
-                             (cxml:with-element "h1"
-                               (let* ((id     (dpans-conversion.transform::evaluate-to-string
-                                               builder (bp:node-relation builder '(:name3 . 1) node)))
-                                      (anchor (format nil "section-~A" id)))
-                                 (cxml:attribute "id" anchor))
-                               (funcall recurse :relations '((:name . 1))))
-                             (funcall recurse :relations '(:element)))))
+                             (when use-sidebar
+                               (transform:apply-transform
+                                (make-instance 'navigation-sidebar :builder builder) node))
+                             (div "content"
+                                  (lambda ()
+                                    (cxml:with-element "h1"
+                                      (let* ((id     (dpans-conversion.transform::evaluate-to-string
+                                                      builder (bp:node-relation builder '(:name3 . 1) node)))
+                                             (anchor (format nil "section-~A" id)))
+                                        (cxml:attribute "id" anchor))
+                                      (funcall recurse :relations '((:name . 1))))
+                                    (funcall recurse :relations '(:element)))))))
                         ((:section :sub-section :sub-sub-section :sub-sub-sub-section :sub-sub-sub-sub-section)
                          (flet ((do-it ()
                                   (cxml:with-element (ecase kind

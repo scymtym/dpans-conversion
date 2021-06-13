@@ -1,17 +1,11 @@
 /* General defaults */
 
 body {
-    width: 80%;
-    max-width: 60em;
-    margin-left: 20%
-}
-
-body {
-    margin:40px auto;
-    line-height:1.4;
-    font-size:16px;
-    color:#444;
-    padding:0 10px
+    /* margin: 40px auto; */
+    line-height: 1.4;
+    font-size: 16px;
+    color: #444;
+    padding: 0 10px
 }
 
 h1,h2,h3 {
@@ -29,6 +23,50 @@ h1,h2,h3 {
 
 th {
     text-align: left;
+}
+
+/* Layout */
+
+main {
+    display: grid;
+    grid-template-columns: 20% 80%;
+}
+
+.content {
+    width: 50em;
+    max-width: 70vw;
+    margin-left: 5vw;
+}
+
+/* TODO indicate removable text */
+nav.sidebar {
+    position: sticky;
+    top: 2rem;
+    align-self: start;
+
+    font-size: smaller;
+}
+
+nav.sidebar ol {
+    list-style: none;
+    padding-left: 1em;
+}
+
+nav.sidebar li li li {
+    display: none;
+}
+
+nav.sidebar li.active {
+    display: contents;
+}
+
+nav.sidebar a {
+    color: #aaa;
+    text-decoration: none;
+}
+
+nav.sidebar li.active a {
+    color: #444;
 }
 
 /* Meta TODO remove when finished*/

@@ -60,10 +60,15 @@
                 :depends-on ("transform")
                 :serial     t
                 :components ((:file       "package")
+                             ;; Utilities
                              (:file       "environment")
                              (:file       "html")
+                             ;;
                              (:file       "render")
-                             (:file       "render-issue")))
+                             (:file       "render-issue")
+                             ;; Style and Javascript resources
+                             (:static-file "style.css")
+                             (:static-file "navigation.js")))
 
                (:module     "interface"
                 :pathname   "code"
