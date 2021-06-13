@@ -86,7 +86,8 @@
 
 (defrule mdash ()
     (bounds (start end) (seq "--" (? (<- third #\-)))) ; TODO also single dash
-  (bp:node* ((if third :emdash :endash) :bounds (cons start end))))
+  (bp:node* (:dash :which  (if third :em :en)
+                   :bounds (cons start end))))
 
 (defrule escaped-character ()
     (seq #\\ (<- character (or #\\ #\@ #\= #\Space #\' #\[ #\]
@@ -483,24 +484,36 @@
     (1 (:name3 . 1) name3)
     (* :element     (nreverse elements))))
 
-(define-command (head :command-name "Head")
+(define-command (head :command-name "Head" :kind :title)
   (1 :name (element environment)))
-(define-command (head1 :command-name "HeadI")
+(define-command (head1 :command-name "HeadI" :kind :sub-title)
   (1* :name (element environment)))
-(define-environment section)
-(define-environment (sub-section :keyword ("sub" "section")))
-(define-environment (sub-sub-section :keyword ("sub" "sub" "section")))
-(define-environment (sub-sub-sub-section :keyword ("sub" "sub" "sub" "section")))
-(define-environment (sub-sub-sub-sub-section :keyword ("sub" "sub" "sub" "sub" "section")))
+
+(defrule subs ()
+    (seq (<- count (:transform (seq) 0))
+         (* (seq (or #\s #\S) "ub" (:transform (seq) (incf count)))))
+  count)
+
+(defrule section (environment)
+    (bounds (start end)
+      (seq/ws (seq "\\begin" (<- count (subs)) (or #\s #\S) "ection")
+              #\{ (<- name (word)) #\}
+              (* (<<- elements (and (not (seq "\\end" (<- count (subs)) (or #\s #\S) "ection"))
+                                    (element environment))))
+              (seq "\\end" (<- count (subs)) (or #\s #\S) "ection")
+              (:transform (seq) nil)))
+  (bp:node* (:section :level  (1+ count)
+                      :bounds (cons start end))
+    (1 (:name    . 1) name)
+    (* (:element . *) (nreverse elements))))
 
 (defrule item-keyword ()
   (seq "\\item" (? "item") #\{ (or "\\bull" "--" (seq)) #\})) ; TODO empty bullet is used as block quote
 
 (defrule list-item (environment)
     (bounds (start end)
-      (seq (item-keyword)
-           (skippable*)
-           (seq (* (<<- body (and (not (or (seq "\\item" (? "item") #\{)#+was(item-keyword) "\\endlist")) (element environment)))))))
+      (seq/ws (item-keyword)
+              (seq (* (<<- body (and (not (or (seq "\\item" (? "item") #\{)#+was(item-keyword) "\\endlist")) (element environment)))))))
   (bp:node* (:list-item :bounds (cons start end))
     (* (:body . *) (nreverse body))))
 
@@ -515,9 +528,8 @@
 
 (defrule enumeration-item (environment)
     (bounds (start end)
-      (seq (enumeration-item-keyword)
-           (skippable*)
-           (* (<<- body (and (not (or (enumeration-item-keyword) "\\endlist")) (element environment))))))
+      (seq/ws (enumeration-item-keyword)
+              (* (<<- body (and (not (or (enumeration-item-keyword) "\\endlist")) (element environment))))))
   (bp:node* (:enumeration-item :bounds (cons start end))
     (* (:body . *) (nreverse body))))
 
@@ -527,18 +539,14 @@
                                          (seq (skippable*) (<- item (or (issue-annotation environment) (enumeration-item environment))) (skippable*))
                                          item)))
 
-#+no (defrule definition-item (environment)
+(defrule definition-item (environment)
     (bounds (start end)
-      (seq/ws "\\itemitem" #\{ (* (<<- key (element environment))) #\}
-              (* (<<- body (and (not (or "\\itemitem" "\\endlist")) (element))))))
+      (seq/ws "\\itemitem" #\{ (* (<<- keys (element environment))) #\}
+              (* (<<- body (and (not (or "\\itemitem" "\\endlist"))
+                                (element environment))))))
   (bp:node* (:definition-item :bounds (cons start end))
-    (* (:key  . *) (nreverse key))
+    (* (:key  . *) (nreverse keys))
     (* (:body . *) (nreverse body))))
-
-(define-command (definition-item :command-name "itemitem")
-  (1* :key  (element environment))
-  (1* :body (and (not (or "\\itemitem" "\\endlist")) (element environment))
-      :open-delimiter nil :close-delimiter nil))
 
 (define-environment (definition-list :keyword "list"
                                      :name?   nil
@@ -1332,10 +1340,6 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
       (head1 environment)
       (chapter environment)
       (section environment)
-      (sub-section environment)
-      (sub-sub-section environment)
-      (sub-sub-sub-section environment)
-      (sub-sub-sub-sub-section environment)
       (define-section)
       (define-figure)
 

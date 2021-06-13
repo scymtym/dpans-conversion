@@ -1,15 +1,15 @@
 (cl:in-package #:dpans-conversion.parser)
 
 (define-condition parse-error (base:annotation-mixin)
-  ((%message :initarg :message
-             :type    string
-             :reader  message)) ; TODO format-control
-  (:default-initargs
-   :message (a:required-argument :message))
-  (:report (lambda (condititon stream)
-             (a:if-let ((message (message condition)))
-               (write-string message stream)
-               (format stream "~@<Incomplete parse.~@:>")))))
+  ((%message :initarg  :message
+             :type     (or null string)
+             :reader   message
+             :initform nil)) ; TODO format-control
+  (:report
+   (lambda (condititon stream)
+     (a:if-let ((message (message condition)))
+       (write-string message stream)
+       (format stream "~@<Incomplete parse.~@:>")))))
 
 (defun %parse-tex (builder input environment filename include-depth)
   (bp:with-builder (builder)

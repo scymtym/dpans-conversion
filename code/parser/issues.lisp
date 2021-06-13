@@ -19,7 +19,7 @@
 
 (defrule dash ()
     (bounds (start end) (seq #\- #\-))
-  (bp:node* (:dash :bounds (cons start end))))
+  (bp:node* (:dash :which :en :bounds (cons start end))))
 
 (defrule possible-reference ()
     (bounds (start end)
@@ -134,7 +134,7 @@
                                 (<<- elements (section1 new-indent)))
                            (seq (indent indent) (<<- elements (line)))))
                   #\Newline))))
-  (bp:node* (:section1 :name name :bounds (cons start end))
+  (bp:node* (:section :name name :bounds (cons start end))
     (* (:element . *) (nreverse elements))))
 
 (defrule label2 ()
@@ -154,7 +154,7 @@
            (* (and (or (whitespace) (not (or (label1) (label2))))
                    (or (<<- elements (paragraph-break))
                        (seq (<<- elements (indented-line)) #\Newline))))))
-  (bp:node* (:section2 :name name :bounds (cons start end))
+  (bp:node* (:section :name name :bounds (cons start end))
     (* (:element . *) (nreverse elements))))
 
 ;;; Special sections
