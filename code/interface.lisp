@@ -1,27 +1,15 @@
 (cl:in-package #:dpans-conversion)
 
+;;; Parsing dpANS TeX sources
+
 (defun parse-dpans (builder root-tex-file
                     &key (root-directory (uiop:pathname-directory-pathname root-tex-file)))
   (let ((directory   (uiop:pathname-directory-pathname root-tex-file))
-        (environment (make-instance 'env:lexical-environment :parent transform::**meta-environment**)))
-    #+no (flet ((process-setup-file (file)
-             (let ((filename (merge-pathnames file directory)))
-               (parser:parse-tex-file builder filename))))
-      (process-setup-file "setup-title.tex")
-      (process-setup-file "setup-aux.tex")
-      (process-setup-file "setup-document.tex")
-      (process-setup-file "setup-terms.tex"))
-    (let* ((relative    (uiop:enough-pathname root-tex-file root-directory))
-           (tree        (parser:parse-tex-file builder root-tex-file :filename relative)))
-      #+no (:inspect
-       (architecture.builder-protocol.visualization:as-tree tree 'list)
-       :new-inspector? t)
-      #+no (dpans-conversion.transform:apply-transform
-            (make-instance 'transform::include-files :builder        builder
-                                                     :environment    environment
-                                                     :root-directory root-directory)
-            tree)
-      tree)))
+        (environment (make-instance 'env:lexical-environment :parent transform::**meta-environment**))
+        (relative    (uiop:enough-pathname root-tex-file root-directory)))
+    (parser:parse-tex-file builder root-tex-file :filename relative)))
+
+;;; Parsing X3J13 cleanup issues plain text sources
 
 (defun find-issues (directory)
   (let ((candidates (directory (merge-pathnames "passed/*" directory))))
@@ -35,6 +23,9 @@
                  (list (parser:parse-issue-file builder file))))
              issue-files))
 
+;;; Parsing dpANS sources and cleanup issues into a single "document
+;;; collection" syntax tree
+
 (defun parse-specification (builder dpans-directory issues-directory
                             &key (root-tex-file  (merge-pathnames
                                                   "chap-0.tex"
@@ -46,10 +37,12 @@
                                                   :defaults (merge-pathnames
                                                              (make-pathname :directory '(:relative :up))
                                                              root-tex-file))))
-  (bp:node (builder :collection)
-    (1 (:document . *) (parse-dpans builder root-tex-file
+  (let ((specification (parse-dpans builder root-tex-file
                                     :root-directory root-directory))
-    (* (:document . *) (parse-issues builder issue-files))))
+        (issues        (parse-issues builder issue-files)))
+    (bp:node (builder :collection)
+      (1 (:specification . 1) specification)
+      (* (:issue         . *) issues))))
 
 (when nil
   (:inspect
@@ -92,60 +85,79 @@
                      (dpans-conversion.html::render-issue issue output)))
              issues))))
 
-(defun do-it (&key (use-mathjax     t)
-                   (use-sidebar     nil)
-                   (debug-expansion nil))
-  (let ((env (make-instance 'env:lexical-environment :parent transform::**meta-environment**)))
-    (flet (#+no (process-file (input output)
-             (format t "Processing file ~A~%" input)
-             (with-simple-restart (continue "Skip ~A" input)
-               (dpans-conversion.html::render-to-file
-                (parser::parse-tex-file 'list input) output env
-                :use-mathjax        nil
-                :modify-environment t))))
-      ;; (process-file "data/dpANS3/setup-title.tex"    "/tmp/output/setup-title.html")
-      ;; (process-file "data/dpANS3/setup-aux.tex"      "/tmp/output/setup-aux.html")
-      ;; (process-file "data/dpANS3/setup-document.tex" "/tmp/output/setup-document.html")
-      ;; (process-file "data/dpANS3/setup-terms.tex"    "/tmp/output/setup-terms.html")
-      ;; (:inspect env :new-inspector? t)
-      (let* ((tree        (parse-dpans 'list #P "~/code/cl/common-lisp/dpans/dpANS3/chap-0.tex"
-                                       :root-directory "~/code/cl/common-lisp/dpans/"))
-             ; (toc         (build-toc tree))
-             (transformed (transform::apply-transforms
-                           (list ;; (make-instance 'dpans-conversion.transform::strip-comments)
-                                 (make-instance 'dpans-conversion.transform::expand-macros :builder           'list
-                                                                                           :environment       env
-                                                                                           :debug-definition? t
-                                                                                           :debug-expansion   '())
-                            ;; (make-instance 'dpans-conversion.transform::strip-tex-commands)
+;;; Complete conversion
+
+(defvar *cache*)
+
+(defmacro cached (expression)
+  `(if (boundp '*cache*)
+       (symbol-value '*cache*)
+       (setf *cache* ,expression)))
+
+(defun to-html (input-directory output-directory
+                &key (dpans-directory  (merge-pathnames "dpANS3/" input-directory))
+                     (issues-directory (merge-pathnames "issues/" input-directory))
+                     (use-mathjax      t)
+                     (use-sidebar      t))
+  (let* ((builder     'list)
+         (environment (make-instance 'env:lexical-environment :parent transform::**meta-environment**))
+         ;; Parse
+         (tree        (cached (parse-specification builder dpans-directory issues-directory)))
+         ;; Transform
+         (transformed (transform::apply-transforms
+                       (list ;; (make-instance 'dpans-conversion.transform::strip-comments)
+                        (make-instance 'dpans-conversion.transform::expand-macros :builder           builder
+                                                                                  :environment       environment
+                                                                                  :debug-definition? t
+                                                                                  :debug-expansion   '())
+                        ;; (make-instance 'dpans-conversion.transform::strip-tex-commands)
                                         ; (make-instance 'dpans-conversion.transform::attach-issue-references)
                                         ; (make-instance 'dpans-conversion.transform::build-references :builder 'list)
                                         ; (make-instance 'dpans-conversion.transform::verify)
-                            )
-                           tree)))
+                        )
+                       tree))
+         ;; Render
+         (result      (let ((transform (make-instance 'dpans-conversion.html::transform :environment      environment
+                                                                                        :builder          builder
+                                                                                        :output-directory output-directory
+                                                                                        :use-sidebar?     use-sidebar))
+                            (specification (bp:node-relation builder '(:specification . 1) transformed)))
+                        (let* ((filename (getf (bp:node-initargs 'list specification) :filename))
+                               (name     (pathname-name filename))
+                               (output   (merge-pathnames (make-pathname :name name
+                                                                         :type "html")
+                                                          output-directory)))
+                          (format t "Generating ~A~%" name)
+                          (ensure-directories-exist output)
+                          (dpans-conversion.html::render-to-file
+                           specification output environment
+                           :use-sidebar      use-sidebar
+                           :use-mathjax      use-mathjax
 
-        (:inspect (vector env
-                          :tree
-                          (architecture.builder-protocol.visualization::as-tree
-                           tree 'list)
-                          (architecture.builder-protocol.visualization::as-query
-                           tree 'list :editor-note)
-                          :transformed
-                          (architecture.builder-protocol.visualization::as-tree
-                           transformed 'list)
-                          (architecture.builder-protocol.visualization::as-query
-                           transformed 'list :component))
-         :new-inspector? t)
+                           :transform        transform
+                           :output-directory output-directory))
 
-        (let* ((filename (getf (bp:node-initargs 'list transformed) :filename))
-               (name     (pathname-name filename))
-               (output   (merge-pathnames (make-pathname :name name
-                                                         :type "html")
-                                          "/tmp/output/")))
-          (format t "Generating ~A~%" name)
-          (ensure-directories-exist output)
-          (dpans-conversion.html::render-to-file
-           transformed output env
-           :use-sidebar     use-sidebar
-           :use-mathjax     use-mathjax
-           :debug-expansion debug-expansion))))))
+                        (transform:apply-transform transform transformed))))
+
+    (:inspect (vector environment
+                      :tree
+                      (architecture.builder-protocol.visualization::as-tree
+
+                       tree 'list)
+                      (architecture.builder-protocol.visualization::as-query
+                       tree 'list :editor-note)
+                      :transformed
+                      (architecture.builder-protocol.visualization::as-tree
+                       transformed 'list)
+                      (architecture.builder-protocol.visualization::as-query
+                       transformed 'list :component))
+     :new-inspector? t)
+
+    result))
+
+(defun do-it (&key (use-mathjax     t)
+                   (use-sidebar     nil)
+                   (debug-expansion nil))
+  (to-html #P"~/code/cl/common-lisp/dpans/" #P"/tmp/output/"
+           :use-mathjax use-mathjax
+           :use-sidebar use-sidebar))
