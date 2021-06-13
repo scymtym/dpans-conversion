@@ -678,7 +678,7 @@
                                    (bounds   (getf initargs :bounds)))
                               (bp:node* (:other-command-application :name name :bounds bounds)))))))))
 
-(defun lookup-macro (name environment error?)
+(defun lookup-macro (name environment error? bounds)
   (let* ((definition? (env:lookup :definition :traversal environment
                                               :if-does-not-exist :normal))
          (mode        (env:lookup :mode :traversal environment
@@ -695,8 +695,11 @@
                             (env:lookup name :math environment
                                         :if-does-not-exist nil))
                           (when error?
-                            (error "~@(~A~) macro ~A is not defined"
-                                   mode name)))))
+                            (error 'parse-error :annotations (list (base:make-annotation (env:lookup :current-file :traversal environment)
+                                                                                         bounds
+                                                                                         "called here"))
+                                                :message     (format nil "~@(~A~) macro ~A is not defined"
+                                                                     mode name))))))
     (when spec
       (values (typecase spec
                 (integer (make-list spec :initial-element 't))
@@ -707,11 +710,11 @@
     (bounds (start end)
       (seq #\\ (<- argument-spec (or (:transform (<- name (identifier)) ; TODO use lookup-macro
                                        (multiple-value-bind (spec found?)
-                                           (lookup-macro name environment nil)
+                                           (lookup-macro name environment nil (cons start (1+ start)))
                                          (unless found? (:fail))
                                          spec))
                                      (:transform (<- name (identifier-with-dot))
-                                       (lookup-macro name environment t))))
+                                       (lookup-macro name environment t (cons start (1+ start))))))
            (* (seq (skippable*)
                    (or (and (:transform (seq)
                               (when (or (null argument-spec)

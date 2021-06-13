@@ -22,6 +22,7 @@
 
                (:module     "parser"
                 :pathname   "code/parser"
+                :depends-on ("base")
                 :serial     t
                 :components ((:file       "package")
                              (:file       "environment")

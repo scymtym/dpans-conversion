@@ -1,8 +1,15 @@
 (cl:in-package #:dpans-conversion.parser)
 
-(defun make-snippet (input start end)
-  (let ((raw (subseq input (max 0 (- start 20)) (min (length input) (+ end 20)))))
-    (substitute #\¶ #\Newline raw)))
+(define-condition parse-error (base:annotation-mixin)
+  ((%message :initarg :message
+             :type    string
+             :reader  message)) ; TODO format-control
+  (:default-initargs
+   :message (a:required-argument :message))
+  (:report (lambda (condititon stream)
+             (a:if-let ((message (message condition)))
+               (write-string message stream)
+               (format stream "~@<Incomplete parse.~@:>")))))
 
 (defun %parse-tex (builder input environment filename include-depth)
   (bp:with-builder (builder)
@@ -12,10 +19,9 @@
                               :grammar 'dpans)
       (ecase result
         ((t)    value)
-        ((nil)  (let ((snippet (make-snippet input position position)))
-                  (error "At ~A [~A]: incomplete parse" position snippet)))
-        (:fatal (let ((snippet (make-snippet input position position)))
-                  (error "At ~A [~A]: ~A" position snippet value)))))))
+        ((nil)  (error 'parse-error :annotations (list (base:make-annotation filename (cons position (1+ position)) "here"))))
+        (:fatal (error 'parse-error :annotations (list (base:make-annotation filename (cons position (1+ position)) "here"))
+                                    :message     value))))))
 
 (defun parse-tex-file (builder file &key (filename     (uiop:enough-pathname
                                                         file *default-pathname-defaults*))
@@ -47,7 +53,6 @@
           (parser.packrat:parse `(issue ,filename) input :grammar 'issues)
         (ecase result
           ((t)    value)
-          ((nil)  (let ((snippet (make-snippet input position position)))
-                    (error "At ~A [~A]: incomplete parse" position snippet)))
-          (:fatal (let ((snippet (make-snippet input position position)))
-                    (error "At ~A [~A]: ~A" position snippet value))))))))
+          ((nil)  (error 'parse-error :annotations (list (base:make-annotation file (cons position (1+ position)) "here"))))
+          (:fatal (error 'parse-error :annotations (list (base:make-annotation file (cons position (1+ position)) "here"))
+                                      :message     value)))))))

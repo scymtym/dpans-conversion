@@ -2,11 +2,16 @@
   (:use
    #:cl)
 
-  (:local-nicknames
-   (#:a   #:alexandria)
+  (:shadow
+   #:parse-error)
 
-   (#:bp  #:architecture.builder-protocol)
-   (#:env #:computation.environment))
+  (:local-nicknames
+   (#:a    #:alexandria)
+
+   (#:bp   #:architecture.builder-protocol)
+   (#:env  #:computation.environment)
+
+   (#:base #:dpans-conversion.base))
 
   (:import-from #:parser.packrat
    #:defgrammar #:in-grammar
