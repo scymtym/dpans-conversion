@@ -8,6 +8,22 @@
   (:default-initargs
    :builder (a:required-argument :builder)))
 
+;;; `peeking-mixin'
+
+(defclass peeking-mixin ()
+  ())
+
+(defmethod apply-transform ((transform peeking-mixin) (ast t))
+  (let ((builder (builder transform)))
+    (labels ((peek (builder relation relation-args node)
+               (let ((kind (bp:node-kind builder node)))
+                 (peek-node transform builder relation relation-args node kind)))
+             (visit (recurse relation relation-args node kind relations &rest initargs)
+               (apply #'transform-node transform recurse
+                      relation relation-args node kind relations
+                      initargs)))
+      (bp:walk-nodes builder (bp:peeking #'peek #'visit) ast))))
+
 ;;; `default-reconstitute-mixin'
 
 (defclass default-reconstitute-mixin ()

@@ -41,6 +41,7 @@
 
                (:module     "transform"
                 :pathname   "code/transform"
+                :depends-on ("base")
                 :serial     t
                 :components ((:file       "package")
                              (:file       "protocol")

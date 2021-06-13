@@ -6,7 +6,12 @@
              (setf (env:lookup name 'env:namespace environment)
                    (make-instance namespace-class))))
       (register-namespace :traversal 'env::equal-namespace)
-      (register-namespace :command   'env::equal-namespace)
+      (register-namespace :macro     'env::equal-namespace)
+      (register-namespace :math      'env::equal-namespace)
+      (register-namespace :variable  'env::equal-namespace)
+      (register-namespace :if        'env::equal-namespace)
+
+      (register-namespace :value     'env::equal-namespace)
 
       (register-namespace :section          'env::equal-namespace)
 
