@@ -13,7 +13,14 @@
 
                "cxml") ; html output
 
-  :components ((:module     "parser"
+  :components ((:module     "base"
+                :pathname   "code/base"
+                :serial     t
+                :components ((:file       "package")
+                             (:file       "annotation")
+                             (:file       "conditions")))
+
+               (:module     "parser"
                 :pathname   "code/parser"
                 :serial     t
                 :components ((:file       "package")
