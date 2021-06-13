@@ -147,87 +147,89 @@
                (cond ((not (eq (bp:node-kind builder node) :other-command-application))
                       t)
                      (t
-                      (let* ((initargs  (bp:node-initargs builder node))
-                             (name      (getf initargs :name))
-                             (arguments (bp:node-relation builder '(:argument . *) node)))
-                        (a:if-let ((macro (env:lookup name :macro (first environment-stack)
-                                                           :if-does-not-exist nil)))
-                          (if (functionp macro)
-                              (let ((expansion (funcall macro environment arguments)))
-                                (values (bp:node (builder :splice :expansion-of node)
-                                          (* :element expansion))
-                                        :splice '() '(:element)))
-                              (let* ((body      (bp:node-relation builder '(:body . *) macro))
-                                     (expansion (cond ((equal name "more")
-                                                       arguments)
-                                                      ((and (= (length body) 1)
-                                                            (eq (bp:node-kind builder (first body)) :other-command-application)
+                      nil)
+                     #+no (t
+                           (let* ((initargs  (bp:node-initargs builder node))
+                                  (name      (getf initargs :name))
+                                  (arguments (bp:node-relation builder '(:argument . *) node)))
+                             (a:if-let ((macro (env:lookup name :macro (first environment-stack)
+                                                                :if-does-not-exist nil)))
+                               (if (functionp macro)
+                                   (let ((expansion (funcall macro environment arguments)))
+                                     (values (bp:node (builder :splice :expansion-of node)
+                                               (* :element expansion))
+                                             :splice '() '(:element)))
+                                   (let* ((body      (bp:node-relation builder '(:body . *) macro))
+                                          (expansion (cond ((equal name "more")
                                                             arguments)
+                                                           ((and (= (length body) 1)
+                                                                 (eq (bp:node-kind builder (first body)) :other-command-application)
+                                                                 arguments)
 
-                                                       (let ((name (getf (bp:node-initargs builder (first body)) :name)))
-                                                         (list (bp:node (builder :other-command-application :name name)
-                                                                 (* (:argument . *) arguments)))))
-                                                      ((not (member name '("sub")
-                                                                    :test #'equal))
-                                                       (let* ((first-parameter (first (bp:node-relation builder :argument macro)))
-                                                              (level           (if first-parameter
-                                                                                   (getf (bp:node-initargs builder first-parameter) :level)
-                                                                                   1)))
-                                                         (map 'list (lambda (b)
-                                                                      #+no (when (equal name "seesection")
-                                                                             (break "~S ~S ~S ~S => ~S" macro level b arguments (expand builder b level arguments)))
-                                                                      (expand builder b level arguments))
-                                                              body)))
-                                                      (t
-                                                       (append body
-                                                               (list (bp:node (builder :block)
-                                                                       (* (:element . *) arguments)))
+                                                            (let ((name (getf (bp:node-initargs builder (first body)) :name)))
+                                                              (list (bp:node (builder :other-command-application :name name)
+                                                                      (* (:argument . *) arguments)))))
+                                                           ((not (member name '("sub")
+                                                                         :test #'equal))
+                                                            (let* ((first-parameter (first (bp:node-relation builder :argument macro)))
+                                                                   (level           (if first-parameter
+                                                                                        (getf (bp:node-initargs builder first-parameter) :level)
+                                                                                        1)))
+                                                              (map 'list (lambda (b)
+                                                                           #+no (when (equal name "seesection")
+                                                                                  (break "~S ~S ~S ~S => ~S" macro level b arguments (expand builder b level arguments)))
+                                                                           (expand builder b level arguments))
+                                                                   body)))
+                                                           (t
+                                                            (append body
+                                                                    (list (bp:node (builder :block)
+                                                                            (* (:element . *) arguments)))
                                         ; (list (bp:node (builder :word :content "{")))
                                         ; (bp:node-relation builder :argument node)
                                         ; (list (bp:node (builder :word :content "}")))
-                                                               )))))
-                                (when (or (eq debug-expansion t)
-                                          (member name debug-expansion :test #'string=))
-                                  (format t "  Expanded ~A[~S] -> ~S~%" name arguments expansion))
-                                (values (bp:node (builder :splice :expansion-of node)
-                                          (* :element expansion))
-                                        :splice '() '(:element))))
-                          (cond (*math?*
-                                 (let ((arguments (map 'list (a:curry #'evaluate-to-string builder)
-                                                       (bp:node-relation builder '(:argument . *) node))))
-                                   (cxml:text (format nil "\\~A~@[{~{~A~}}~] " name arguments)))
-                                 nil)
-                                ((and (member name '("vtop" "hbox") :test #'string=)
-                                      arguments)
-                                 (values (bp:node (builder :splice :expansion-of node)
-                                           (* (:element . *) arguments))
-                                         :splice '() '(:element)))
-                                ((member name '("newif" "overfullrule" "pageno"
-                                                "Head" "HeadI" "longbookline"
-                                                "DocumentNumber" "vfill" "vfil" "hfill" "hfil" "noalign"
-                                                "eject" "vtop"
-                                                "newskip" "newdimen" "hsize" "topskip"
-                                                "leftskip" "parindent" "parskip"
-                                                "setbox" "hbox" "fullhsize" "vskip" "hskip" "parfillskip" "relax"
-                                                "obeylines" "rightskip" "noindent" "hangindent" "negthinspace"
-                                                "quad" "penalty" "Vskip"
-                                                "break" "smallbreak" "medbreak" "goodbreak"
-                                                "bye")
-                                         :test 'string=)
-                                 nil)
-                                (t
-                                 #+no (destructuring-bind (&optional start . end) (getf initargs :source)
-                                        (cerror "Put error indicator into output"
-                                                "Undefined macro ~S [~A at ~A:~A in ~A]"
-                                                name
-                                                (when (and start end)
-                                                  (dpans-conversion.parser::make-snippet (a:read-file-into-string (first file-stack))
-                                                                                         start end))
-                                                start end (first file-stack)))
-                                 (span "error" (lambda ()
-                                                 (cxml:text (format nil "Undefined macro ~S (source: ~S)"
-                                                                    name (getf initargs :source)))))
-                                 nil)))))))
+                                                                    )))))
+                                     (when (or (eq debug-expansion t)
+                                               (member name debug-expansion :test #'string=))
+                                       (format t "  Expanded ~A[~S] -> ~S~%" name arguments expansion))
+                                     (values (bp:node (builder :splice :expansion-of node)
+                                               (* :element expansion))
+                                             :splice '() '(:element))))
+                               (cond (*math?*
+                                      (let ((arguments (map 'list (a:curry #'evaluate-to-string builder)
+                                                            (bp:node-relation builder '(:argument . *) node))))
+                                        (cxml:text (format nil "\\~A~@[{~{~A~}}~] " name arguments)))
+                                      nil)
+                                     ((and (member name '("vtop" "hbox") :test #'string=)
+                                           arguments)
+                                      (values (bp:node (builder :splice :expansion-of node)
+                                                (* (:element . *) arguments))
+                                              :splice '() '(:element)))
+                                     ((member name '("newif" "overfullrule" "pageno"
+                                                     "Head" "HeadI" "longbookline"
+                                                     "DocumentNumber" "vfill" "vfil" "hfill" "hfil" "noalign"
+                                                     "eject" "vtop"
+                                                     "newskip" "newdimen" "hsize" "topskip"
+                                                     "leftskip" "parindent" "parskip"
+                                                     "setbox" "hbox" "fullhsize" "vskip" "hskip" "parfillskip" "relax"
+                                                     "obeylines" "rightskip" "noindent" "hangindent" "negthinspace"
+                                                     "quad" "penalty" "Vskip"
+                                                     "break" "smallbreak" "medbreak" "goodbreak"
+                                                     "bye")
+                                              :test 'string=)
+                                      nil)
+                                     (t
+                                      #+no (destructuring-bind (&optional start . end) (getf initargs :source)
+                                             (cerror "Put error indicator into output"
+                                                     "Undefined macro ~S [~A at ~A:~A in ~A]"
+                                                     name
+                                                     (when (and start end)
+                                                       (dpans-conversion.parser::make-snippet (a:read-file-into-string (first file-stack))
+                                                                                              start end))
+                                                     start end (first file-stack)))
+                                      (span "error" (lambda ()
+                                                      (cxml:text (format nil "Undefined macro ~S (source: ~S)"
+                                                                         name (getf initargs :source)))))
+                                      nil)))))))
              (visit
                  (context recurse relation relation-args node kind relations
                   &rest initargs
@@ -539,19 +541,21 @@
                            (br)
                            (div "component"
                                 (lambda ()
-                                  (map nil (lambda (name next-name)
-                                             (multiple-value-bind (name setf?)
-                                                 (dpans-conversion.transform::evaluate-to-string builder name)
-                                               (cxml:with-element "a"
-                                                 (cxml:attribute "id" (format nil "~(~A~)-~A"
-                                                                              namespace
-                                                                              name))
-                                                 (cxml:text " ")) ; HACK
-                                               (render-name name setf?)
-                                               (when next-name
-                                                 (cxml:text ", "))))
-                                       names (append (rest names) '(nil)))
-                                  (span "ftype" (lambda () (cxml:text ftype)))
+                                  (div "header"
+                                       (lambda ()
+                                         (map nil (lambda (name next-name)
+                                                    (multiple-value-bind (name setf?)
+                                                        (dpans-conversion.transform::evaluate-to-string builder name)
+                                                      (cxml:with-element "a"
+                                                        (cxml:attribute "id" (format nil "~(~A~)-~A"
+                                                                                     namespace
+                                                                                     name))
+                                                        (cxml:text " ")) ; HACK
+                                                      (render-name name setf?)
+                                                      (when next-name
+                                                        (cxml:text ", "))))
+                                              names (append (rest names) '(nil)))
+                                         (span "ftype" (lambda () (cxml:text ftype)))))
                                   (funcall recurse :relations '((:element . *)))))
                            (br)))
                         (:issue-annotation
@@ -583,9 +587,10 @@
                                   (lambda () (cxml:text "‣"))
                                   :element 'span))
                         ;; Structure
-                        ((:head :head1)
-                         (span "title" recurse)
-                         (br))
+                        (:head
+                         (cxml:with-element "h1" (funcall recurse)))
+                        (:head1
+                         (cxml:with-element "h2" (funcall recurse)))
                         ((:chapter)
                          (let* ((number   (dpans-conversion.transform::evaluate-to-string
                                            builder (bp:node-relation builder '(:id . 1) node)))
@@ -606,20 +611,22 @@
                                     (funcall recurse :relations '(:element)))))))
                         ((:section :sub-section :sub-sub-section :sub-sub-sub-section :sub-sub-sub-sub-section)
                          (flet ((do-it ()
-                                  (cxml:with-element (ecase kind
-                                                       (:section "h2")
-                                                       (:sub-section "h3")
-                                                       (:sub-sub-section "h4")
-                                                       (:sub-sub-sub-section "h5")
-                                                       (:sub-sub-sub-sub-section "h6"))
-                                    (let* ((id-node (find-child-of-kind builder :define-section node))
-                                           (id      (if id-node
-                                                        (node-name id-node)
-                                                        (remove #\Space (node-name node))))
-                                           (anchor  (format nil "section-~A" id)))
-                                      (cxml:attribute "id" anchor))
-                                    (funcall recurse :relations '((:name . 1))))
-                                  (funcall recurse :relations '((:element . *)))))
+                                  (let* ((id-node (find-child-of-kind builder :define-section node))
+                                         (id      (if id-node
+                                                      (node-name id-node)
+                                                      (remove #\Space (node-name node))))
+                                         (anchor  (format nil "section-~A" id)))
+                                    (cxml:with-element "section"
+                                      (cxml:attribute "id" anchor)
+                                      (cxml:with-element (ecase kind
+                                                           (:section "h2")
+                                                           (:sub-section "h3")
+                                                           (:sub-sub-section "h4")
+                                                           (:sub-sub-sub-section "h5")
+                                                           (:sub-sub-sub-sub-section "h6"))
+                                        ; (cxml:attribute "id" anchor)
+                                        (funcall recurse :relations '((:name . 1))))
+                                      (funcall recurse :relations '((:element . *)))))))
                            (let* ((name (bp:node-relation builder '(:name . 1) node))
                                   (name (dpans-conversion.transform::evaluate-to-string
                                          builder name)))
@@ -677,17 +684,17 @@
                         (:header
                          (cxml:with-element "th" (funcall recurse)))
                         (:row
-                         (cxml:with-element "tr" (funcall recurse)))
+                          (cxml:with-element "tr" (funcall recurse)))
                         (:cell
-                         (cxml:with-element "td"
-                           (a:when-let ((span (getf initargs :span)))
-                             (cxml:attribute "colspan" (princ-to-string span)))
-                           (case context
-                             (:code
-                              (cxml:with-element "code"
-                                (funcall recurse)))
-                             (t
-                              (funcall recurse)))))
+                          (cxml:with-element "td"
+                            (a:when-let ((span (getf initargs :span)))
+                              (cxml:attribute "colspan" (princ-to-string span)))
+                            (case context
+                              (:code
+                               (cxml:with-element "code"
+                                 (funcall recurse)))
+                              (t
+                               (funcall recurse)))))
 
                         (:tabletwo
                          (cxml:with-element "dl"
@@ -726,7 +733,7 @@
                                      (funcall recurse)))
                                   (t
                                    (funcall recurse))))
-                        ((:hbox :vbox)
+                        ((:hbox :vbox :vtop)
                          (cond (*math?*
                                 (cxml:text (format nil "\\~(~A~)" kind))
                                 (funcall recurse :relations '((:element . *))))
@@ -734,6 +741,7 @@
                                 (funcall recurse :relations '((:element . *))))))
 
                         (:halign
+                         (break "should not happen")
                          (funcall recurse :relations '((:element . *))))
 
                         (:bracket-group
@@ -751,6 +759,6 @@
                         ;; Ignored
                         ((:comment :define-section :assignment :font :chardef :mathchardef
                           :newif :newskip :new :counter-definition :setbox :global :catcode
-                          :advance :register-read))))
+                                   :advance :register-read))))
                  (pop stack))))
       (bp:walk-nodes builder (bp:peeking #'peek (a:curry #'visit :top)) tree))))
