@@ -56,7 +56,8 @@
   (bp:node* (:paragraph-break :bounds (cons start end))))
 
 (defrule indent (amount)
-  (* (whitespace) amount amount))
+  (or (:transform (seq) (unless (zerop amount) (:fail))) ; TODO parser.packrat bug
+      (* (whitespace) amount amount)))
 
 (defrule indented-line ()
     (seq (whitespace+) (<- line (line)))
@@ -87,7 +88,9 @@
     "Current practice"
     "Date"
     "Discussion"
-    "Edit History"
+    ,(lambda (name)
+       (or (string-equal "Edit History")
+           (string-equal "Edit-History")))
     "Example"
     "Forum" ; TODO should not happen
     "Issue" ; TODO should not happen
@@ -95,10 +98,10 @@
     "Performance impact"
     "Problem Description"
     ,(lambda (name)
-       (a:starts-with-subseq "Proposal" name :test #'char-equal))
+       (or (a:starts-with-subseq "Proposal " name :test #'char-equal)
+           (string-equal name "Proposal")))
     "Rationale"
     "References"
-    "Related Issues" ; TODO should not happen
     "Status"
     "Test Case")) ; TODO normalize to Test Case_s_ in source?
 
@@ -111,11 +114,17 @@
                 (funcall section name))))
            *sections*))
 
+;;; Section of the form
+;;;
+;;; LABEL:
+;;;
+;;;   CONTENT
+
 (defrule label1 ()
-    (seq (+ (<<- name (and (not (or (seq (whitespace*) #\Newline)
-                                    (seq #\: (whitespace*) #\Newline)))
-                           :any)))
-         #\: (and (seq (whitespace*) #\Newline) (seq)))
+  (seq (+ (<<- name (and (not (or (seq (whitespace*) #\Newline)
+                                  (seq #\: (whitespace*) #\Newline)))
+                         :any)))
+       #\: (and (seq (whitespace*) #\Newline) (seq)))
   (let* ((name (coerce (nreverse name) 'string))
          (key  (a:if-let ((index (position #\: name)))
                  (subseq name 0 index)
@@ -136,6 +145,10 @@
                   #\Newline))))
   (bp:node* (:section :name name :bounds (cons start end))
     (* (:element . *) (nreverse elements))))
+
+;;; Section of the form
+;;;
+;;; LABEL: CONTENT
 
 (defrule label2 ()
     (seq (+ (<<- name (and (not (or #\: #\Newline)) :any)))
@@ -168,7 +181,7 @@
       (seq "Issue:" (whitespace+) (<- value (value)) #\Newline))
   (bp:node* (:name :content value :bounds (cons start end))))
 
-(defrule issue-reference (must-be-explicit?)
+(defrule issue-reference (must-be-explicit?) ; TODO share issue and proposal name rules with dpans grammar
     (bounds (start end)
       (seq (? (seq ; (<- explicit? (or #\I #\i)) "ssue" (whitespace*) ; TODO bug in parser.packrat: explicit? is always assigned and not rolled back when "ssue" does not match
                    (or #\I #\i) "ssue" (<- explicit? (:transform (seq) t))  (whitespace*)))
@@ -186,7 +199,7 @@
 
 (defrule related-issues ()
     (bounds (start end)
-      (seq "Related " (or #\I #\i) "ssues:" (whitespace*)
+      (seq "Related" (or #\Space #\-) (or #\I #\i) "ssues:" (whitespace*)
            (* (seq (<<- references (issue-reference 'nil))
                    (? (seq (whitespace*) #\( (+ (and (not #\)) :any)) #\) (whitespace*))) ; TODO don't drop comment
                    (? (seq (or (seq #\Newline (whitespace+)) (whitespace*))
