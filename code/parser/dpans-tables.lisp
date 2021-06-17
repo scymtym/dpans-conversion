@@ -31,47 +31,60 @@
   (bp:node* (:header :bounds (cons start end))
     (* :element (nreverse elements))))
 
+(defrule display (environment) ; TODO use this
+    (bounds (start end)
+      (seq/ws (seq "\\display" (or "two" "three" "four" "five"))
+               #\{ (<- caption (chunk)) #\}
+               #\{ (* (<<- row (table-row environment))) #\}))
+  (bp:node* (:displaytwo :bounds (cons start end))
+    (1 (:caption . 1) caption)
+    (* (:row     . *) (nreverse row))))
+
 (define-command displaytwo
-  (1  :caption (word))
+  (1  :caption (chunk))
   (1* :row     (table-row environment)))
 
 (define-command displaythree
-  (1  :caption (word))
+  (1  :caption (chunk))
   (1* :row     (table-row environment)))
 
 (define-command displayfour
-  (1  :caption (word))
+  (1  :caption (chunk))
   (1* :row     (table-row environment)))
 
 (define-command displayfive
-  (1  :caption (word))
+  (1  :caption (chunk))
   (1* :row     (table-row environment)))
 
 (define-command showtwo
-  (1  :caption (word))
+  (1  :caption (chunk))
   (1* :row     (table-row environment)))
 
 (define-command showthree
-  (1  :caption (word))
+  (1  :caption (chunk))
+  (1* :row     (table-row environment)))
+
+(define-command showfive
+  (1  :caption (chunk))
   (1* :row     (table-row environment)))
 
 (define-command tablefigtwo
-  (1  :caption (word))
+  (1  :caption (chunk))
   (2  :header  (header environment))
   (1* :row     (table-row environment)))
 
 (define-command tablefigthree
-  (1  :caption (word))
+  (1  :caption (chunk))
   (3  :header  (header environment))
   (1* :row     (table-row environment)))
 
 (define-command tablefigfour
-  (1  :caption (word))
+  (1  :caption (chunk))
   (4  :header  (header environment))
   (1* :row     (table-row environment)))
 
 (define-command tablefigsix
-  (1  :caption (word))
+  (1  :caption (chunk))
   (6  :header  (header environment))
   (1* :row     (table-row environment)))
 
@@ -90,6 +103,7 @@
       (displayfive environment)
       (showtwo environment)
       (showthree environment)
+      (showfive environment)
       (tablefigtwo environment)
       (tablefigthree environment)
       (tablefigfour environment)

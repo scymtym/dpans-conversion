@@ -8,14 +8,14 @@
 
 (defun evaluate-to-string (builder node)
   (labels ((rec (node)
-             (cond ((a:when-let ((content (getf (bp:node-initargs builder node) :content)))
-                      (return-from evaluate-to-string content)))
-                   ((a:when-let ((content (getf (bp:node-initargs builder node) :name)))
-                      (return-from evaluate-to-string content)))
-                   ((eq (bp:node-kind builder node) :symbol)             ; TODO name
+             (cond ((eq (bp:node-kind builder node) :symbol)             ; TODO name
                     (return-from evaluate-to-string
                       (let ((initargs (bp:node-initargs builder node)))
                         (values (getf initargs :name) (getf initargs :setf?)))))
+                   ((a:when-let ((content (getf (bp:node-initargs builder node) :content)))
+                      (return-from evaluate-to-string content)))
+                   ((a:when-let ((content (getf (bp:node-initargs builder node) :name)))
+                      (return-from evaluate-to-string content)))
                    (t
                     (map nil #'rec (bp:node-relation builder :element node))))))
     (rec node)))

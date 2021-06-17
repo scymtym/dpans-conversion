@@ -45,15 +45,20 @@
                 :serial     t
                 :components ((:file       "package")
                              (:file       "protocol")
-                             (:file       "utilities")
+
                              (:file       "environment")
+                             (:file       "utilities")
+                             (:file       "to-string")
+
                              (:file       "mixins")
 
-                             (:file       "include-files")
-                             (:file       "build-references")
                              (:file       "strip-comments")
                              (:file       "strip-tex-commands")
-                             (:file       "expand-macros")))
+                             (:file       "expand-macros")
+                             (:file       "add-dictionary-sections")
+                             (:file       "split-into-files")
+                             (:file       "note-output-file")
+                             (:file       "build-references")))
 
                (:module     "html"
                 :pathname   "code/html"
@@ -69,6 +74,7 @@
                              (:file       "render-typography")
                              (:file       "render-annotations")
                              (:file       "render-issue")
+                             (:file       "navigation")
 
                              (:file       "render")
                              ;; Style and Javascript resources

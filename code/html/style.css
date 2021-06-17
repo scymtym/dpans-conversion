@@ -77,6 +77,10 @@ nav.sidebar li.active a {
     color: #444;
 }
 
+.footer {
+    text-align: center;
+}
+
 /* Meta TODO remove when finished*/
 
 .error {
@@ -101,6 +105,15 @@ nav.sidebar li.active a {
     font-style: normal;
 }
 
+.float .caption {
+    text-align: center;
+}
+
+table {
+    margin-left: auto;
+    margin-right: auto;
+}
+
 /* Semantic */
 
 .keyword {
@@ -113,7 +126,7 @@ nav.sidebar li.active a {
     font-family: mono;
 }
 
-.term,.newterm,.f {
+.glossary-reference,.newterm,.f {
     color: #400000;
     text-decoration: none;
     font-style: italic;
@@ -162,12 +175,12 @@ nav.sidebar li.active a {
     font-style: italic;
 }
 
-code {
+code { /* TODO border, background */
     color: purple;
     font-family: mono;
 }
 
-.name {
+.name { /* TODO Explain */
     font-weight: bold;
 }
 
@@ -192,11 +205,11 @@ div.component {
     float: right;
 }
 
-div.component .name {
+.component .name {
     font-family: mono;
 }
 
-div.component > dl > dt {
+.component .label {
     font-weight: bold;
 }
 
@@ -343,4 +356,10 @@ div.component > dl > dt {
 
 .issue-annotation .issue-annotation .issue-annotation .issue-annotation {
     border-color: aquamarine;
+}
+
+/* Issues */
+
+.proposal {
+    background: beige;
 }

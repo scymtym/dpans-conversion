@@ -24,7 +24,11 @@
 (defrule possible-reference ()
     (bounds (start end)
       (seq (or (seq (? (<<- name (or #\: #\& #\*)))
-                    (* (<<- name (or (guard upper-case-p) #\- #\+ #\/ #\= #\*)) 2))
+                    (<<- name (or (guard upper-case-p)
+                                  #\- #\+ #\/ #\= #\*))
+                    (+ (<<- name (or (guard upper-case-p)
+                                     (guard (digit-char-p))
+                                     #\- #\+ #\/ #\= #\*))))
                (<<- name (or #\+ #\- #\/ #\= #\T)))
            (:transform (and (or #\s (not (guard alpha-char-p))) (seq)) nil) ; HACK
            ))
@@ -55,6 +59,19 @@
       (seq #\Newline (whitespace*) #\Newline))
   (bp:node* (:paragraph-break :bounds (cons start end))))
 
+(defrule any-indent () ; TODO rename to indent
+    (and (<- count (:transform (seq) 0))
+         (* (or (:transform #\Space (incf count 1))
+                (:transform #\Tab   (incf count 8)))))
+    count)
+
+(defrule some-indent (limit) ; TODO rename to indent
+    (and (<- count (:transform (seq) 0))
+         (* (or (:transform #\Space (incf count 1))
+                (:transform #\Tab   (incf count 8)))
+            0 limit))
+  count)
+
 (defrule indent (amount)
   (or (:transform (seq) (unless (zerop amount) (:fail))) ; TODO parser.packrat bug
       (* (whitespace) amount amount)))
@@ -63,14 +80,137 @@
     (seq (whitespace+) (<- line (line)))
   line)
 
+;;; Names and references
+
+(defrule value ()
+    (+ (<<- name (and (not #\Newline) :any)))
+  (coerce (nreverse name) 'string))
+
+(defrule proper-issue-character ()
+  (or (and (guard alpha-char-p) (guard upper-case-p))
+      (guard digit-char-p)))
+
+(defrule issue-name ()
+    (* (<<- name (or (proper-issue-character)
+                     (and ;; Must not end in -, . or &.
+                          (seq :any (proper-issue-character))
+                          (or #\- #\. #\&))))
+       2)
+  (coerce (nreverse name) 'string))
+
+(defrule proposal-name ()
+    (+ (<<- name (or (guard alphanumericp) #\- #\.)))
+  (coerce (nreverse name) 'string))
+
+(defrule issue-name-and-proposal-name ()
+    (seq (<- issue-name (issue-name))
+         (? (seq #\: (<- proposal-name (proposal-name)))))
+  (list issue-name proposal-name))
+
+(defrule issue-reference (must-be-explicit?) ; TODO share issue and proposal name rules with dpans grammar
+    (bounds (start end)
+      (seq (? (seq ; (<- explicit? (or #\I #\i)) "ssue" (whitespace*) ; TODO bug in parser.packrat: explicit? is always assigned and not rolled back when "ssue" does not match
+               (or #\I #\i) "ssue" (<- explicit? (:transform (seq) t))  (whitespace*)))
+           (<- (name proposal) (issue-name-and-proposal-name))))
+  (when (and must-be-explicit? (not explicit?))
+    (:fail))
+  (bp:node* (:issue-reference :name      name
+                              :proposal  proposal
+                              :explicit? explicit?
+                              :bounds    (cons start end))))
+
+;;; Markup
+
+(defrule enumeration-number ()
+    (+ (<<- digits (guard digit-char-p)))
+  (parse-integer (coerce (nreverse digits) 'string)))
+
+(defrule enumeration-bullet (number)
+    (bounds (start end)
+      (or (seq #\( (<- number (enumeration-number)) #\))
+          (seq (<- number (enumeration-number)) #\.)))
+  (- end start))
+
+(defrule enumeration-item (indent number)
+  (bounds (start end)
+          (seq (indent indent)
+               (<- length (enumeration-bullet number))
+               (<<- lines (line))
+               ;; Measure new indentation
+               (? (seq #\Newline
+                       (and (seq (indent indent)
+                                 (<- new-indent (:transform (<- extra (some-indent length))
+                                                  (print (+ indent extra)))))
+                            (seq))
+                       (<- next-number (:transform (seq) (1+ number)))
+                       (* (and (not (seq (indent indent)
+                                         (or (section-label)
+                                             (enumeration-bullet next-number))))
+                               (or (seq (indent new-indent) (<<- lines (line)))
+                                   (<<- lines (paragraph-break))
+                                   (seq (whitespace*) #\Newline)))))))) ; TODO empty line
+  (bp:node* (:enumeration-item :bounds (cons start end))
+    (* (:body . *) (nreverse lines))))
+
+(defrule enumeration-list (indent)
+    (bounds (start end)
+      (seq (indent indent) (and (<- extra-indent (any-indent)) (seq)) ; TODO indent should be measured beforehand
+           (<- count (:transform (seq) 1))
+           (<- new-indent (:transform (seq) (+ indent extra-indent)))
+           (+ (seq (<<- items (enumeration-item new-indent count))
+                   (:transform (seq) (incf count))))))
+  (bp:node* (:enumeration-list :bounds (cons start end))
+    (* (:element . *) (nreverse items))))
+
+(bp:with-builder ('list)
+  (parser.packrat:parse '(issue "foo") "Proposal (FOO):
+
+  Foo
+
+  1. foo
+      (defun foo ())
+     bar
+
+  2. baz
+     fez
+"))
+
+(bp:with-builder ('list)
+  (parser.packrat:parse '(issue "foo") "Problem Description:
+
+  The description of the DEFMACRO lambda list currently contains some
+  mis-statements and leaves some ambiguities:
+
+  1. Can &BODY, &WHOLE, and &ENVIRONMENT appear at recursive levels of the
+     DEFMACRO lambda list?
+
+     The description of &WHOLE (p145) specifies that &WHOLE must occur ``first
+     in the lambda list,'' but the description of a lambda list says that
+     ``a lambda may [recursively] appear in place of the parameter name.''
+     Consequently, the question arises whether &WHOLE should be permitted to
+     be a synonym for &REST at inner levels of a DEFMACRO lambda list.
+
+     The descriptions of &BODY and &ENVIRONMENT do not contain syntactic
+     restrictions on where they may appear.
+
+  2. Does using &WHOLE affect the pattern of arguments permitted by DEFMACRO.
+
+Proposal (FOO):
+
+1. foo
+   bar
+2. baz
+   fez
+"))
+
 ;;; Structure
 
 (defrule preamble ()
-    (bounds (start end)
-      (seq (* (<<- content (and (not (seq #\Newline (or (* "=" 3) (label1) (label2)))) :any)))
-           (? (seq (* "=" 3)
-                   (* (or (whitespace) #\Newline))))
-           (and (or (label1) (label2)) (seq))))
+  (bounds (start end)
+          (seq (* (<<- content (and (not (seq #\Newline (or (* "=" 3) (section-label)))) :any)))
+               (? (seq (* "=" 3)
+                       (* (or (whitespace) #\Newline))))
+               (and (or (long-label) (short-label)) (seq))))
   (bp:node* (:preamble :content (coerce (nreverse content) 'string)
                        :bounds  (cons start end))))
 
@@ -89,17 +229,14 @@
     "Date"
     "Discussion"
     ,(lambda (name)
-       (or (string-equal "Edit History")
-           (string-equal "Edit-History")))
+       (or (string-equal name "Edit History")
+           (string-equal name "Edit-History")))
     "Example"
     "Forum" ; TODO should not happen
     "Issue" ; TODO should not happen
     "Note" ; only seen in test-not-if-not so far
     "Performance impact"
     "Problem Description"
-    ,(lambda (name)
-       (or (a:starts-with-subseq "Proposal " name :test #'char-equal)
-           (string-equal name "Proposal")))
     "Rationale"
     "References"
     "Status"
@@ -120,7 +257,7 @@
 ;;;
 ;;;   CONTENT
 
-(defrule label1 ()
+(defrule long-label ()
   (seq (+ (<<- name (and (not (or (seq (whitespace*) #\Newline)
                                   (seq #\: (whitespace*) #\Newline)))
                          :any)))
@@ -133,14 +270,16 @@
       (:fail))
     name))
 
-(defrule section1 (indent)
+(defrule long-section (indent)
     (bounds (start end)
       (seq (indent indent)
-           (<- name (label1)) (whitespace*) #\Newline (whitespace*) #\Newline
-           (* (or (and (not (seq (indent indent) (or (label1) (label2))))
+           (<- name (long-label)) (whitespace*) #\Newline (whitespace*) #\Newline
+           (* (or (and (not (seq (indent indent) (section-label)))
                        (or (<<- elements (paragraph-break))
                            (and (<- new-indent (:transform :any (+ indent 2)))
-                                (<<- elements (section1 new-indent)))
+                                (<<- elements (or (enumeration-list new-indent)
+                                                  (long-section new-indent))))
+                           (<<- elements (enumeration-list indent))
                            (seq (indent indent) (<<- elements (line)))))
                   #\Newline))))
   (bp:node* (:section :name name :bounds (cons start end))
@@ -150,7 +289,7 @@
 ;;;
 ;;; LABEL: CONTENT
 
-(defrule label2 ()
+(defrule short-label ()
     (seq (+ (<<- name (and (not (or #\: #\Newline)) :any)))
          #\: (and (whitespace) (seq)))
   (let* ((name (coerce (nreverse name) 'string))
@@ -161,43 +300,25 @@
       (:fail))
     name))
 
-(defrule section2 (indent)
+(defrule short-section2 (indent)
     (bounds (start end)
-      (seq (indent indent) (<- name (label2)) (whitespace+) (<<- elements (line)) #\Newline
-           (* (and (or (whitespace) (not (or (label1) (label2))))
+      (seq (indent indent) (<- name (short-label)) (whitespace+) (<<- elements (line)) #\Newline
+           (* (and (or (whitespace) (not (section-label)))
                    (or (<<- elements (paragraph-break))
-                       (seq (<<- elements (indented-line)) #\Newline))))))
+                       (seq (<<- elements (or (seq (indent indent) (enumeration-list indent))
+                                              (indented-line)))
+                            #\Newline))))))
   (bp:node* (:section :name name :bounds (cons start end))
     (* (:element . *) (nreverse elements))))
 
 ;;; Special sections
 
-(defrule value ()
-    (+ (<<- name (and (not #\Newline) :any)))
-  (coerce (nreverse name) 'string))
-
-(defrule issue-name ()
+(defrule section-name ()
     (bounds (start end)
       (seq "Issue:" (whitespace+) (<- value (value)) #\Newline))
   (bp:node* (:name :content value :bounds (cons start end))))
 
-(defrule issue-reference (must-be-explicit?) ; TODO share issue and proposal name rules with dpans grammar
-    (bounds (start end)
-      (seq (? (seq ; (<- explicit? (or #\I #\i)) "ssue" (whitespace*) ; TODO bug in parser.packrat: explicit? is always assigned and not rolled back when "ssue" does not match
-                   (or #\I #\i) "ssue" (<- explicit? (:transform (seq) t))  (whitespace*)))
-           (+ (<<- name (or (and (guard alpha-char-p) (guard upper-case-p))
-                            #\-)))
-           (? (seq #\: (+ (<<- proposal (or (guard alpha-char-p) #\-)))))))
-  (when (and must-be-explicit? (not explicit?))
-    (:fail))
-  (let ((name     (coerce (nreverse name) 'string))
-        (proposal (when proposal (coerce (nreverse proposal) 'string))))
-    (bp:node* (:issue-reference :name      name
-                                :proposal  proposal
-                                :explicit? explicit?
-                                :bounds    (cons start end)))))
-
-(defrule related-issues ()
+(defrule section-related-issues ()
     (bounds (start end)
       (seq "Related" (or #\Space #\-) (or #\I #\i) "ssues:" (whitespace*)
            (* (seq (<<- references (issue-reference 'nil))
@@ -207,34 +328,69 @@
                            (or (seq #\Newline (whitespace+)) (whitespace*))))))))
   (nreverse references))
 
-(defrule required-issues ()
+(defrule section-required-issues ()
     (bounds (start end)
       (seq "Requires Issue:" (whitespace*)
            (<- reference (issue-reference 'nil))))
   (list reference))
 
-(defrule issue-forum ()
+(defrule section-forum ()
     (bounds (start end)
       (seq "Forum:" (whitespace+) (<- value (value)) #\Newline))
   (bp:node* (:forum :content value :bounds (cons start end))))
 
-(defrule issue-category ()
+(defrule section-category ()
     (bounds (start end)
       (seq "Category:" (whitespace+) (<- value (value)) #\Newline))
   (bp:node* (:category :content value :bounds (cons start end))))
 
+;;; Proposal section
+
+(defrule proposal-label ()
+    (seq "Proposal"
+         (? (seq (whitespace*)
+                 (or (seq #\( (<- (issue proposal) (issue-name-and-proposal-name)) #\))
+                     (<- (issue proposal) (issue-name-and-proposal-name)))))
+         (? #\:) (and (seq (whitespace*) #\Newline) (seq)))
+  (list issue proposal))
+
+(defrule proposal ()
+    (bounds (start end)
+      (seq (<- (issue-name proposal-name) (proposal-label))
+           (whitespace*) #\Newline (whitespace*) #\Newline
+           (* (or (and (not (section-label)) ; TODO (section-content) or something
+                       (or (<<- elements (paragraph-break))
+                           (and (<- new-indent (:transform (seq) 2))
+                                (<<- elements (or (enumeration-list 0)
+                                                  (enumeration-list new-indent)
+                                                  (long-section new-indent))))
+                           (<<- elements (line))))
+                  #\Newline))))
+  (bp:node* (:proposal :name       proposal-name
+                       :issue-name issue-name
+                       :bounds     (cons start end))
+    (* (:element . *) (nreverse elements))))
+
 ;;;
+
+(defrule section-label ()
+  (or (proposal-label) (long-label) (short-label)))
+
+(defrule section ()
+  (or (proposal) (long-section 0) (short-section2 0)))
 
 (defrule issue (filename)
     (bounds (start end)
       (seq (? (<- preamble (preamble)))
-           (+ (or (<-  name            (issue-name))
-                  (<-  related-issues  (related-issues))
-                  (<-  required-issues (required-issues))
-                  (<-  forum           (issue-forum))
-                  (<-  category        (issue-category))
-                  (<<- sections        (or (section1 0) (section2 0)))
+           (+ (or (<-  name            (section-name))
+                  (<-  related-issues  (section-related-issues))
+                  (<-  required-issues (section-required-issues))
+                  (<-  forum           (section-forum))
+                  (<-  category        (section-category))
+                  (<<- sections        (section))
                   (seq (whitespace*) #\Newline)))))
+  (unless (find :proposal sections :key #'bp:node-kind*)
+    (break "No Proposal"))
   (bp:node* (:issue :filename filename :bounds (cons start end))
     (1    (:name           . 1)    name)
     (*    (:required-issue . *)    required-issues)

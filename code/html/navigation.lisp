@@ -55,27 +55,39 @@
 
 (defmethod transform:transform-node ((transform navigation-sidebar)
                                      recurse relation relation-args node kind relations &key)
-  (if (eq kind :issue)
-      (cxml:with-element "nav"
-        (cxml:attribute "class" "sidebar")
-        (cxml:text " ")
-        (cxml:with-element "ol"
-          (funcall recurse)))
-      (funcall recurse)))
+  (funcall recurse)
+  #+no (if (eq kind :issue)
+           (cxml:with-element "nav"
+             (cxml:attribute "class" "sidebar")
+             (cxml:text " ")
+             (cxml:with-element "ol"
+               (funcall recurse)))
+           (funcall recurse)))
+
+(defmethod transform:transform-node ((transform navigation-sidebar)
+                                     recurse relation relation-args node (kind (eql :output-file)) relations
+                                     &key)
+  (cxml:with-element "nav"
+    (cxml:attribute "class" "sidebar")
+    (cxml:text " ")
+    (cxml:with-element "ol"
+      (funcall recurse))))
 
 (defmethod transform:transform-node ((transform navigation-sidebar)
                                      recurse relation relation-args node (kind (eql :file)) relations
                                      &key include-depth)
-  (if (= include-depth 0)
-      (cxml:with-element "nav"
-        (cxml:attribute "class" "sidebar")
-        (cxml:text " ")
-        (funcall recurse))
-      (funcall recurse)))
+  (funcall recurse)
+  #+no (if (= include-depth 0)
+           (cxml:with-element "nav"
+             (cxml:attribute "class" "sidebar")
+             (cxml:text " ")
+             (funcall recurse))
+           (funcall recurse)))
 
 (defmethod transform:transform-node ((transform navigation-sidebar)
                                      recurse relation relation-args node (kind (eql :chapter)) relations &key)
-  (cxml:with-element "nav"
+  (funcall recurse)
+  #+no (cxml:with-element "nav"
     (cxml:attribute "class" "sidebar")
     (cxml:with-element "h2"
       (cxml:text "This chapter"))
@@ -83,29 +95,26 @@
       (cxml:text " ")
       (funcall recurse))))
 
-(macrolet ((define (kind)
-             `(defmethod transform:transform-node ((transform navigation-sidebar)
-                                                   recurse relation relation-args node (kind (eql ,kind)) relations &key)
-                (flet ((emit (target name)
-                         (cxml:with-element "li"
-                           (a target (lambda () (cxml:text name)))
-                           (cxml:with-element "ol" ; TODO avoid if empty
-                             (cxml:text " ")
-                             (funcall recurse)))))
+(defmethod transform:transform-node ((transform navigation-sidebar)
+                                     recurse relation relation-args node (kind (eql :section)) relations &key)
+  (flet ((emit (target name)
+           (cxml:with-element "li"
+             (a target (lambda () (cxml:text name)))
+             (cxml:with-element "ol" ; TODO avoid if empty
+               (cxml:text " ")
+               (funcall recurse)))))
 
-                  (let ((builder (transform:builder transform)))
-                    (if (bp:node-relation builder '(:name . 1) node)
-                        (let* ((id-node (find-child-of-kind builder :define-section node))
-                               (id      (if id-node
-                                            (node-name id-node)
-                                            (remove #\Space (node-name node))))
-                               (target  (format nil "#section-~A" id))
-                               (name    (transform::evaluate-to-string
-                                         builder (bp:node-relation builder '(:name . 1) node))))
-                          (emit target name))
-                        (let* ((name    (getf (bp:node-initargs builder node) :name))
-                               (target  (format nil "#section-~A" name)))
-                          (emit target name))))))))
-  (define :section)
-  (define :sub-section)
-  (define :sub-sub-section))
+    (let ((builder (transform:builder transform)))
+      (if (bp:node-relation builder '(:name . 1) node)
+          (let* ((id-node (find-child-of-kind builder :define-section node))
+                 (id      (if id-node
+                              (node-name id-node)
+                              (remove-if (a:rcurry #'member '(#\Space #\Newline))
+                                         (node-name node))))
+                 (target  (format nil "#section-~A" id))
+                 (name    (transform::evaluate-to-string
+                           builder (bp:node-relation builder '(:name . 1) node))))
+            (emit target name))
+          (let* ((name    (getf (bp:node-initargs builder node) :name)) ; TODO different format. this is what issues use
+                 (target  (format nil "#section-~A" name)))
+            (emit target name))))))

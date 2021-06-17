@@ -98,15 +98,15 @@
 (defrule indexed-char ()
     (seq "\\char" (skippable*) (? #\') (+ (<<- id (guard digit-char-p))))
   (let ((code (parse-integer (coerce (nreverse id) 'string) :radix 8)))
-    (bp:node* (:word :content (string (code-char code))))))
+    (bp:node* (:chunk :content (string (code-char code))))))
 
-(defrule word ()
+(defrule chunk ()
     (+ (<<- characters (or (escaped-character)
                            (and (not (or #\{ #\} #\\ #\% #\& #\$ #\~ ; #\.
                                          (seq (+ #\#) (+ (guard digit digit-char-p))) ; argument
                                          (paragraph-break))) ; TODO make non-result version
                                 :any))))
-  (bp:node* (:word :content (coerce (nreverse (remove nil characters)) 'string))))
+  (bp:node* (:chunk :content (coerce (nreverse (remove nil characters)) 'string))))
 
 (defrule paragraph-break ()
   (bounds (start end) (seq #\Newline (* (or #\Space #\Tab)) #\Newline))
@@ -281,6 +281,8 @@
          (let* ((name  (coerce (nreverse name) 'string))
                 (name* (cond ((member name '("setup" "index.idx") :test #'string=)
                               nil)
+                             ((string= name "setup-sections-for-toc")
+                              "setup-sections")
                              ((a:ends-with-subseq "fig" name)
                               nil)
                              ((a:ends-with-subseq "tc" name)
@@ -306,39 +308,43 @@
          (let* ((name  (coerce (nreverse name) 'string))
                 (file  (include-file name environment)))
            (bp:node* (:input :name name :bounds (cons start end))
-             (bp:? (:file . bp:?) file))))))
+             (bp:? (:file . bp:?) file))
+           #+no (bp:node* (:section :level  1 ; TODO do this as a transform
+                               :bounds (cons start end))
+             (1 (:name    . 1) (bp:node* (:chunk :content "Dictionary" :bounds (cons start end))))
+             (1 (:element . *) ))))))
 
 (define-command term
-  (1 :name (word)))
+  (1 :name (chunk)))
 
 (define-command newterm
-  (1 :name (word)))
+  (1 :name (chunk)))
 
 (define-command newtermidx
-  (1 :name (word))
-  (1 :term (word)))
+  (1 :name (chunk))
+  (1 :term (chunk)))
 
 (define-command ftype
   (1 :name (element environment)))
 
 ;; This would not be needed if we could handle expansions better.
-(defrule seesec ()
+#+no (defrule seesec ()
     (bounds (start end)
       (seq "\\" (<- which (or #\s #\S)) "ee" (or "section" "chapter") "\\"
            (<- name (identifier))))
   (bp:node* (:block :bounds (cons start end))
-    (* :element (list (bp:node* (:word :content (concatenate 'string (string which) "ee ")))
+    (* :element (list (bp:node* (:chunk :content (concatenate 'string (string which) "ee ")))
                       (bp:node* (:secref :bounds (cons start end))
-                        (1 (:name . 1) (bp:node* (:word :content name))))))))
+                        (1 (:name . 1) (bp:node* (:chunk :content name))))))))
 
-(defrule seefig ()
+#+no (defrule seefig ()
     (bounds (start end)
       (seq "\\" (<- which (or #\s #\S)) "ee" "figure" "\\"
            (<- name (identifier))))
   (bp:node* (:block :bounds (cons start end))
-    (* :element (list (bp:node* (:word :content (concatenate 'string (string which) "ee ")))
+    (* :element (list (bp:node* (:chunk :content (concatenate 'string (string which) "ee ")))
                       (bp:node* (:figref :bounds (cons start end))
-                        (1 (:name . 1) (bp:node* (:word :content name))))))))
+                        (1 (:name . 1) (bp:node* (:chunk :content name))))))))
 
 (defrule secref ()
   (bounds (start end)
@@ -346,7 +352,7 @@
                               (<- name (argument)))))
   (bp:node* (:secref :bounds (cons start end))
     (1 (:name . 1) (if (stringp name)
-                       (bp:node* (:word :content name)) ; TODO word is a hack
+                       (bp:node* (:chunk :content name)) ; TODO chunk is a hack
                        name))))
 
 (defrule chapref ()
@@ -355,7 +361,7 @@
                          (<- name (argument)))))
   (bp:node* (:secref :bounds (cons start end))
     (1 (:name . 1) (if (stringp name)
-                       (bp:node* (:word :content name))
+                       (bp:node* (:chunk :content name))
                        name))))
 
 (define-command keyref ; lambda list keyword reference
@@ -389,7 +395,7 @@
                             (seq #\\ (<- name (identifier))))))
   (bp:node* (:figref :bounds (cons start end))
     (1 (:name . 1) (if (stringp name)
-                       (bp:node* (:word :content name))
+                       (bp:node* (:chunk :content name))
                        name))))
 
 (defrule miscref (environment)
@@ -455,7 +461,7 @@
         (a:ensure-list name-and-options)
       `(defrule ,name ( environment)
            (bounds (start end)
-             (seq ,start-string ,@(when name? '(#\{ (<- name (word)) #\}))
+             (seq ,start-string ,@(when name? '(#\{ (<- name (chunk)) #\}))
                   (skippable*)
                   (* (<<- elements (and (not ,end-string)
                                         ,element)))
@@ -468,21 +474,21 @@
 (defrule chapter (environment)
     (bounds (start end)
       (seq (seq "\\" "begin" (or #\c #\C) "hapter")
-           #\{ (<- id (word)) #\}
-           #\{ (<- name (word)) #\}
-           #\{ (<- name2 (word)) #\}
-           #\{ (<- name3 (word)) #\}
+           #\{ (<- id (chunk)) #\}
+           #\{ (<- name (chunk)) #\}
+           #\{ (<- name2 (chunk)) #\}
+           #\{ (<- name3 (chunk)) #\}
            (skippable*)
            (* (<<- elements
                    (and (not (seq "\\" "end" (or #\c #\C) "hapter")) (element environment))))
            (seq "\\" "end" (or #\c #\C) "hapter")
            (:transform (seq) nil)))
   (bp:node* (:chapter :bounds (cons start end))
-    (1 (:id   . 1)  id)
-    (1 (:name . 1)  name)
-    (1 (:name2 . 1) name2)
-    (1 (:name3 . 1) name3)
-    (* :element     (nreverse elements))))
+    (1 (:id      . 1) id)
+    (1 (:name    . 1) name)
+    (1 (:name2   . 1) name2)
+    (1 (:name3   . 1) name3)
+    (* (:element . *) (nreverse elements))))
 
 (define-command (head :command-name "Head" :kind :title)
   (1 :name (element environment)))
@@ -497,7 +503,7 @@
 (defrule section (environment)
     (bounds (start end)
       (seq/ws (seq "\\begin" (<- count (subs)) (or #\s #\S) "ection")
-              #\{ (<- name (word)) #\}
+              #\{ (<- name (chunk)) #\}
               (* (<<- elements (and (not (seq "\\end" (<- count (subs)) (or #\s #\S) "ection"))
                                     (element environment))))
               (seq "\\end" (<- count (subs)) (or #\s #\S) "ection")
@@ -556,13 +562,13 @@
 
 (defrule define-section ()
     (bounds (start end)
-      (seq "\\DefineSection" #\{ (<- name (word)) #\}))
+      (seq "\\DefineSection" #\{ (<- name (chunk)) #\}))
   (bp:node* (:define-section :bounds (cons start end))
     (1 (:name . 1) name)))
 
 (defrule define-figure ()
     (bounds (start end)
-      (seq "\\DefineFigure" #\{ (<- name (word)) #\}))
+      (seq "\\DefineFigure" #\{ (<- name (chunk)) #\}))
   (bp:node* (:define-figure :bounds (cons start end))
     (1 (:name . 1) name)))
 
@@ -679,7 +685,7 @@
       (1 (:body . *) (cond (node)
                            (body
                             (let ((body (coerce (nreverse body) 'string)))
-                                 (bp:node* (:word :content body))))
+                                 (bp:node* (:chunk :content body))))
                            (rhs
                             (let* ((initargs (bp:node-initargs* rhs))
                                    (name     (getf initargs :name))
@@ -758,7 +764,7 @@
                                                                                      (list (aref delimiter index) (1+ index)))))
                                                                  char)))
                                              (prog1
-                                                 (bp:node* (:word :content (coerce (nreverse characters) 'string)))
+                                                 (bp:node* (:chunk :content (coerce (nreverse characters) 'string)))
                                                (setf characters '())))))
                        (and (:transform (seq)
                               (when (or (null argument-spec)
@@ -1045,7 +1051,7 @@
 (defrule advance (environment)
     (bounds (start end)
       (seq/ws "\\advance" (<- name (defined-variable environment))
-              (? "by") (<- amount (word))))
+              (? "by") (<- amount (chunk))))
   (bp:node* (:advance :bounds (cons start end))
     (1 (:variable . 1) name)
     (1 (:amount   . 1) amount)))
@@ -1083,7 +1089,7 @@
                               (defined-variable environment)
                               (user-macro-application environment)
                               (hbox environment)
-                              (word)))))
+                              (chunk)))))
   (bp:node* (:assignment :global? global?)
     (1 (:variable . 1) variable)
     (1 (:value    . 1) value)))
@@ -1111,7 +1117,7 @@
       (defined-variable environment)))
 
 (defrule register-assignment (environment)
-  (seq/ws (seq "\\" (or "count" "skip")) (<- name (name)) #\= (<- value (word))))
+  (seq/ws (seq "\\" (or "count" "skip")) (<- name (name)) #\= (<- value (chunk))))
 
 (defrule register-reference (environment)
   (seq/ws (seq "\\" (or "ht" "dp" "box")) (register-number environment)))
@@ -1175,8 +1181,8 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
                                                                 (bounds (start2 end2)
                                                                   (+ (<<- characters (and (not (or (skippable) #\} #\\ "depth" "width")) :any))))
                                                                 (prog1
-                                                                    (bp:node* (:word :content (coerce (nreverse characters)'string)
-                                                                                     :bounds  (cons start2 end2)))
+                                                                    (bp:node* (:chunk :content (coerce (nreverse characters)'string)
+                                                                                      :bounds  (cons start2 end2)))
                                                                   (setf characters '()))))))
                                            (seq/ws "depth"
                                                    (<- depth (or (defined-variable environment)
@@ -1184,8 +1190,8 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
                                                                    (bounds (start2 end2)
                                                                      (+ (<<- characters (and (not (or (skippable) #\} #\\ "height" "width")) :any))))
                                                                    (prog1
-                                                                       (bp:node* (:word :content (coerce (nreverse characters)'string)
-                                                                                        :bounds  (cons start2 end2)))
+                                                                       (bp:node* (:chunk :content (coerce (nreverse characters) 'string)
+                                                                                         :bounds  (cons start2 end2)))
                                                                      (setf characters '()))))))
                                            (seq/ws "width"
                                                    (<- width (or (defined-variable environment)
@@ -1193,8 +1199,8 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
                                                                      (bounds (start2 end2)
                                                                        (+ (<<- characters (and (not (or (skippable) #\} #\\ "height" "depth")) :any))))
                                                                    (prog1
-                                                                       (bp:node* (:word :content (coerce (nreverse characters)'string)
-                                                                                        :bounds  (cons start2 end2)))
+                                                                       (bp:node* (:chunk :content (coerce (nreverse characters) 'string)
+                                                                                         :bounds  (cons start2 end2)))
                                                                      (setf characters '())))))))))))
   (bp:node* (:hrule :bounds (cons start end))
     (bp:? (:height . bp:?) height)
@@ -1362,8 +1368,8 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
       (newtermidx environment)
       (ftype environment)
 
-      (seesec)
-      (seefig)
+      ; (seesec)
+      ; (seefig)
       (secref)
       (chapref)
 
@@ -1397,7 +1403,7 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
       (tilde environment)
       (mdash)
       (paragraph-break)
-      (word)
+      (chunk)
 
       (skippable+)))
 

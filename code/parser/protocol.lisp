@@ -18,7 +18,10 @@
                               input
                               :grammar 'dpans)
       (ecase result
-        ((t)    value)
+        ((t)    (unless (= position (length input))
+                  (error 'parse-error :annotations (list (base:make-annotation filename (cons position (1+ position)) "here"))
+                                      :message     "incomplete parse"))
+                value)
         ((nil)  (error 'parse-error :annotations (list (base:make-annotation filename (cons position (1+ position)) "here"))))
         (:fatal (error 'parse-error :annotations (list (base:make-annotation filename (cons position (1+ position)) "here"))
                                     :message     value))))))
@@ -52,7 +55,10 @@
       (multiple-value-bind (result position value)
           (parser.packrat:parse `(issue ,filename) input :grammar 'issues)
         (ecase result
-          ((t)    value)
+          ((t)    (unless (= position (length input))
+                    (error 'parse-error :annotations (list (base:make-annotation file (cons position (1+ position)) "here"))
+                                        :message     "incomplete parse"))
+                  value)
           ((nil)  (error 'parse-error :annotations (list (base:make-annotation file (cons position (1+ position)) "here"))))
           (:fatal (error 'parse-error :annotations (list (base:make-annotation file (cons position (1+ position)) "here"))
                                       :message     value)))))))

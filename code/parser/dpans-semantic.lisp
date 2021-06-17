@@ -46,16 +46,20 @@
 ;;; X3J13 cleanup issue named NAME pertains to everything in ....
 
 (defrule issue-name ()
-    (+ (<<- name (and (not #\}) :any)))
-  (coerce (nreverse name) 'string))
+    (seq (+ (<<- name (and (not (or #\: #\})) :any)))
+         (? (seq #\: (+ (<<- proposal (and (not #\}) :any))))))
+  (list (coerce (nreverse name) 'string)
+        (when proposal
+          (coerce (nreverse proposal) 'string))))
 
 (defrule issue-annotation (environment)
     (bounds (start end)
-      (seq "\\issue" #\{ (<- name (issue-name)) #\} (? #\Newline)
+      (seq "\\issue" #\{ (<- (name proposal) (issue-name)) #\} (? #\Newline)
            (* (<<- elements (and (not "\\endissue") (element environment))))
-           "\\endissue" #\{ (<- name (issue-name)) #\} (? #\Newline)))
-  (bp:node* (:issue-annotation :name   name
-                               :bounds (cons start end))
+           "\\endissue" #\{ (<- (name proposal) (issue-name)) #\} (? #\Newline)))
+  (bp:node* (:issue-annotation :name     name
+                               :proposal proposal
+                               :bounds   (cons start end))
     (* (:element . *) (nreverse elements))))
 
 ;;; Name
@@ -261,10 +265,16 @@
     (* (:argument     . *) (nreverse arguments))
     (* (:return-value . *) (nreverse return-values))))
 
+(defrule specializer ()
+    (bounds (start end)
+      (+ (<<- characters (and (not #\)) :any))))
+  (bp:node* (:typeref :bounds (cons start end))
+    (1 (:name . 1) (coerce (nreverse characters) 'string))))
+
 (defrule specialized-parameter (environment)
     (bounds (start end)
       (seq/ws "\\specparam" #\{ (<- name (element environment)) #\}
-              #\{ (<- specializer (element environment)) #\}))
+              #\{ (<- specializer (specializer)) #\}))
   (bp:node* (:specialized-parameter :bounds (cons start end))
     (1 (:name        . 1) name)
     (1 (:specializer . 1) specializer)))
@@ -346,7 +356,7 @@
 (defrule bnf-rule (environment)
     (bounds (start end)
       (seq/ws "\\auxbnf"
-               #\{ (<- name (word)) #\}
+               #\{ (<- name (chunk)) #\}
                #\{
                (and (<- new-environment (:transform (seq)
                                           (env:augmented-environment
@@ -367,7 +377,7 @@
     (bounds (start end)
       (seq (* (<<- content (and (not (or #\: #\{)) :any))) #\: (? #\:)))
   (let ((content (coerce (nreverse content) 'string)))
-    (bp:node* (:word :content content :bounds (cons start end)))))
+    (bp:node* (:chunk :content content :bounds (cons start end)))))
 
 (defrule component-label (environment)
     (bounds (start end)
@@ -375,7 +385,7 @@
               (* (<<- elements (and (not (or "\\label" "\\endcom" "\\endissue"))
                                     (element environment))))))
   (bp:node* (:part :bounds (cons start end))
-    (1 (:name . 1)    name)
+    (1 (:name    . 1) name)
     (* (:element . *) (nreverse elements))))
 
 (define-command (none :command-name "None"))
@@ -409,5 +419,5 @@
   (nreverse elements))
 
 (define-command gentry
-  (1  :name (word))
+  (1  :name (chunk))
   (*> :body (glossary-entry-body environment) :open-delimiter nil :close-delimiter nil))

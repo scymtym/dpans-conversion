@@ -53,38 +53,6 @@
     'list)
    :new-inspector? t))
 
-(:inspect
- (parser:parse-issue-file 'list "~/code/cl/common-lisp/dpans/issues/passed/closed-stream-operations")
- :new-inspector? t)
-
-(when nil
-  (:inspect
-   (architecture.builder-protocol.visualization::as-tree
-    (nth-value
-     1 (parse-specification 'list
-                            "~/code/cl/common-lisp/dpans/dpANS3/"
-                            "~/code/cl/common-lisp/dpans/issues/"))
-    'list)
-   :new-inspector? t))
-
-(when nil
-  (multiple-value-bind (document issues)
-
-      (let ((issues (nth-value
-                     1 (parse-specification 'list
-                                            "~/code/cl/common-lisp/dpans/dpANS3/"
-                                            "~/code/cl/common-lisp/dpans/issues/")))
-            (output-directory "/tmp/output/issues/"))
-
-        (ensure-directories-exist output-directory)
-        (map nil (lambda (issue)
-                   (let* ((filename (getf (bp:node-initargs 'list issue) :filename))
-                          (output   (make-pathname :name     (pathname-name filename)
-                                                   :type     "html"
-                                                   :defaults output-directory)))
-                     (dpans-conversion.html::render-issue issue output)))
-             issues))))
-
 ;;; Complete conversion
 
 (defvar *cache*)
@@ -106,13 +74,20 @@
          ;; Transform
          (transformed (transform::apply-transforms
                        (list ;; (make-instance 'dpans-conversion.transform::strip-comments)
-                        (make-instance 'dpans-conversion.transform::expand-macros :builder           builder
-                                                                                  :environment       environment
-                                                                                  :debug-definition? t
-                                                                                  :debug-expansion   '())
+                        (make-instance 'transform::expand-macros :builder           builder
+                                                                 :environment       environment
+                                                                 :debug-definition? t
+                                                                 :debug-expansion   '())
                         ;; (make-instance 'dpans-conversion.transform::strip-tex-commands)
                                         ; (make-instance 'dpans-conversion.transform::attach-issue-references)
-                                        ; (make-instance 'dpans-conversion.transform::build-references :builder 'list)
+                        (make-instance 'transform::drop :builder   builder
+                                                        :predicate (a:conjoin (transform::kind? :input)
+                                                                              (transform::initarg? :name "setup-for-toc")))
+                        (make-instance 'transform::lower-display-tables :builder builder)
+                        (make-instance 'transform::add-dictionary-sections :builder builder)
+                        (make-instance 'transform::split-into-files :builder builder)
+                        (make-instance 'transform::note-output-file :builder builder)
+                        (make-instance 'transform::build-references :builder builder)
                                         ; (make-instance 'dpans-conversion.transform::verify)
                         )
                        tree))
@@ -122,15 +97,15 @@
                                                                                         :output-directory output-directory
                                                                                         :use-sidebar?     use-sidebar))
                             (specification (bp:node-relation builder '(:specification . 1) transformed)))
-                        (let* ((filename (getf (bp:node-initargs 'list specification) :filename))
-                               (name     (pathname-name filename))
-                               (output   (merge-pathnames (make-pathname :name name
+                        (let* (#+no (filename (getf (bp:node-initargs 'list specification) :filename))
+                               #+no (name     (pathname-name filename))
+                               #+no (output   (merge-pathnames (make-pathname :name name
                                                                          :type "html")
                                                           output-directory)))
-                          (format t "Generating ~A~%" name)
-                          (ensure-directories-exist output)
+                          ; (format t "Generating ~A~%" name)
+                          ; (ensure-directories-exist output)
                           (dpans-conversion.html::render-to-file
-                           specification output environment
+                           transformed :output environment
                            :use-sidebar      use-sidebar
                            :use-mathjax      use-mathjax
 

@@ -3,11 +3,13 @@
    #:cl)
 
   (:local-nicknames
-   (#:a   #:alexandria)
+   (#:a    #:alexandria)
 
-   (#:env #:computation.environment)
+   (#:env  #:computation.environment)
 
-   (#:bp  #:architecture.builder-protocol))
+   (#:bp   #:architecture.builder-protocol)
+
+   (#:base #:dpans-conversion.base))
 
   ;; Transform protocol
   (:export

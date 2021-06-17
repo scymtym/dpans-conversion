@@ -29,20 +29,25 @@
 (defclass default-reconstitute-mixin ()
   ())
 
+(defun %reconstitute (builder recurse kind relations &rest initargs)
+  (let ((node (apply #'bp:make-node builder kind initargs)))
+    (bp:add-relations
+     builder node
+     (map 'list (lambda (relation)
+                  (typecase relation
+                    ((or symbol (cons symbol atom))
+                     (multiple-value-bind (relation* cardinality)
+                         (bp:normalize-relation relation)
+                       (declare (ignore relation*))
+                       (let ((right (first (funcall recurse :relations (list relation)))))
+                         (list cardinality relation right))))
+                    ((cons t (cons t (cons t null)))
+                     relation)))
+          relations))))
+
 (defun reconstitute (builder recurse kind relations &rest initargs)
-  (bp:make+finish-node+relations
-   builder kind initargs
-   (map 'list (lambda (relation)
-                (typecase relation
-                  ((or symbol (cons symbol atom))
-                   (multiple-value-bind (relation* cardinality)
-                       (bp:normalize-relation relation)
-                     (declare (ignore relation*))
-                     (let ((right (first (funcall recurse :relations (list relation)))))
-                       (list cardinality relation right))))
-                  ((cons t (cons t (cons t null)))
-                   relation)))
-        relations)))
+  (let ((node (apply #'%reconstitute builder recurse kind relations initargs)))
+    (bp:finish-node builder kind node)))
 
 (defmethod transform-node ((transform default-reconstitute-mixin) recurse
                            relation relation-args node kind relations
@@ -85,6 +90,8 @@
 (defclass file-tracking-mixin ()
   ())
 
+;;; Input files
+
 (defmethod current-file ((transform file-tracking-mixin))
   (env:lookup :current-file :traversal (environment transform)))
 
@@ -101,27 +108,42 @@
 (defmethod leave ((transform t) (kind (eql :file)) (which t))
   (format t "~V@TLeaving file ~S~%" (* 2 (include-depth transform)) which))
 
-(flet ((do-it (continuation transform filename)
-         (let* ((old-file-stack (file-stack transform))
-                (new-file-stack (list* filename old-file-stack))
-                (name           (pathname-name filename)))
-           (enter transform :file name)
-           (unwind-protect
-                (call-with-environment continuation transform
-                                       '((:current-file . :traversal)
-                                         (:file-stack   . :traversal))
-                                       (list filename new-file-stack))
-             (leave transform :file name)))))
+(defmethod transform-node :around
+    ((transform file-tracking-mixin) recurse
+     relation relation-args node (kind (eql :file)) relations
+     &key filename &allow-other-keys)
+  (let* ((old-file-stack (file-stack transform))
+         (new-file-stack (list* filename old-file-stack))
+         (name           (pathname-name filename)))
+    (enter transform :file name)
+    (unwind-protect
+         (call-with-environment #'call-next-method transform
+                                '((:current-file . :traversal)
+                                  (:file-stack   . :traversal))
+                                (list filename new-file-stack))
+      (leave transform :file name))))
 
-  (defmethod transform-node :around
-      ((transform file-tracking-mixin) recurse
-       relation relation-args node (kind (eql :file)) relations
-       &key filename &allow-other-keys)
-    (do-it #'call-next-method transform filename))
+;;; Output files
 
-  (defmethod transform-node :around
-      ((transform file-tracking-mixin) recurse
-       relation relation-args node (ekind (eql :included-file)) relations
-       &key filename &allow-other-keys)
-    (break "should not happen")
-    (do-it #'call-next-method transform filename)))
+(defclass output-file-tracking-mixin ()
+  ())
+
+(defmethod current-output-file ((transform output-file-tracking-mixin))
+  (env:lookup :current-output-file :traversal (environment transform)
+              :if-does-not-exist nil))
+
+(defmethod output-file-stack ((transform output-file-tracking-mixin))
+  (env:lookup :output-file-stack :traversal (environment transform)
+              :if-does-not-exist '()))
+
+(defmethod transform-node :around
+    ((transform output-file-tracking-mixin) recurse
+     relation relation-args node (kind (eql :output-file)) relations
+     &key filename &allow-other-keys)
+  (let* ((old-file-stack (output-file-stack transform))
+         (new-file-stack (list* filename old-file-stack))
+         (name           (pathname-name filename)))
+    (call-with-environment #'call-next-method transform
+                           '((:current-output-file . :traversal)
+                             (:output-file-stack   . :traversal))
+                           (list filename new-file-stack))))

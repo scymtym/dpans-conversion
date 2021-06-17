@@ -18,7 +18,7 @@
 (defun evaluate-to-string (builder node)
   (labels ((rec (node)
              (case (bp:node-kind builder node)
-               (:word
+               (:chunk
                 (return-from evaluate-to-string
                   (getf (bp:node-initargs builder node) :content)))
                (:symbol
@@ -62,7 +62,7 @@
                       ((<= 1 number (1+ (length arguments)))
                        (nth (1- number) arguments))
                       (t
-                       (bp:node (builder :word :content "missing macro argument"))
+                       (bp:node (builder :chunk :content "missing macro argument"))
                                         ; (error "Missing macro argument")
                        )))
                (t
@@ -186,9 +186,9 @@
                                                             (append body
                                                                     (list (bp:node (builder :block)
                                                                             (* (:element . *) arguments)))
-                                        ; (list (bp:node (builder :word :content "{")))
+                                        ; (list (bp:node (builder :chunk :content "{")))
                                         ; (bp:node-relation builder :argument node)
-                                        ; (list (bp:node (builder :word :content "}")))
+                                        ; (list (bp:node (builder :chunk :content "}")))
                                                                     )))))
                                      (when (or (eq debug-expansion t)
                                                (member name debug-expansion :test #'string=))
@@ -243,6 +243,7 @@
                        include-depth
                        which
                        editor reviewer
+                       anchor
                   &allow-other-keys)
                (unwind-protect
                     (progn
@@ -281,7 +282,7 @@
                         (:argument
                          (span "error" (lambda () (cxml:text (format nil "unresolved macro argument ~S" node)))))
                         ;; Typographic Markup
-                        (:word
+                        (:chunk
                          (cond ((not *math?*)
                                 (cxml:text content))
                                ((equal content "{")
@@ -297,20 +298,7 @@
                         (:hrule
                          (cxml:with-element "hr" (cxml:text " "))) ; HACK
 
-                        ((:list-item :enumeration-item)
-                         (cxml:with-element "li"
-                           (funcall recurse :relations '(:body))))
-                        (:item-list
-                         (cxml:with-element "ul" (funcall recurse)))
-                        (:enumeration-list
-                         (cxml:with-element "ol" (funcall recurse)))
-                        (:definition-item
-                         (cxml:with-element "dt"
-                           (funcall recurse :relations '(:key)))
-                         (cxml:with-element "dd"
-                           (funcall recurse :relations '(:body))))
-                        (:definition-list
-                         (cxml:with-element "dl" (funcall recurse)))
+
                         ;; Semantic Markup
                         (:term
                          (let* ((name (node-name node))
@@ -411,7 +399,8 @@
                                  (cxml:text "(")
                                  (span "name" (a:curry recurse :relations '((:name . 1))))
                                  (cxml:unescaped "&nbsp;")
-                                 (let* ((class (bp:node-relation builder '(:specializer . 1) node))
+                                 (funcall recurse :relations '((:spealizer . 1)) )
+                                 #+no (let* ((class (bp:node-relation builder '(:specializer . 1) node))
                                         (name  (dpans-conversion.transform::evaluate-to-string builder class)) ; TODO  repeated in TYPEREF
                                         (url   (format nil "#type-~A" name)))
                                    (unless name (break "~A" node))
@@ -527,6 +516,7 @@
                            (flet ((do-it ()
                                     (cxml:with-element "dl" ; TODO one dl for all parts?
                                       (cxml:with-element "dt"
+                                        (class-attribute "label")
                                         (funcall recurse :relations '((:name . 1))))
                                       (cxml:with-element "dd"
                                         (funcall recurse :relations '((:element . *)))))))
@@ -563,7 +553,13 @@
                            (br)))
                         ((:dash
                           :issue-annotation :editor-note :reviewer-note
-                          :file :title :sub-title :chapter :section)
+                          :file :title :sub-title :chapter :section
+                          :collection :output-file :issue
+                          :reference
+                          :item-list :list-item
+                          :enumeration-list :enumeration-item
+                          :definition-list :definition-item
+                          :table)
                          (apply #'transform:transform-node transform recurse relation relation-args node kind relations initargs))
                         #+no (:issue-annotation
                          (div "issue-annotation"
@@ -608,6 +604,7 @@
                          (span "error" (lambda ()
                                          (cxml:text "&"))))
                         ((:displaytwo :displaythree :displayfour :displayfive)
+                         (break "should not happen")
                          (cxml:with-element "table"
                            #+no (let* ((id-node (find-child-of-kind builder :define-figure node))
                                        (id      (when id-node
@@ -618,7 +615,8 @@
                            ;; TODO caption and header
                            (funcall recurse :relations '(:row)
                                             :function  (a:curry #'visit :code))))
-                        ((:showtwo :showthree :table)
+                        ((:showtwo :showthree)
+                         (break "should not happen")
                          (cxml:with-element "table"
                            #+no (let* ((id-node (find-child-of-kind builder :define-figure node))
                                        (id      (when id-node
@@ -670,7 +668,7 @@
                            (format t "~V@TProcessing glossary entry ~A~%"
                                    (* 2 (length file-stack)) term)
                            (unless (equal term "case")
-                             (div* "glossary-entry" (format nil "term-~A" term)
+                             (div* "glossary-entry" anchor
                                    (lambda ()
                                      (span "term" (a:curry recurse :relations '((:name . 1))))
                                      (funcall recurse :relations '(:body)))))))

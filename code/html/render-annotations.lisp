@@ -1,18 +1,9 @@
 (cl:in-package #:dpans-conversion.html)
 
-(define-render (:issue-annotation name)
+(define-render (:issue-annotation target)
   (div "issue-annotation"
        (lambda ()
-         (span "issue-reference"
-               (lambda ()
-                 (let* ((index  (position #\: name))
-                        (issue  (if index
-                                    (subseq name 0 index)
-                                    name))
-                        (target (format nil "issues/~(~A~).html" issue)))
-                   (a target (lambda ()
-                               (cxml:text "Issue: ")
-                               (cxml:text name))))))
+         (issue-link transform node target :explicit? t)
          (funcall recurse :relations '(:element)))))
 
 (define-render (:editor-note editor content)

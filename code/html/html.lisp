@@ -16,6 +16,7 @@
                                 &key title use-mathjax use-sidebar)
   (multiple-value-bind (filename relative)
       (filename-and-relative-path filename output-directory)
+    (ensure-directories-exist filename)
     (a:with-output-to-file (stream filename
                                    :element-type '(unsigned-byte 8)
                                    :if-exists    :supersede)
@@ -25,6 +26,8 @@
         (cxml:with-element "html"
           (cxml:attribute "xmlns" "http://www.w3.org/1999/xhtml")
           (cxml:with-element "head"
+            (cxml:with-element "meta"
+              (cxml:attribute "charset" "utf-8"))
             (cxml:with-element "link"
               (cxml:attribute "rel" "stylesheet")
               (cxml:attribute "type" "text/css")
@@ -48,7 +51,9 @@
                 (cxml:text title))))
           (cxml:with-element "body"
             (cxml:with-element "main"
-              (funcall continuation stream))))))))
+              (funcall continuation stream))
+            (cxml:with-elemnt "footer"
+              (cxml:text "Copyright © 2021 Jan Moringen"))))))))
 
 (defmacro with-html-document ((stream-var filename output-directory
                                &rest args &key title use-mathjax use-sidebar)
@@ -60,9 +65,15 @@
 
 ;;; Element shortcuts
 
+(defun class-attribute (class-or-classes)
+  (typecase class-or-classes
+    (null)
+    (cons (cxml:attribute "class" (format nil "~{~A~^ ~}" class-or-classes)))
+    (string (cxml:attribute "class" class-or-classes))))
+
 (defun h* (level class name)
   (cxml:with-element (coerce (format nil "h~D" level) '(and string (not base-string)))
-    (when class (cxml:attribute "class" class))
+    (class-attribute class)
     (cxml:text name)))
 
 (defun h (level name)
@@ -73,23 +84,23 @@
 
 (defun span (class continuation)
   (cxml:with-element "span"
-    (cxml:attribute "class" class)
+    (class-attribute class)
     (funcall continuation)))
 
 (defun span* (class id continuation)
   (cxml:with-element "span"
-    (cxml:attribute "class" class)
+    (class-attribute class)
     (cxml:attribute "id" id)
     (funcall continuation)))
 
 (defun div (class continuation)
   (cxml:with-element "div"
-    (cxml:attribute "class" class)
+    (class-attribute class)
     (funcall continuation)))
 
 (defun div* (class id continuation)
   (cxml:with-element "div"
-    (cxml:attribute "class" class)
+    (class-attribute class)
     (cxml:attribute "id" id)
     (funcall continuation)))
 
@@ -100,6 +111,6 @@
 
 (defun a* (url class continuation)
   (cxml:with-element "a"
+    (class-attribute class)
     (cxml:attribute "href" url)
-    (cxml:attribute "class" class)
     (funcall continuation)))

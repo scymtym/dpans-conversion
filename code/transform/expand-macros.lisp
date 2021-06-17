@@ -15,7 +15,7 @@
    (%debug-expansion   :initarg  :debug-expansion
                        :type     (or (eql t) list)
                        :reader   debug-expansion
-                       :initform ())))
+                       :initform '("seesection" "seefigure"))))
 
 (defmethod initialize-instance :after ((instance expand-macros) &key)
   (dpans-conversion.parser::register-builtin-macros (environment instance)))
@@ -193,7 +193,7 @@
               (expansion (expand builder environment macro arguments))
               (debug     (debug-expansion transform)))
          (when (or (eq debug t)
-                   (member name debug :test #'equal))
+                   (member name debug :test #'string-equal))
            (let ((stream *standard-output*))
              (format stream "~V@T" (* 2 (depth transform)))
              (pprint-logical-block (stream (list node) :per-line-prefix "| ")

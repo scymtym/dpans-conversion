@@ -13,7 +13,7 @@
 
       (register-namespace :value     'env::equal-namespace)
 
-      (register-namespace :section          'env::equal-namespace)
+      (register-namespace :section          'env::equal-namespace) ; TODO separate meta-environment for reference building
 
       (register-namespace :symbol           'env::equal-namespace)
       (register-namespace :type             'env::equal-namespace)
@@ -25,5 +25,16 @@
       (register-namespace :declaration      'env::equal-namespace)
       (register-namespace :restart          'env::equal-namespace)
 
-      (register-namespace :glossary         'env::equal-namespace))
+      (register-namespace :glossary         'env::equal-namespace)
+
+      (register-namespace :issue            'env::equal-namespace))
     environment))
+
+(defun namespaces (environment)
+  (let ((result '()))
+    (env:map-entries (lambda (key value container)
+                       (declare (ignore value container))
+                       (unless (member key '(:traversal env:namespace))
+                         (push key result)))
+                     'env:namespace environment)
+    result))
