@@ -23,7 +23,7 @@
 (defun node-name (node)
   (let* ((builder 'list)
          (name    (bp:node-relation builder '(:name . 1) node)))
-    (evaluate-to-string builder name)))
+    (to-string builder name)))
 
 (defun namespace<-ftype (ftype)
   (a:eswitch (ftype :test #'string=)
