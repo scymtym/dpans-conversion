@@ -1,10 +1,18 @@
 (cl:in-package #:dpans-conversion.html)
 
 (define-render (:issue-annotation target)
-  (div "issue-annotation"
-       (lambda ()
-         (issue-link transform node target :explicit? t)
-         (funcall recurse :relations '(:element)))))
+  (let ((builder (transform:builder transform)))
+    (labels ((in-line? (node)
+               (case (bp:node-kind builder node)
+                 (:chunk     t)
+                 (:reference t)
+                 (t          nil)))
+             (content ()
+               (issue-link transform node target :explicit? t)
+               (funcall recurse :relations '((:element . *)))))
+      (if (every #'in-line? (bp:node-relation builder '(:element . *) node))
+          (span "issue-annotation" #'content)
+          (div "issue-annotation" #'content)))))
 
 (define-render (:editor-note editor content)
   (tooltip "editor-note" "editor-note-tooltip"
