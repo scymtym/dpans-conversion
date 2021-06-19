@@ -5,5 +5,5 @@
 
 (defmethod transform-node ((transform strip-comments) recurse
                            relation relation-args node (kind (eql :comment)) relations
-                           &rest initargs)
+                           &key)
   nil)

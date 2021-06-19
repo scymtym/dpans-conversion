@@ -33,14 +33,14 @@
     (register "bye" 0)
 
     ;; Registers
-    (register "advance" 1)
 
                                         ; (register "newskip" 1)
 
     (register "dimen" 1) ; TODO wrong; should use assignment
     (register "maxdimen" 0)
 
-    (register "hsize" 1) (register "vsize" 1)
+    (register "hsize" :variable)
+    (register "vsize" 1)
     (register "wd" :variable)
     (register "pagetotal" :variable)
     (register "lastbox" :variable)
@@ -51,7 +51,7 @@
     (register "rightskip" :variable)
     (register "topskip" 1)
     (register "tabskip" :variable) (register "parskip" '((:variable))) (register "parfillskip" :variable)
-    (register "hskip" '((:variable))) (register "vskip" 1) (register "baselineskip" 1)
+    (register "hskip" '((:variable))) (register "vskip" 1) (register "baselineskip" :variable)
     (register "offinterlineskip" 0) (register "nointerlineskip" 0)
     (register "hss" 0) (register "vss" 0)
     (register "negthinspace" 0) (register "thinspace" 0) (register "quad" 0) (register "qquad" 0)

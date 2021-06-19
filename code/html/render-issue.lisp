@@ -23,7 +23,7 @@
                 (a* url class #'format-issue))
               (span (list class "error") #'format-issue)))))))
 
-(define-render (:issue-reference (target nil))
+(define-render (:issue-reference (target nil)) ; TODO should be a :reference
   (case relation
     ((:related-issue :required-issue)
      (cxml:with-element "li"          ; TODO should not assume list

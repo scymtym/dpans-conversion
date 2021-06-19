@@ -53,8 +53,9 @@
                              (:file       "mixins")
 
                              (:file       "strip-comments")
-                             (:file       "strip-tex-commands")
+                             (:file       "drop")
                              (:file       "expand-macros")
+                             (:file       "lower-display-tables")
                              (:file       "add-dictionary-sections")
                              (:file       "split-into-files")
                              (:file       "note-output-file")
@@ -68,10 +69,14 @@
                              ;; Utilities
                              (:file       "environment")
                              (:file       "html")
+                             (:file       "mixins")
                              ;;
                              (:file       "transform")
                              (:file       "render-structure")
                              (:file       "render-typography")
+                             (:file       "render-markup") ; TODO merge with tables
+                             (:file       "render-tables")
+                             (:file       "render-references")
                              (:file       "render-annotations")
                              (:file       "render-issue")
                              (:file       "navigation")

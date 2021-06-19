@@ -68,7 +68,7 @@
   (let ((name (if (stringp name) ; TODO
                   (string-downcase name)
                   name)))
-    (format t "Recording ~24A ~A~%" namespace name)
+    ;; (format t "Recording ~24A ~A~%" namespace name)
     (let ((environment (environment transform)))
       (a:when-let ((existing (env:lookup name namespace environment :if-does-not-exist nil)))
         #+no (let ((stream *standard-output*))
@@ -115,17 +115,26 @@
 
 (defmethod record-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :section)) relations
-                        &rest initargs &key name &allow-other-keys)
+                        &rest initargs &key name label &allow-other-keys)
   (let ((builder (builder transform)))
-    (if name                      ; issue sections have a name initarg
-        (record-and-reconstitute
-         transform recurse kind relations initargs name :section)
-        (let* ((id-node (find-child-of-kind builder :define-section node))
-               (id      (if id-node
-                            (node-name id-node)
-                            (remove #\Space (node-name node)))))
-          (record-and-reconstitute
-           transform recurse kind relations initargs id :section)))))
+    (cond (label ; \beginSection with \defineSection produces a label
+           (record-and-reconstitute
+            transform recurse kind relations initargs label :section))
+          (name                   ; issue sections have a name initarg
+           (record-and-reconstitute
+            transform recurse kind relations initargs name :section))
+          (t
+           (let ((id (remove #\Space (node-name node)))) ; TODO should not be needed
+             (record-and-reconstitute
+              transform recurse kind relations initargs id :section))))))
+
+(defmethod record-node ((transform build-references) recurse
+                        relation relation-args node (kind (eql :table)) relations
+                        &rest initargs &key label &allow-other-keys)
+  (if label
+      (record-and-reconstitute
+       transform recurse kind relations initargs label :figure)
+      (call-next-method)))
 
 (defmethod record-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :component)) relations
@@ -142,7 +151,9 @@
                                                   name)))
                                      (record-and-reconstitute
                                       transform
-                                      (lambda (&rest args) (break "should not happen"))
+                                      (lambda (&rest args)
+                                        (declare (ignore args))
+                                        (break "should not happen"))
                                       (bp:node-kind builder name-node)
                                       '()
                                       (bp:node-initargs builder name-node)
@@ -243,6 +254,11 @@
     (link node (node-name node) :section transform))
 
   (defmethod link-node ((transform build-references) recurse
+                        relation relation-args node (kind (eql :figref)) relations
+                        &key)
+    (link node (node-name node) :figure transform))
+
+  (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :typeref)) relations
                         &key)
     (link node (node-name node) :type transform))
@@ -311,22 +327,34 @@
 
   (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :possible-reference)) relations
-                        &rest initargs &key name)
+                        &rest initargs &key name namespace must-resolve?)
     (let* ((environment (environment transform))
            (builder     (builder transform))
            (name        (normalize name))
+           (namespaces  (if namespace
+                            (a:ensure-list namespace)
+                            (append (set-difference (namespaces environment) '(:issue :glossary))
+                                    '(:issue :glossary))) )
            (match       (some (lambda (namespace)
                                 (a:when-let ((target (env:lookup name namespace environment
                                                                  :if-does-not-exist nil)))
                                   (cons namespace target)))
-                              (append (set-difference (namespaces environment) '(:issue :glossary))
-                                      '(:issue :glossary)))))
-      (if match
-          (destructuring-bind (namespace .  target) match
-            (let ()
-              (apply #'bp:make+finish-node builder :reference
-                     :namespace namespace
-                     :name      name
-                     :target    target
-                     (a:remove-from-plist initargs :name))))
-          (bp:node (builder :chunk :content name))))))
+                              namespaces)))
+      (cond (match
+             (destructuring-bind (namespace . target) match
+               (apply #'bp:make+finish-node builder :reference
+                      :namespace namespace
+                      :name      name
+                      :target    target
+                      (a:remove-from-plist initargs :name))))
+            (must-resolve?
+             (let ((namespace (typecase namespace
+                                (null "?")
+                                (cons (first namespace))
+                                (t    namespace))))
+               (apply #'reconstitute builder recurse :reference relations
+                                                     :namespace namespace
+                                                     :target    nil
+                                                     initargs)))
+            (t
+             (bp:node (builder :chunk :content name)))))))

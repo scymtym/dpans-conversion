@@ -90,7 +90,7 @@
 (defun span* (class id continuation)
   (cxml:with-element "span"
     (class-attribute class)
-    (cxml:attribute "id" id)
+    (when id (cxml:attribute "id" id))
     (funcall continuation)))
 
 (defun div (class continuation)
@@ -101,7 +101,7 @@
 (defun div* (class id continuation)
   (cxml:with-element "div"
     (class-attribute class)
-    (cxml:attribute "id" id)
+    (when id (cxml:attribute "id" id))
     (funcall continuation)))
 
 (defun a (url continuation)

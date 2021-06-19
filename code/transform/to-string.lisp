@@ -14,8 +14,16 @@
 
 (defmethod transform-node ((transform to-string) recurse ; TODO define macro
                            relation relation-args node (kind t) relations
-                           &key content)
+                           &key)
   (funcall recurse))
+
+(defmethod transform-node ((transform to-string) recurse ; TODO define macro
+                           relation relation-args node (kind (eql :dash)) relations
+                           &key which)
+  (let ((string (ecase which
+                  (:em "---")
+                  (:en "--"))))
+    (write-string string (result transform))))
 
 (defmethod transform-node ((transform to-string) recurse ; TODO define macro
                            relation relation-args node (kind (eql :chunk)) relations
@@ -24,8 +32,8 @@
 
 (defmethod transform-node ((transform to-string) recurse ; TODO define macro
                            relation relation-args node (kind (eql :name)) relations
-                           &key name)
-  (write-string name (result transform)))
+                           &key content)
+  (write-string content (result transform)))
 
 (defmethod transform-node ((transform to-string) recurse ; TODO define macro
                            relation relation-args node (kind (eql :symbol)) relations

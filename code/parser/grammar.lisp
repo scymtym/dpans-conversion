@@ -6,6 +6,14 @@
 
 (in-grammar dpans)
 
+;;; Utilities
+
+(defmacro with-name-string ((name-var name-node) &body body)
+  (check-type name-var symbol)
+  `(let ((,name-var (getf (bp:node-initargs* ,name-node) :content)))
+     (check-type ,name-var string)
+     ,@body))
+
 ;;; Lexical stuff
 
 (defrule end-of-line ()
@@ -71,7 +79,7 @@
 
 (defrule name ()
     (bounds (start end) (seq "\\" (<- name (identifier))))
-  (bp:node* (:name :name name :bounds (cons start end))))
+  (bp:node* (:name :content name :bounds (cons start end))))
 
 (defrule spacing-command ()
     (seq #\\ (or #\, #\! #\: #\> #\; ; spaces
@@ -104,6 +112,7 @@
     (+ (<<- characters (or (escaped-character)
                            (and (not (or #\{ #\} #\\ #\% #\& #\$ #\~ ; #\.
                                          (seq (+ #\#) (+ (guard digit digit-char-p))) ; argument
+                                         (mdash)
                                          (paragraph-break))) ; TODO make non-result version
                                 :any))))
   (bp:node* (:chunk :content (coerce (nreverse (remove nil characters)) 'string))))
@@ -390,13 +399,11 @@
 
 (defrule figref (environment)
     (bounds (start end)
-      (seq "\\" (or #\f #\F) "igref"
-           (skippable*) (or (seq #\{ (<- name (element environment)) (skippable*) #\})
-                            (seq #\\ (<- name (identifier))))))
+      (seq/ws (seq "\\" (or #\f #\F) "igref")
+              (<- name (or (name)
+                           (element environment)))))
   (bp:node* (:figref :bounds (cons start end))
-    (1 (:name . 1) (if (stringp name)
-                       (bp:node* (:chunk :content name))
-                       name))))
+    (1 (:name . 1) name)))
 
 (defrule miscref (environment)
     (bounds (start end)
@@ -406,7 +413,9 @@
     (1 (:name . 1) name)))
 
 (defrule reference (environment)
-  (or (keyref environment)
+  (or (chapref)
+      (secref)
+      (keyref environment)
       (typeref environment)
       (declref environment)
       (specref environment)
@@ -493,7 +502,7 @@
 (define-command (head :command-name "Head" :kind :title)
   (1 :name (element environment)))
 (define-command (head1 :command-name "HeadI" :kind :sub-title)
-  (1 :name (element environment)))
+  (1* :name (element environment)))
 
 (defrule subs ()
     (seq (<- count (:transform (seq) 0))
@@ -509,6 +518,19 @@
               (seq "\\end" (<- count (subs)) (or #\s #\S) "ection")
               (:transform (seq) nil)))
   (bp:node* (:section :level  (1+ count)
+                      :bounds (cons start end))
+    (1 (:name    . 1) name)
+    (* (:element . *) (nreverse elements))))
+
+(defrule simple-section (environment)
+    (bounds (start end)
+      (seq/ws "\\beginSimpleChapter"
+              #\{ (<- name (chunk)) #\}
+              (* (<<- elements (and (not "\\endSimpleChapter")
+                                    (element environment))))
+              "\\endSimpleChapter"
+              (:transform (seq) nil)))
+  (bp:node* (:section :level  1
                       :bounds (cons start end))
     (1 (:name    . 1) name)
     (* (:element . *) (nreverse elements))))
@@ -596,7 +618,7 @@
       (seq/ws "\\chardef" (<- name (name))
               #\= (or (seq #\` (escaped-character))
                       (* (guard digit-char-p) 1 3))))
-  (let ((name (getf (bp:node-initargs* name) :name)))
+  (with-name-string (name name)
     (setf (lookup name :macro environment) 0))
   (bp:node* (:chardef :bounds (cons start end))
     (1 (:name . 1) name)))
@@ -605,7 +627,7 @@
     (bounds (start end)
       (seq/ws "\\mathchardef" (<- name (name))
               (seq #\" (* (guard (digit-char-p 16)) 4 4)))) ; TODO code
-  (let ((name (getf (bp:node-initargs* name) :name)))
+  (with-name-string (name name)
     (setf (lookup name :math environment) 0))
   (bp:node* (:mathchardef  :bounds (cons start end))
     (1 (:name . 1) name)))
@@ -675,7 +697,7 @@
 
   (let ((name (if (characterp name)
                   (string name)
-                  (getf (bp:node-initargs* name) :name))))
+                  (with-name-string (name name) name))))
     (setf (lookup name :macro environment) 0)
 
     (bp:node* (:definition :kind    :let
@@ -688,8 +710,9 @@
                                  (bp:node* (:chunk :content body))))
                            (rhs
                             (let* ((initargs (bp:node-initargs* rhs))
-                                   (name     (getf initargs :name))
+                                   (name     (getf initargs :content))
                                    (bounds   (getf initargs :bounds)))
+                              (check-type name string)
                               (bp:node* (:other-command-application :name name :bounds bounds)))))))))
 
 (defun lookup-macro (name environment error? bounds)
@@ -859,17 +882,15 @@
       (seq "\\newif"
            (skippable*) (<- name1 (name))
            (? (seq (? (whitespace/in-line+)) (<- name2 (name))))))
-  (let* ((name  (getf (bp:node-initargs* name1) :name))
-         (stem  (subseq name 2))
-         (true  (concatenate 'string stem "true"))
-         (false (concatenate 'string stem "false")))
-    (setf (lookup stem  :if    environment) t
-          (lookup true  :macro environment) 0
-          (lookup false :macro environment) 0))
-  (when name2
-    #+no (let ((name (getf (bp:node-initargs* name2) :name)))
-           (print name)
-           (setf (env:lookup name :macro environment) 0)))
+  ;; Side effect: define "if", "true" and "false" macros.
+  (with-name-string (name name1)
+    (let* ((stem  (subseq name 2))
+           (true  (concatenate 'string stem "true"))
+           (false (concatenate 'string stem "false")))
+      (setf (lookup stem  :if    environment) t
+            (lookup true  :macro environment) 0
+            (lookup false :macro environment) 0)))
+  ;; Result
   (bp:node* (:newif :bounds (cons start end))
     (1    (:name  . 1) name1)
     (bp:? (:name2 . 1) name2)))
@@ -995,10 +1016,26 @@
 (defrule newskip/dimen (environment)
     (bounds (start end)
       (seq/ws (seq "\\new" (or "skip" "dimen")) (<- name (name))))
-  (let ((name (getf (bp:node-initargs* name) :name)))
+  ;; Side effect: define variable
+  (with-name-string (name name)
     (setf (lookup name :variable environment) t))
+  ;; Result
   (bp:node* (:newskip :bounds (cons start end))
     (1 (:name . 1) name)))
+
+(when nil
+  (let ((env (make-instance 'env:lexical-environment :parent **meta-environment**)))
+    (setf (env:lookup :global? :traversal env) t)
+    (register-builtin-macros env)
+    (setf (env:lookup "smallab" :variable env) t)
+    (setf (env:lookup "prbseven" :macro env) 0)
+    (setf (env:lookup "prbtwelve" :macro env) 0)
+    (setf (env:lookup "ignorepar" :macro env) 0)
+    (bp:with-builder ('list)
+      (parser.packrat:parse
+       `(document "foo" 0 ,env)
+       "\\newdimen \\changedepth
+\\changedepth=0.15\\baselineskip"))))
 
 #+no (defrule skip (environment) ; TODO why treat this specially?
     (seq/ws "\\parskip" (<- name (name)))
@@ -1008,9 +1045,11 @@
     (seq #\\ (or (seq/ws "countdef" (<- name (name))
                          #\= (+ (<<- number (guard digit-char-p))))
                  (seq/ws "newcount" (<- name (name)))))
-
-  (let ((name (getf (bp:node-initargs* name) :name)))
+  ;; Side effect: define variable
+  (let ((name (getf (bp:node-initargs* name) :content)))
+    (check-type name string)
     (setf (lookup name :variable environment) t))  ; TODO to consume = token and value token
+  ;; Variable
   (bp:node* (:counter-definition)
     (1    (:name . 1)   name)
     (bp:? (:number . 1) number)))
@@ -1035,7 +1074,8 @@
 (defrule new (environment)
     (bounds (start end)
       (seq/ws (seq "\\new" (or "toks" "box" "write" "insert")) (<- name (name))))
-  (let ((name (getf (bp:node-initargs* name) :name)))
+  ;; Side effect: define variable and macro
+  (with-name-string (name name)
     (setf (lookup name :variable environment) t)
     (setf (lookup name :macro environment) 0))
   (bp:node* (:new :bounds (cons start end))
@@ -1050,11 +1090,36 @@
 
 (defrule advance (environment)
     (bounds (start end)
-      (seq/ws "\\advance" (<- name (defined-variable environment))
-              (? "by") (<- amount (chunk))))
+      (seq/ws "\\advance" (<- name (or (register-reference environment)
+                                       (defined-variable environment)))
+              (? "by") (<- amount (or (numeric-expression environment)
+                                      (chunk))))) ; TODO numeric-expression
   (bp:node* (:advance :bounds (cons start end))
     (1 (:variable . 1) name)
     (1 (:amount   . 1) amount)))
+
+(when nil
+  (let ((env (make-instance 'env:lexical-environment :parent **meta-environment**)))
+    (register-builtin-macros env)
+    (setf (env:lookup "iskip" :variable env) t
+          (env:lookup "iiiskip" :variable env) t)
+    (bp:with-builder ('list)
+      (parser.packrat:parse
+       `(document "foo" 0 ,env)
+       "\\iiiskip=\\leftskip	\\advance\\iiiskip 1.5pc\\iskip  =\\iiiskip
+\\advance\\hsize by -\\leftskip
+\\advance\\hsize by -2\\leftskip
+\\advance\\hsize -2pt
+\\advance\\dimen1 by -\\ht0"))))
+
+(when nil
+  (let ((env (make-instance 'env:lexical-environment :parent **meta-environment**)))
+    (setf (env:lookup "iiiskip" :variable env) t
+          (env:lookup "leftskip" :variable env) t)
+    (bp:with-builder ('list)
+      (parser.packrat:parse
+       `(user-assignment ,env)
+       "\\iiiskip=\\leftskip"))))
 
 (when nil
  (let ((env (make-instance 'env:lexical-environment :parent **meta-environment**)))
@@ -1075,7 +1140,7 @@
 
 (defrule defined-variable (environment)
     (<- name (name))
-  (let ((name (getf (bp:node-initargs* name) :name)))
+  (with-name-string (name name)
     (unless (env:lookup name :variable environment
                              :if-does-not-exist nil)
       (:fail)))
@@ -1084,9 +1149,10 @@
 (defrule user-assignment (environment)
     (seq/ws (? (<- global? (:transform "\\global" t)))
             (<- variable (defined-variable environment))
-            (or (seq/ws #\= (<- value (element environment)))
+            (or (seq/ws #\= (<- value (or (numeric-expression environment)
+                                          (element environment))))
                 (<- value (or (numeric-expression environment)
-                              (defined-variable environment)
+                              ; (defined-variable environment)
                               (user-macro-application environment)
                               (hbox environment)
                               (chunk)))))
@@ -1101,12 +1167,22 @@
     (1 (:name . 1) name)))
 
 (defrule %numeric-expression (environment)
-  (or (seq/ws #\- (%numeric-expression environment))
+  (or (:transform (seq #\- (<- factor (%numeric-expression environment)))
+        (bp:node* (:multiplication :factor -1)
+          (1 :factor factor)))
+      (:transform
+          (seq (or (seq #\. (+ (<<- digits (guard digit-char-p))))
+                   (seq (+ (<<- digits (guard digit-char-p)))
+                        (? (seq #\. (+ (<<- digits (guard digit-char-p)))))))
+               (<- factor (%numeric-expression environment)))
+        (bp:node* (:multiplication :factor (nreverse digits))
+          (1 :factor factor)))
       (defined-variable environment)
       (register-reference environment)))
 
 (defrule numeric-expression (environment)
   (or (seq/ws (%numeric-expression environment) "plus" (numeric-expression environment))
+      ; (seq/ws (%numeric-expression environment) "minus" (numeric-expression environment))
       (%numeric-expression environment)))
 
 (defrule register-number (environment)
@@ -1120,7 +1196,7 @@
   (seq/ws (seq "\\" (or "count" "skip")) (<- name (name)) #\= (<- value (chunk))))
 
 (defrule register-reference (environment)
-  (seq/ws (seq "\\" (or "ht" "dp" "box")) (register-number environment)))
+  (seq/ws (seq "\\" (or "ht" "dp" "box" "dimen")) (register-number environment)))
 
 (defrule register-copy (environment)
   (seq/ws "\\copy" (register-reference* environment)))
@@ -1271,10 +1347,11 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
       (seq/ws (or "\\font" "\\Font") (<- name (name)) ; TODO capitalized is temp
               #\= (* (<<- file (guard alphanumericp)))
               (? (seq/ws "\\sc" (<- name2 (name))))))
-  (let ((name (getf (bp:node-initargs* name) :name))
-        (file (coerce (nreverse file) 'string)))
-    (setf (lookup name :macro environment) 0))
-
+  ;; Side effect: define macro
+  (with-name-string (name name)
+    (let ((file (coerce (nreverse file) 'string)))
+      (setf (lookup name :macro environment) 0)))
+  ;; Result
   (bp:node* (:font :bounds (cons start end))
     (1 (:name . 1) name)))
 
@@ -1346,6 +1423,7 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
       (head1 environment)
       (chapter environment)
       (section environment)
+      (simple-section environment)
       (define-section)
       (define-figure)
 
@@ -1367,11 +1445,6 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
       (newterm environment)
       (newtermidx environment)
       (ftype environment)
-
-      ; (seesec)
-      ; (seefig)
-      (secref)
-      (chapref)
 
       (reference environment)
 

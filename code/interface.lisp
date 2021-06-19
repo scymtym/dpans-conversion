@@ -90,6 +90,7 @@
                                                                     (a:conjoin (transform::kind? :input)
                                                                                (transform::initarg? :name "setup-for-toc"))
                                                                     (transform::kind? :definition)
+                                                                    (transform::kind? :comment)
                                                                     (a:conjoin (transform::kind? :other-command-application)
                                                                                (transform::initarg? :name (transform::one-of?
                                                                                                            "penalty"
@@ -97,36 +98,32 @@
                                                                                                            "hfil"
                                                                                                            "vfil" "vfill" "vskip"
                                                                                                            "break" "eject" "parskip"
-                                                                                                           "obeylines"
-                                                                                                           "quad" "goodbreak")))))
+                                                                                                           "obeylines" "relax"
+                                                                                                           "quad" "goodbreak"
+                                                                                                           "noindent" "ignorespaces")))))
                         (make-instance 'transform::lower-display-tables :builder builder)
+                        (make-instance 'transform::attach-labels :builder builder)
                         (make-instance 'transform::add-dictionary-sections :builder builder)
                         (make-instance 'transform::split-into-files :builder builder)
+                        (make-instance 'transform::issue-index :builder builder)
                         (make-instance 'transform::note-output-file :builder builder)
                         (make-instance 'transform::build-references :builder builder)
                                         ; (make-instance 'dpans-conversion.transform::verify)
                         )
                        tree))
          ;; Render
-         (result      (let ((transform (make-instance 'dpans-conversion.html::transform :environment      environment
-                                                                                        :builder          builder
-                                                                                        :output-directory output-directory
-                                                                                        :use-sidebar?     use-sidebar))
-                            (specification (bp:node-relation builder '(:specification . 1) transformed)))
-                        (let* (#+no (filename (getf (bp:node-initargs 'list specification) :filename))
-                               #+no (name     (pathname-name filename))
-                               #+no (output   (merge-pathnames (make-pathname :name name
-                                                                         :type "html")
-                                                          output-directory)))
-                          ; (format t "Generating ~A~%" name)
-                          ; (ensure-directories-exist output)
-                          (dpans-conversion.html::render-to-file
-                           transformed :output environment
-                           :use-sidebar      use-sidebar
-                           :use-mathjax      use-mathjax
+         (result      (let ((transform (make-instance 'dpans-conversion.html::transform
+                                                      :environment      environment
+                                                      :builder          builder
+                                                      :output-directory output-directory
+                                                      :use-sidebar?     use-sidebar)))
+                        (dpans-conversion.html::render-to-file
+                         transformed :output environment
+                         :use-sidebar      use-sidebar
+                         :use-mathjax      use-mathjax
 
-                           :transform        transform
-                           :output-directory output-directory))
+                         :transform        transform
+                         :output-directory output-directory)
 
                         (transform:apply-transform transform transformed))))
 

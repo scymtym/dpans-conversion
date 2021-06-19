@@ -1,46 +1,6 @@
 (cl:in-package #:dpans-conversion.html)
 
-;;; `output-directory-mixin'
-
-(defclass output-directory-mixin ()
-  ((%output-directory :type     (and directory
-                                     (satisfies uiop:directory-pathname-p))
-                      :reader   output-directory
-                      :writer   (setf %output-directory)))
-  (:default-initargs
-   :output-directory (a:required-argument :output-directory)))
-
-(defmethod shared-initialize :after
-    ((instance   output-directory-mixin)
-     (slot-names t)
-     &key (output-directory nil output-directory-supplied?))
-  (when output-directory-supplied?
-    (setf (%output-directory instance)
-          (uiop:ensure-directory-pathname output-directory))))
-
-(defmethod prepare-transform ((transform output-directory-mixin))
-  (when (next-method-p) (call-next-method)) ; TODO progn method combination?
-  (ensure-directories-exist (output-directory transform)))
-
-;;; `static-files-mixin'
-
-(defclass static-files-mixin ()
-  ((%static-files :reader static-files)))
-
-(defmethod prepare-transform ((transform static-files-mixin))
-  (when (next-method-p) (call-next-method))
-  (let ((output-directory (output-directory transform)))
-    (map nil (lambda (entry)
-               (destructuring-bind (filename . content) entry
-                 (let ((content (typecase content
-                                  (string   content)
-                                  (pathname (a:read-file-into-string content))))
-                       (filename (merge-pathnames filename output-directory)))
-                   (a:write-string-into-file content filename
-                                             :if-exists :supersede))))
-         (static-files transform))))
-
-;;;
+;;; `navigation-sidebar'
 
 (defclass navigation-sidebar (transform:builder-mixin
                               output-directory-mixin
@@ -51,70 +11,83 @@
                                   (cons #1=#P"navigation.js"
                                         (merge-pathnames
                                          #1# #.(or *compile-file-pathname*
-                                                   *load-pathname*)))))))
+                                                   *load-pathname*)))))
+   ;; State
+   (%index-files  :accessor index-files
+                  :initform nil)
+   (%current-file :accessor current-file)))
 
 (defmethod transform:transform-node ((transform navigation-sidebar)
                                      recurse relation relation-args node kind relations &key)
-  (funcall recurse)
-  #+no (if (eq kind :issue)
-           (cxml:with-element "nav"
-             (cxml:attribute "class" "sidebar")
-             (cxml:text " ")
-             (cxml:with-element "ol"
-               (funcall recurse)))
-           (funcall recurse)))
+  (funcall recurse))
+
+(defmethod transform:transform-node ((transform navigation-sidebar)
+                                     recurse relation relation-args node (kind (eql :collection)) relations
+                                     &key)
+  (let* ((builder (transform:builder transform))
+         (files   (bp:node-relation builder '(:element . *) node)))
+    (setf (index-files transform)
+          (remove-if-not (lambda (file)
+                           (member (getf (bp:node-initargs builder file) :output-file)
+                                   '("chap-0" "issue-index")
+                                   :test #'equalp))
+                         files))
+    (break "~A" (index-files transform) files)))
 
 (defmethod transform:transform-node ((transform navigation-sidebar)
                                      recurse relation relation-args node (kind (eql :output-file)) relations
                                      &key)
+  (setf (current-file transform) node)
+
   (cxml:with-element "nav"
     (cxml:attribute "class" "sidebar")
-    (cxml:text " ")
+    (let ((builder (transform:builder transform)))
+      (cxml:with-element "ol"
+        (map nil (lambda (file)
+                   (cxml:with-element "li"
+                     (let* ((section (transform::find-ancestor-of-kind builder :section file))
+                            (url     (node-url transform node section))
+                            (name    (node-name section)))
+                       (a url (lambda () (cxml:text name))))))
+             (index-files transform))))
+    (cxml:with-element "hr")
     (cxml:with-element "ol"
+      (class-attribute "local-toc")
       (funcall recurse))))
 
 (defmethod transform:transform-node ((transform navigation-sidebar)
-                                     recurse relation relation-args node (kind (eql :file)) relations
-                                     &key include-depth)
-  (funcall recurse)
-  #+no (if (= include-depth 0)
-           (cxml:with-element "nav"
-             (cxml:attribute "class" "sidebar")
-             (cxml:text " ")
-             (funcall recurse))
-           (funcall recurse)))
-
-(defmethod transform:transform-node ((transform navigation-sidebar)
-                                     recurse relation relation-args node (kind (eql :chapter)) relations &key)
-  (funcall recurse)
-  #+no (cxml:with-element "nav"
-    (cxml:attribute "class" "sidebar")
-    (cxml:with-element "h2"
-      (cxml:text "This chapter"))
+                                     recurse relation relation-args node (kind (eql :section)) relations
+                                     &key)
+  (cxml:with-element "li"
+    (let* ((builder (transform:builder transform))
+           (name    (if (bp:node-relation builder '(:name . 1) node)
+                        (transform::evaluate-to-string
+                         builder (bp:node-relation builder '(:name . 1) node))
+                        (getf (bp:node-initargs builder node) :name)))
+           (url     (node-url transform (current-file transform) node)))
+      (a url (lambda () (cxml:text name))))
     (cxml:with-element "ol"             ; TODO avoid if empty
       (cxml:text " ")
-      (funcall recurse))))
+      (funcall recurse)))
 
-(defmethod transform:transform-node ((transform navigation-sidebar)
-                                     recurse relation relation-args node (kind (eql :section)) relations &key)
-  (flet ((emit (target name)
-           (cxml:with-element "li"
-             (a target (lambda () (cxml:text name)))
-             (cxml:with-element "ol" ; TODO avoid if empty
-               (cxml:text " ")
-               (funcall recurse)))))
+  #+no (flet ((emit (target name)
+                (cxml:with-element "li"
+                  (a target (lambda () (cxml:text name)))
+                  (cxml:with-element "ol" ; TODO avoid if empty
+                    (cxml:text " ")
+                    (funcall recurse)))))
 
-    (let ((builder (transform:builder transform)))
-      (if (bp:node-relation builder '(:name . 1) node)
-          (let* ((id-node (find-child-of-kind builder :define-section node))
-                 (id      (if id-node
-                              (node-name id-node)
-                              (remove-if (a:rcurry #'member '(#\Space #\Newline))
-                                         (node-name node))))
-                 (target  (format nil "#section-~A" id))
-                 (name    (transform::evaluate-to-string
-                           builder (bp:node-relation builder '(:name . 1) node))))
-            (emit target name))
-          (let* ((name    (getf (bp:node-initargs builder node) :name)) ; TODO different format. this is what issues use
-                 (target  (format nil "#section-~A" name)))
-            (emit target name))))))
+         (let ((builder (transform:builder transform)))
+           (if (bp:node-relation builder '(:name . 1) node)
+               (let* ((id-node (find-child-of-kind builder :define-section node))
+                      (id      (if id-node
+                                   (node-name id-node)
+                                   (remove-if (a:rcurry #'member '(#\Space #\Newline))
+                                              (node-name node))))
+                      (target  (format nil "#section-~A" id))
+                      (name    (transform::evaluate-to-string
+                                builder (bp:node-relation builder '(:name . 1) node))))
+                 (emit target name))
+               (let* ((name    (getf (bp:node-initargs builder node) :name)) ; TODO different format. this is what issues use
+                      (target  (format nil "#section-~A" name)))
+                 (emit target name))))))

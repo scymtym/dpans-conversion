@@ -60,25 +60,29 @@ nav.sidebar ol {
     padding-left: 1em;
 }
 
-nav.sidebar li li li {
-    display: none;
-}
-
-nav.sidebar li.active {
-    display: contents;
-}
-
 nav.sidebar a {
-    color: #aaa;
     text-decoration: none;
 }
 
-nav.sidebar li.active a {
+nav.sidebar ol.local-toc li li li {
+    display: none;
+}
+
+nav.sidebar ol.local-toc li.active {
+    display: contents;
+}
+
+nav.sidebar ol.local-toc a {
+    color: #aaa;
+}
+
+nav.sidebar ol.local-toc li.active a {
     color: #444;
 }
 
-.footer {
+footer {
     text-align: center;
+    font-size: small;
 }
 
 /* Meta TODO remove when finished*/

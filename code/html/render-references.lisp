@@ -11,17 +11,23 @@
          (target-file        (getf target-initargs :output-file))
          #+no (target-to-root     (nth-value 1 (filename-and-relative-path
                                            target-file output-directory)))
-         (filename           (merge-pathnames target-file reference-to-root))
+         (filename           (unless (equal reference-file target-file)
+                               (merge-pathnames target-file reference-to-root)))
          (anchor             (getf target-initargs :anchor)))
-    (format nil "~A.html#~A" filename anchor)))
+    (format nil "~@[~A.html~]#~A" filename anchor)))
 
 (define-render (:reference name namespace target) ; TODO move to different file
   (let ((builder (transform:builder transform))
         (class   (format nil "~(~A~)-reference" namespace)))
     (if target
-        (let* ((target-initargs (bp:node-initargs builder target))
-               #+no (name            (or (getf target-initargs :name)
-                                    (node-name target)))
+        (let* ((name            (case namespace
+                                  (:section (or (let ((initargs (bp:node-initargs builder target)))
+                                                  (getf initargs :name))
+                                                (node-name target)))
+                                  (t        name)))
                (url             (node-url transform node target)))
           (a* url class (lambda () (cxml:text name))))
-        (span (list class "error") (lambda () (cxml:text name))))))
+        (span (list class "error") (lambda ()
+                                     (cxml:text (string-downcase namespace))
+                                     (cxml:text ":")
+                                     (cxml:text name))))))

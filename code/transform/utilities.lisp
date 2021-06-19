@@ -1,12 +1,34 @@
 (cl:in-package #:dpans-conversion.transform)
 
-(defun find-child-of-kind (builder kind node)
-  (let ((children (bp:node-relation builder :element node)))
-    (find-if (lambda (child)
-               (eq (bp:node-kind builder child) kind))
-             children)))
+(defun find-ancestor-of-kind (builder kind node)
+  (bp:walk-nodes
+   builder (lambda (recurse relation relation-args node kind* relations
+                    &rest initargs &key &allow-other-keys)
+             (declare (ignore relation relation-args relations initargs))
+             (when (eq kind* kind)
+               (return-from find-ancestor-of-kind node))
+             (funcall recurse))
+   node)
+  nil)
 
-(defun evaluate-to-string (builder node)
+(defun find-child-of-kind (builder kind node)
+  (map nil (lambda (relation)
+             (multiple-value-bind (relation* cardinality)
+                 (bp:normalize-relation relation)
+               (declare (ignore relation*))
+               (ecase cardinality
+                 ((1 bp:?)
+                  (let ((child (bp:node-relation builder relation node)))
+                    (when (eq (bp:node-kind builder child) kind)
+                      (return-from find-child-of-kind child))))
+                 (*
+                  (map nil (lambda (child)
+                             (when (eq (bp:node-kind builder child) kind)
+                               (return-from find-child-of-kind child)))
+                       (bp:node-relation builder relation node))))))
+       (bp:node-relations builder node)))
+
+(defun evaluate-to-string (builder node) ; TODO unused?
   (labels ((rec (node)
              (cond ((eq (bp:node-kind builder node) :symbol)             ; TODO name
                     (return-from evaluate-to-string
@@ -14,7 +36,7 @@
                         (values (getf initargs :name) (getf initargs :setf?)))))
                    ((a:when-let ((content (getf (bp:node-initargs builder node) :content)))
                       (return-from evaluate-to-string content)))
-                   ((a:when-let ((content (getf (bp:node-initargs builder node) :name)))
+                   ((a:when-let ((content (getf (bp:node-initargs builder node) :name))) ; TODO unused?
                       (return-from evaluate-to-string content)))
                    (t
                     (map nil #'rec (bp:node-relation builder :element node))))))

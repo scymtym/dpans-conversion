@@ -141,8 +141,7 @@
      relation relation-args node (kind (eql :output-file)) relations
      &key filename &allow-other-keys)
   (let* ((old-file-stack (output-file-stack transform))
-         (new-file-stack (list* filename old-file-stack))
-         (name           (pathname-name filename)))
+         (new-file-stack (list* filename old-file-stack)))
     (call-with-environment #'call-next-method transform
                            '((:current-output-file . :traversal)
                              (:output-file-stack   . :traversal))

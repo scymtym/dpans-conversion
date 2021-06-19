@@ -50,11 +50,14 @@
        (declare (ignorable initargs))
        ,@body)))
 
-(define-render (:collection)
+#+no (define-render (:collection)
+  #+no (a:when-let ((sidebar-transform (sidebar-transform transform)))
+    (transform:apply-transform sidebar-transform node))
+
   (let ((output-directory (output-directory transform)))
     ;; Render the specification
     #+not-yet (let ((filename (merge-pathnames "chap-0.html" output-directory)))
-      (with-html-document (stream filename :use-mathjax t :use-sidebar t)
-        (funcall recurse :relations '((:specification . 1)))))
+                (with-html-document (stream filename :use-mathjax t :use-sidebar t)
+                  (funcall recurse :relations '((:specification . 1)))))
     ;; Render issues
     (funcall recurse :relations '((:issue . *)))))

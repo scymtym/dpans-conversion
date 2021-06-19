@@ -20,7 +20,26 @@
     (setf (env:lookup "hat" :macro environment)
           (lambda (builder environment)
             (declare (ignore environment))
-            (list (bp:node (builder :chunk :content "^")))))))
+            (list (bp:node (builder :chunk :content "^"))))
+          (env:lookup "uppercase" :macro environment)
+          (lambda (builder environment argument)
+            (declare (ignore environment))
+            (let ((string (to-string builder argument)))
+              (list (bp:node (builder :chunk :content (string-upcase string)))))))))
+
+;; TODO parse \secref as other-command-application and define a macro diversion above?
+(defmethod transform-node ((transform expand-macros) recurse
+                           relation relation-args node (kind (eql :secref)) relations
+                           &key test)
+  (let* ((builder     (builder transform))
+         (name*       (bp:node-relation builder '(:name . 1) node))
+         (name        (case (bp:node-kind builder name*)
+                        (:other-command-application
+                         (getf (bp:node-initargs builder name*) :name))
+                        (t
+                         (to-string builder name*)))))
+    (bp:node (builder :secref)
+      (1 (:name . 1) (bp:node (builder :name :content name))))))
 
 (defmethod root-environment ((transform expand-macros))
   (labels ((root (environment)

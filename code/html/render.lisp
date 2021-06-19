@@ -15,20 +15,6 @@
                (eq (bp:node-kind builder child) kind))
              children)))
 
-(defun evaluate-to-string (builder node)
-  (labels ((rec (node)
-             (case (bp:node-kind builder node)
-               (:chunk
-                (return-from evaluate-to-string
-                  (getf (bp:node-initargs builder node) :content)))
-               (:symbol
-                (return-from evaluate-to-string
-                  (getf (bp:node-initargs builder node) :name)))
-               (t
-                (map nil #'rec (bp:node-relation builder :element node))))))
-    (rec node)))
-#+sbcl (declaim (sb-ext:deprecated :early ("dpans-conversion" "0.1") (function evaluate-to-string)))
-
 (defun tooltip (container-class tooltip-class
                 tooltip-continuation content-continuation
                 &key (element 'div))
@@ -108,6 +94,7 @@
   )
 
 (defun builtin-the (environment arguments)
+  (break "wtf")
   (assert (a:length= 1 arguments))
   (let* ((argument (first arguments))
          (name     (getf (bp:node-initargs 'list argument) :name)
@@ -309,6 +296,7 @@
                         (:newtermidx (span "newterm" (a:curry recurse :relations '((:name . 1)))))
 
                         (:secref
+                         (break "should not happen")
                          (let* ((name (node-name node))
                                 (url  (format nil "#section-~A" name)))
                            (a* url "section-reference" recurse)))
@@ -531,7 +519,7 @@
                                 (namespace (dpans-conversion.transform::namespace<-ftype ftype)))
                            (format t "~V@TGenerating component ~{~A~^, ~}~%"
                                    (* 2 (length file-stack))
-                                   (map 'list (a:curry #'evaluate-to-string builder) names))
+                                   (map 'list (a:curry #'transform::evaluate-to-string builder) names))
                            (br)
                            (div "component"
                                 (lambda ()
@@ -560,7 +548,8 @@
                           :item-list :list-item
                           :enumeration-list :enumeration-item
                           :definition-list :definition-item
-                          :table :header :row :cell)
+                          :table :header :row :cell
+                          :issue-reference)
                          (apply #'transform:transform-node transform recurse relation relation-args node kind relations initargs))
                         #+no (:issue-annotation
                          (div "issue-annotation"
@@ -595,7 +584,8 @@
                         (:non-breaking-space (cxml:unescaped "&nbsp;")) ; TODO
                         (:paragraph-break (cxml:with-element "br"))
                         ;; Tables
-                        ( :define-figure
+                        (:define-figure
+                         (break "should not happen")
                          (let* ((id      (node-name node))
                                 (anchor  (format nil "figure-~A" id)))
                            (cxml:with-element "a"

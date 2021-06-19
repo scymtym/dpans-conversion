@@ -1,6 +1,9 @@
 (cl:in-package #:dpans-conversion.html)
 
 (define-render (:collection)
+  (a:when-let ((sidebar-transform (sidebar-transform transform)))
+    (transform:apply-transform sidebar-transform node))
+
   (funcall recurse)
   #+no (if (zerop include-depth)
            (let* ((builder           (transform:builder transform))
@@ -17,7 +20,7 @@
            (with-simple-restart (continue "Skip included file ~S" filename)
              (funcall recurse))))
 
-(define-render (:output-file filename)
+(define-render (:output-file filename title)
   (let* ((builder  (transform:builder transform))
          (root     (bp:node-relation builder '(:element . 1) node))
          (kind     (bp:node-kind builder root))
@@ -28,7 +31,7 @@
                            filename))
          (sidebar-transform (sidebar-transform transform)))
     (with-html-document (stream filename (output-directory transform)
-                                :title       "TODO title"
+                                :title       title
                                 :use-mathjax t ; use-mathjax
                                 :use-sidebar (when sidebar-transform t))
       (when sidebar-transform
@@ -37,8 +40,8 @@
                        (if (eq kind :issue)
                            (funcall recurse)
                            (render-to-file root :file (transform::environment transform)
-                                           :transform        transform
-                                           :output-directory (output-directory transform))))))))
+                                                :transform        transform
+                                                :output-directory (output-directory transform))))))))
 
 (define-render (:file filename include-depth)
   (funcall recurse)
