@@ -107,6 +107,7 @@ nav.sidebar li.active a {
 
 .float .caption {
     text-align: center;
+    font-style: italic;
 }
 
 table {
