@@ -162,47 +162,6 @@
   (bp:node* (:enumeration-list :bounds (cons start end))
     (* (:element . *) (nreverse items))))
 
-(bp:with-builder ('list)
-  (parser.packrat:parse '(issue "foo") "Proposal (FOO):
-
-  Foo
-
-  1. foo
-      (defun foo ())
-     bar
-
-  2. baz
-     fez
-"))
-
-(bp:with-builder ('list)
-  (parser.packrat:parse '(issue "foo") "Problem Description:
-
-  The description of the DEFMACRO lambda list currently contains some
-  mis-statements and leaves some ambiguities:
-
-  1. Can &BODY, &WHOLE, and &ENVIRONMENT appear at recursive levels of the
-     DEFMACRO lambda list?
-
-     The description of &WHOLE (p145) specifies that &WHOLE must occur ``first
-     in the lambda list,'' but the description of a lambda list says that
-     ``a lambda may [recursively] appear in place of the parameter name.''
-     Consequently, the question arises whether &WHOLE should be permitted to
-     be a synonym for &REST at inner levels of a DEFMACRO lambda list.
-
-     The descriptions of &BODY and &ENVIRONMENT do not contain syntactic
-     restrictions on where they may appear.
-
-  2. Does using &WHOLE affect the pattern of arguments permitted by DEFMACRO.
-
-Proposal (FOO):
-
-1. foo
-   bar
-2. baz
-   fez
-"))
-
 ;;; Structure
 
 (defrule preamble ()
