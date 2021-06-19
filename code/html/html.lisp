@@ -52,7 +52,7 @@
           (cxml:with-element "body"
             (cxml:with-element "main"
               (funcall continuation stream))
-            (cxml:with-elemnt "footer"
+            (cxml:with-element "footer"
               (cxml:text "Copyright © 2021 Jan Moringen"))))))))
 
 (defmacro with-html-document ((stream-var filename output-directory
