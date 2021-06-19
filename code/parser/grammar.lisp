@@ -493,7 +493,7 @@
 (define-command (head :command-name "Head" :kind :title)
   (1 :name (element environment)))
 (define-command (head1 :command-name "HeadI" :kind :sub-title)
-  (1* :name (element environment)))
+  (1 :name (element environment)))
 
 (defrule subs ()
     (seq (<- count (:transform (seq) 0))

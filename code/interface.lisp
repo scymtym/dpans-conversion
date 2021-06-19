@@ -74,6 +74,11 @@
          ;; Transform
          (transformed (transform::apply-transforms
                        (list ;; (make-instance 'dpans-conversion.transform::strip-comments)
+                        (make-instance 'transform::drop :builder   builder
+                                                        :predicate (a:conjoin (transform::kind? :other-command-application)
+                                                                              (transform::initarg? :name (transform::one-of?
+                                                                                                          "write"
+                                                                                                          "bye"))))
                         (make-instance 'transform::expand-macros :builder           builder
                                                                  :environment       environment
                                                                  :debug-definition? t
@@ -81,8 +86,19 @@
                         ;; (make-instance 'dpans-conversion.transform::strip-tex-commands)
                                         ; (make-instance 'dpans-conversion.transform::attach-issue-references)
                         (make-instance 'transform::drop :builder   builder
-                                                        :predicate (a:conjoin (transform::kind? :input)
-                                                                              (transform::initarg? :name "setup-for-toc")))
+                                                        :predicate (a:disjoin
+                                                                    (a:conjoin (transform::kind? :input)
+                                                                               (transform::initarg? :name "setup-for-toc"))
+                                                                    (transform::kind? :definition)
+                                                                    (a:conjoin (transform::kind? :other-command-application)
+                                                                               (transform::initarg? :name (transform::one-of?
+                                                                                                           "penalty"
+                                                                                                           "noalign"
+                                                                                                           "hfil"
+                                                                                                           "vfil" "vfill" "vskip"
+                                                                                                           "break" "eject" "parskip"
+                                                                                                           "obeylines"
+                                                                                                           "quad" "goodbreak")))))
                         (make-instance 'transform::lower-display-tables :builder builder)
                         (make-instance 'transform::add-dictionary-sections :builder builder)
                         (make-instance 'transform::split-into-files :builder builder)

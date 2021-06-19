@@ -270,6 +270,7 @@
                            (pop-file)))
                         ;; Evaluation
                         (:definition
+                         (break "should not happen")
                          (let* ((kind        (getf initargs :kind))
                                 (environment (if global ; TODO make local when result of macro expansion?
                                                  (a:lastcar environment-stack)
@@ -715,11 +716,15 @@
                          (funcall recurse :relations '((:consequent . *))))
 
                         (:if-case
-                         (cxml:text "if-case not implemented"))
+                         (span "error" (lambda () (cxml:text (let ((*print-level* 2) (*print-circle* t))
+                                                               (format nil "if-case not implemented: ~S" node))))))
+                        (:other-command-application
+                         (span "error" (lambda () (cxml:text (let ((*print-level* 2) (*print-circle* t))
+                                                               (format nil "unexpanded macro: ~S" node))))))
 
                         ;; Ignored
                         ((:comment :define-section :assignment :font :chardef :mathchardef
                           :newif :newskip :new :counter-definition :setbox :global :catcode
                                    :advance :register-read))))
                  (pop stack))))
-      (bp:walk-nodes builder (bp:peeking #'peek (a:curry #'visit :top)) tree))))
+      (bp:walk-nodes builder #+no (bp:peeking #'peek (a:curry #'visit :top)) (a:curry #'visit :top) tree))))

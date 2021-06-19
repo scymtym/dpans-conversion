@@ -15,17 +15,26 @@
       nil
       (call-next-method)))
 
+(defun one-of? (&rest values)
+  (lambda (value)
+    (member value values :test #'equal)))
+
 (defun kind? (kind)
   (lambda (relation relation-args node kind* relations
            &key &allow-other-keys)
     (declare (ignore relation relation-args node relations))
-    (eq kind kind*)))
+    (if (functionp kind)
+        (funcall kind kind*)
+        (eq kind kind*))))
 
 (defun initarg? (initarg value)
   (lambda (relation relation-args node kind relations
            &rest initargs &key &allow-other-keys)
     (declare (ignore relation relation-args kind node relations))
-    (equalp value (getf initargs initarg))))
+    (let ((value* (getf initargs initarg)))
+      (if (functionp value)
+          (funcall value value*)
+          (equalp value value*)))))
 
 (defun relation? (relation)
   (flet ((relation-matches? (relation* relation-args node kind relations

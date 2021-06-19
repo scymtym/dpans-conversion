@@ -5,20 +5,22 @@
                          default-reconstitute-mixin
                          environment-mixin
                          file-tracking-mixin)
-  ((%drop              :type     list ; of string
-                       :reader   drop
-                       :initform '("write" "bye"))
-   ;;
+  (;;
    (%debug-definition? :initarg  :debug-definition?
                        :reader   debug-definition?
                        :initform nil)
    (%debug-expansion   :initarg  :debug-expansion
                        :type     (or (eql t) list)
                        :reader   debug-expansion
-                       :initform '("seesection" "seefigure"))))
+                       :initform '("hat"))))
 
 (defmethod initialize-instance :after ((instance expand-macros) &key)
-  (dpans-conversion.parser::register-builtin-macros (environment instance)))
+  (let ((environment (environment instance)))
+    (dpans-conversion.parser::register-builtin-macros environment)
+    (setf (env:lookup "hat" :macro environment)
+          (lambda (builder environment)
+            (declare (ignore environment))
+            (list (bp:node (builder :chunk :content "^")))))))
 
 (defmethod root-environment ((transform expand-macros))
   (labels ((root (environment)
@@ -72,13 +74,19 @@
 (defmethod transform-node ((transform expand-macros) recurse
                            relation relation-args node (kind (eql :definition)) relations
                            &key name global?)
-  (when (debug-definition? transform)
-    (format t "~V@TDefining~:[~; global~] macro ~S~%"
-            (* 2 (depth transform)) global? name))
   (let ((environment (if t ; global?
                          (root-environment transform)
                          (environment transform))))
-    (setf (env:lookup name :macro environment) node))
+    (cond ((functionp (env:lookup name :macro environment
+                                  :if-does-not-exist nil))
+           (when (debug-definition? transform)
+             (format t "~V@TNot overwriting diverted~:[~; global~] macro ~S~%"
+                     (* 2 (depth transform)) global? name)))
+          (t
+           (when (debug-definition? transform)
+             (format t "~V@TDefining~:[~; global~] macro ~S~%"
+                     (* 2 (depth transform)) global? name))
+           (setf (env:lookup name :macro environment) node))))
   nil)
 
 (defmethod transform-node ((transform expand-macros) recurse
@@ -109,11 +117,13 @@
               (* 2 (depth transform)) name true false))
     (setf (env:lookup stem  :if    environment) t
           (env:lookup true  :macro environment)
-          (lambda (environment) ; TODO should go to root environment if \global
+          (lambda (builder environment) ; TODO should go to root environment if \global
+            (declare (ignore builder))
             (setf (env:lookup stem :value environment) t)
             nil)
           (env:lookup false :macro environment)
-          (lambda (environment)
+          (lambda (builder environment)
+            (declare (ignore builder))
             (setf (env:lookup stem :value environment) nil)
             nil)))
   nil)
@@ -158,7 +168,7 @@
 (defun expand (builder environment macro arguments)
   (typecase macro
     (function
-     (apply macro environment arguments))
+     (apply macro builder environment arguments))
     (t
      (let* ((body            (bp:node-relation builder '(:body . *) macro))
             (first-parameter (first (bp:node-relation builder :argument macro)))
@@ -209,8 +219,6 @@
          (let ((instead (bp:node (builder :splice :expansion-of node)
                           (* (:element . *) expansion))))
            (values instead :splice '() '((:element . *))))))
-      ((find name (drop transform) :test #'string=) ; TODO could be a separate transform
-       nil)
       (t
        t))))
 
