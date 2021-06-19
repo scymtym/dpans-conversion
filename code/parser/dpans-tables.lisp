@@ -31,81 +31,52 @@
   (bp:node* (:header :bounds (cons start end))
     (* :element (nreverse elements))))
 
-(defrule display (environment) ; TODO use this
+;;; Table macros
+
+(defrule display-table (environment)
     (bounds (start end)
       (seq/ws (seq "\\display" (or "two" "three" "four" "five"))
                #\{ (<- caption (chunk)) #\}
                #\{ (* (<<- row (table-row environment))) #\}))
-  (bp:node* (:displaytwo :bounds (cons start end))
+  (bp:node* (:table :which :display :bounds (cons start end))
     (1 (:caption . 1) caption)
     (* (:row     . *) (nreverse row))))
 
-(define-command displaytwo
-  (1  :caption (chunk))
-  (1* :row     (table-row environment)))
+(defrule show-table (environment)
+    (bounds (start end)
+      (seq/ws (seq "\\show" (or "two" "three" "four" "five"))
+              #\{ (<- caption (chunk)) #\}
+              #\{ (* (<<- rows (table-row environment))) #\}))
+  (bp:node* (:table :which :show :bounds (cons start end))
+    (1 (:caption . 1) caption)
+    (* (:row     . *) (nreverse rows))))
 
-(define-command displaythree
-  (1  :caption (chunk))
-  (1* :row     (table-row environment)))
-
-(define-command displayfour
-  (1  :caption (chunk))
-  (1* :row     (table-row environment)))
-
-(define-command displayfive
-  (1  :caption (chunk))
-  (1* :row     (table-row environment)))
-
-(define-command showtwo
-  (1  :caption (chunk))
-  (1* :row     (table-row environment)))
-
-(define-command showthree
-  (1  :caption (chunk))
-  (1* :row     (table-row environment)))
-
-(define-command showfive
-  (1  :caption (chunk))
-  (1* :row     (table-row environment)))
-
-(define-command tablefigtwo
-  (1  :caption (chunk))
-  (2  :header  (header environment))
-  (1* :row     (table-row environment)))
-
-(define-command tablefigthree
-  (1  :caption (chunk))
-  (3  :header  (header environment))
-  (1* :row     (table-row environment)))
-
-(define-command tablefigfour
-  (1  :caption (chunk))
-  (4  :header  (header environment))
-  (1* :row     (table-row environment)))
-
-(define-command tablefigsix
-  (1  :caption (chunk))
-  (6  :header  (header environment))
-  (1* :row     (table-row environment)))
+(defrule figure-table (environment)
+    (bounds (start end)
+      (seq/ws (seq "\\tablefig" (<- count (or (:transform "two"   2)
+                                              (:transform "three" 3)
+                                              (:transform "four"  4)
+                                              (:transform "five"  5)
+                                              (:transform "six"   6))))
+              #\{ (<- caption (chunk)) #\}
+              (* (seq/ws #\{ (<<- header (header environment)) #\})
+                 count count)
+              #\{ (* (<<- rows (table-row environment))) #\}))
+  (bp:node* (:table :which :figure :bounds (cons start end))
+    (1 (:caption . 1) caption)
+    (* (:header  . *) (nreverse header))
+    (* (:row     . *) (nreverse rows))))
 
 (define-command tabletwo-entry
   (1 :term       (element environment))
   (1 :definition (element environment)))
 
 (define-command tabletwo
-  (2  :header  (header environment))
-  (1* :entry   (seq (skippable*) (tabletwo-entry environment))))
+  (2  :header (header environment))
+  (1* :entry  (seq (skippable*) (tabletwo-entry environment))))
 
 (defrule dpans-table (environment)
-  (or (displaytwo environment)
-      (displaythree environment)
-      (displayfour environment)
-      (displayfive environment)
-      (showtwo environment)
-      (showthree environment)
-      (showfive environment)
-      (tablefigtwo environment)
-      (tablefigthree environment)
-      (tablefigfour environment)
-      (tablefigsix environment)
+  (or (display-table environment)
+      (show-table environment)
+      (figure-table environment)
       (tabletwo environment)))

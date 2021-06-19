@@ -31,59 +31,15 @@
          transform '((:display? . :traversal)) '(:cell))
         (call-next-method))))
 
-(flet ((do-it (transform recurse relations initargs)
-         (let ((builder (builder transform)))
-           (call-with-environment
-            (lambda ()
-              (apply #'reconstitute builder recurse :table relations initargs))
-            transform '((:display? . :traversal)) '(:table)))))
-
-  (defmethod transform-node ((transform lower-display-tables) recurse
-                             relation relation-args node (kind (eql :displaytwo)) relations
-                             &rest initargs &key)
-    (do-it transform recurse relations initargs))
-
-  (defmethod transform-node ((transform lower-display-tables) recurse
-                             relation relation-args node (kind (eql :displaythree)) relations
-                             &rest initargs &key)
-    (do-it transform recurse relations initargs))
-
-  (defmethod transform-node ((transform lower-display-tables) recurse
-                             relation relation-args node (kind (eql :displayfour)) relations
-                             &rest initargs &key)
-    (do-it transform recurse relations initargs))
-
-  (defmethod transform-node ((transform lower-display-tables) recurse
-                             relation relation-args node (kind (eql :displayfive)) relations
-                             &rest initargs &key)
-    (do-it transform recurse relations initargs)))
-
 (defmethod transform-node ((transform lower-display-tables) recurse
-                           relation relation-args node (kind (eql :showtwo)) relations
-                           &rest initargs &key)
-  (let ((builder (builder transform)))
-    (apply #'reconstitute builder recurse :table relations initargs)))
-
-(defmethod transform-node ((transform lower-display-tables) recurse
-                           relation relation-args node (kind (eql :showtwo)) relations
-                           &rest initargs &key)
-  (let ((builder (builder transform)))
-    (apply #'reconstitute builder recurse :table relations initargs)))
-
-(defmethod transform-node ((transform lower-display-tables) recurse
-                           relation relation-args node (kind (eql :showthree)) relations
-                           &rest initargs &key)
-  (let ((builder (builder transform)))
-    (apply #'reconstitute builder recurse :table relations initargs)))
-
-(defmethod transform-node ((transform lower-display-tables) recurse
-                           relation relation-args node (kind (eql :showfour)) relations
-                           &rest initargs &key)
-  (let ((builder (builder transform)))
-    (apply #'reconstitute builder recurse :table relations initargs)))
-
-(defmethod transform-node ((transform lower-display-tables) recurse
-                           relation relation-args node (kind (eql :showfive)) relations
-                           &rest initargs &key)
-  (let ((builder (builder transform)))
-    (apply #'reconstitute builder recurse :table relations initargs)))
+                           relation relation-args node (kind (eql :table)) relations
+                           &rest initargs &key which)
+  (case which
+    (:display
+     (let ((builder (builder transform)))
+       (call-with-environment
+        (lambda ()
+          (apply #'reconstitute builder recurse :table relations initargs))
+        transform '((:display? . :traversal)) '(:table))))
+    (t
+     (call-next-method))))

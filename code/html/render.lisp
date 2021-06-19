@@ -559,7 +559,7 @@
                           :item-list :list-item
                           :enumeration-list :enumeration-item
                           :definition-list :definition-item
-                          :table)
+                          :table :header :row :cell)
                          (apply #'transform:transform-node transform recurse relation relation-args node kind relations initargs))
                         #+no (:issue-annotation
                          (div "issue-annotation"
@@ -627,6 +627,7 @@
                            ;; TODO caption and header
                            (funcall recurse :relations '(:row))))
                         ((:tablefigtwo :tablefigthree :tablefigfour :tablefigsix)
+                         (break "should not happen")
                          (cxml:with-element "table"
                            #+no (let* ((id-node (find-child-of-kind builder :define-figure node))
                                        (id      (when id-node
@@ -639,10 +640,13 @@
                            (cxml:with-element "tbody"
                              (funcall recurse :relations '(:row)))))
                         (:header
+                         (break "should not happen")
                          (cxml:with-element "th" (funcall recurse)))
                         (:row
+                          (break "should not happen")
                           (cxml:with-element "tr" (funcall recurse)))
                         (:cell
+                          (break "should not happen")
                           (cxml:with-element "td"
                             (a:when-let ((span (getf initargs :span)))
                               (cxml:attribute "colspan" (princ-to-string span)))
