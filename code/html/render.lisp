@@ -302,6 +302,7 @@
                            (a* url "section-reference" recurse)))
 
                         (:keyref
+                         ;; TODO (break "should not happen")
                          (let* ((name (node-name node))
                                 (url  (format nil "#lambda-list-keyword-~A" name)))
                            (unless name (break "~A" node))
@@ -309,39 +310,48 @@
                                                                      (cxml:text "&")
                                                                      (funcall recurse)))))
                         (:typeref
+                         (break "should not happen")
                          (let* ((name (node-name node))
                                 (url  (format nil "#type-~A" name)))
                            (unless name (break "~A" node))
                            (a* url "type-reference" recurse)))
                         (:declref
+                         (break "should not happen")
                          (let* ((name (node-name node))
                                 (url  (format nil "#declaration-~A" name)))
                            (a* url "declaration-reference" recurse)))
                         (:specref
+                         (break "should not happen")
                          (let* ((name (node-name node))
                                 (url  (format nil "#special-operator-~A" name)))
                            (a* url "special-operator-reference" recurse)))
                         (:funref
+                         (break "should not happen")
                          (let* ((name (node-name node))
                                 (url  (format nil "#function-~A" name)))
                            (a* url "function-reference" recurse)))
                         (:macref
+                         (break "should not happen")
                          (let* ((name (node-name node))
                                 (url  (format nil "#macro-~A" name)))
                            (a* url "macro-reference" recurse)))
                         (:varref
+                         (break "should not happen")
                          (let* ((name (node-name node))
                                 (url  (format nil "#variable-~A" name)))
                            (a* url "variable-reference" recurse)))
                         (:conref
+                         (break "should not happen")
                          (let* ((name (node-name node))
                                 (url  (format nil "#constant-~A" name)))
                            (a* url "constant-reference" recurse)))
                         (:figref
+                         (break "should not happen")
                          (let* ((name (node-name node))
                                 (url  (format nil "#figure-~A" name)))
                            (a* url "figure-reference" recurse)))
                         (:miscref      ; TODO not sure what this means
+                         (break "should not happen")
                          (let* ((name (node-name node))
                                 (url  (format nil "#misc-~A" name)))
                            (a* url "misc-reference" recurse)))

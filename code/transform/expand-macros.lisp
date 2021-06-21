@@ -222,7 +222,7 @@
               (expansion (expand builder environment macro arguments))
               (debug     (debug-expansion transform)))
          (when (or (eq debug t)
-                   (member name debug :test #'string-equal))
+                   (member name #+no '("loopref" "ttref") debug :test #'string-equal))
            (let ((stream *standard-output*))
              (format stream "~V@T" (* 2 (depth transform)))
              (pprint-logical-block (stream (list node) :per-line-prefix "| ")

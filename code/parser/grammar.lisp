@@ -185,7 +185,7 @@
   (let ((content (coerce (nreverse content) 'string)))
     (bp:node* (:verbatim :content content))))
 
-(define-command (b :kind :bold)
+#+no (define-command (b :kind :bold)
   (1* :element (element environment)))
 
 (defrule bf (environment)
@@ -197,7 +197,7 @@
 (define-command (bold :kind :bold)
   (1* :element (element environment)))
 
-(define-command (i :kind :italic)
+#+no (define-command (i :kind :italic)
   (1* :element (element environment)))
 
 (define-command (ital :kind :italic)
@@ -376,6 +376,21 @@
 (define-command keyref ; lambda list keyword reference
   (1 :name (element environment)))
 
+#+later (defrule simple-reference ()
+    (bounds (start end)
+      (seq/ws (seq "\\" (<- namespace (or (:transform "type" :typef)
+                                          (:transform "decl" :declaration)
+                                          (:transform "spec" :special-operator)
+                                          (:transform "fun"  :function)
+                                          (:transform "mac"  :macro)
+                                          (:transform "var"  :variable)
+                                          (:transform "con"  :constant)))
+                   "ref")
+              #\{ (<- name (element environment)) #\}))
+  (bp:node* (:reference :namespace namespace
+                        :bounds    (cons start end))
+    (1 (:name . 1) name)))
+
 (define-command typeref
   (1 :name (element environment)))
 
@@ -425,6 +440,21 @@
       (conref environment)
       (figref environment)
       (miscref environment)))
+
+#+later (defrule simple-index (environment)
+    (bounds (start end)
+      (seq/ws (seq "\\idx" (<- namespace (or (:transform "ref"     :symbol)
+                                             (:transform "keyref"  :lambda-list-keyword)
+                                             (:transform "code"    :?)
+                                             (:transform "kwd"     :keyword)
+                                             (:transform "text"    :?)
+                                             (:transform "term"    :?)
+                                             (:transform "example" :constant)
+                                             (:transform "packref" :?))))
+              #\{ (<- name (element environment)) #\}))
+  (bp:node* (:index :namespace namespace
+                    :bounds    (cons start end))
+    (1 (:name . 1) name)))
 
 (macrolet
     ((define ()
@@ -1409,8 +1439,8 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
       (openout environment)
 
       ;; Markup
-      (b environment) (bf environment) (bold environment)
-      (i environment) (ital environment) (it environment)
+      #+no (b environment) (bf environment) #+no (bold environment)
+      #+no (i environment) #+no (ital environment) (it environment)
       (f environment)
       (tt environment)
       (rm environment)

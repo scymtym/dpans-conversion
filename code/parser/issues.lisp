@@ -150,23 +150,24 @@ EXTENSIONS-POSITION:DISABLE" :grammar 'issues))
   (list (- end start) style))
 
 (defrule enumeration-item (indent number)
-  (bounds (start end)
-          (seq (indent indent)
-               (<- (length style) (enumeration-bullet number))
-               (<<- lines (line))
-               ;; Measure new indentation
-               (? (seq #\Newline
-                       (and (seq (indent indent)
-                                 (<- new-indent (:transform (<- extra (some-indent length))
-                                                  (print (+ indent extra)))))
-                            (seq))
-                       (<- next-number (:transform (seq) (1+ number)))
-                       (* (and (not (seq (indent indent)
-                                         (or (section-label)
-                                             (enumeration-bullet next-number))))
-                               (or (seq (indent new-indent) (<<- lines (line)))
-                                   (<<- lines (paragraph-break))
-                                   (seq (whitespace*) #\Newline)))))))) ; TODO empty line
+    (bounds (start end)
+      (seq (indent indent)
+           (<- (length style) (enumeration-bullet number))
+           (<<- lines (line))
+           (? (seq #\Newline
+                   ;; Measure new indentation and compute next number
+                   (and (seq (indent indent)
+                             (<- new-indent (:transform (<- extra (some-indent length))
+                                              (print (+ indent extra)))))
+                        (seq))
+                   (<- next-number (:transform (seq) (1+ number)))
+                   ;; Collect lines
+                   (* (and (not (seq (indent indent)
+                                     (or (section-label)
+                                         (enumeration-bullet next-number))))
+                           (or (seq (indent new-indent) (<<- lines (line)))
+                               (<<- lines (paragraph-break))
+                               (seq (whitespace*) #\Newline))))))))  ; TODO make a rule for empty lines
   (bp:node* (:enumeration-item :bounds (cons start end))
     (* (:body . *) (nreverse lines))))
 
@@ -175,7 +176,8 @@ EXTENSIONS-POSITION:DISABLE" :grammar 'issues))
       (seq (indent indent) (and (<- extra-indent (any-indent)) (seq)) ; TODO indent should be measured beforehand
            (<- count (:transform (seq) 1))
            (<- new-indent (:transform (seq) (+ indent extra-indent)))
-           (+ (seq (<<- items (enumeration-item new-indent count))
+           (+ (seq (* (seq (whitespace*) #\Newline)) ; empty lines TODO make a rule
+                   (<<- items (enumeration-item new-indent count))
                    (:transform (seq) (incf count))))))
   (let* ((item  (first items))
          (style (when item

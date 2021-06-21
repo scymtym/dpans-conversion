@@ -57,6 +57,11 @@
                               '(:function :macro :special-operator))
                              ((search "function" caption :test #'char-equal)
                               :function)
+                             ((search "variable" caption :test #'char-equal)
+                              :variable)
+                             ((and (search "type" caption :test #'char-equal)
+                                   (not (search "relating to" caption :test #'char-equal)))
+                              :type)
                              (t
                               nil))))
        (call-with-environment
