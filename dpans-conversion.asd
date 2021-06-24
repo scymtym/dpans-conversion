@@ -58,6 +58,7 @@
                              (:file       "lower-display-tables")
                              (:file       "cleanup-components")
                              (:file       "cleanup-issues")
+                             (:file       "symbol-index")
                              (:file       "add-dictionary-sections")
                              (:file       "split-into-files")
                              (:file       "note-output-file")
