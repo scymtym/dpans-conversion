@@ -57,10 +57,12 @@
                               '(:function :macro :special-operator))
                              ((search "function" caption :test #'char-equal)
                               :function)
-                             ((search "variable" caption :test #'char-equal)
+                             ((and (search "variable" caption :test #'char-equal)
+                                   (not (search "applicable to" caption :test #'char-equal)))
                               :variable)
                              ((and (search "type" caption :test #'char-equal)
-                                   (not (search "relating to" caption :test #'char-equal)))
+                                   (not (search "relating to" caption :test #'char-equal))
+                                   (not (search "method combination" caption :test #'char-equal))) ; TODO detect this as :method-combination
                               :type)
                              (t
                               nil))))
