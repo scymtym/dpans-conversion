@@ -48,12 +48,13 @@
           (:fatal (let ((snippet (make-snippet input position position)))
                     (error "At ~A [~A]: ~A" position snippet value))))))))
 
-(defun parse-issue-file (builder file)
+(defun parse-issue-file (builder file &key (process :x3j13))
   (let ((input    (a:read-file-into-string file))
         (filename (enough-namestring file)))
     (bp:with-builder (builder)
       (multiple-value-bind (result position value)
-          (parser.packrat:parse `(issue ,filename) input :grammar 'issues)
+          (parser.packrat:parse `(issue ,filename ,process) input
+                                :grammar 'issues)
         (ecase result
           ((t)    (unless (= position (length input))
                     (error 'parse-error :annotations (list (base:make-annotation file (cons position (1+ position)) "here"))
