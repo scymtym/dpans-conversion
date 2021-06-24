@@ -82,6 +82,7 @@
                              (:file       "render-tables")
                              (:file       "render-references")
                              (:file       "render-annotations")
+                             (:file       "render-component")
                              (:file       "render-issue")
                              (:file       "navigation")
 

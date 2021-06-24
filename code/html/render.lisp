@@ -506,9 +506,13 @@
                         (:index)        ; drop index stuff here
 
                         ;; "Component"
-                        (:ftype )
-                        (:none (span "none" (lambda () (cxml:text "None"))))
-                        (:part
+                        #+no (:ftype
+                         (break "should not happen"))
+                        #+no (:none
+                         (break "should not happen")
+                         (span "none" (lambda () (cxml:text "None"))))
+                        #+no (:part
+                         (break "should not happen")
                          (let* ((name (bp:node-relation builder '(:name . 1) node))
                                 (name (dpans-conversion.transform::evaluate-to-string
                                        builder name)))
@@ -523,9 +527,10 @@
                                           '("Note" "Example" "Pronunciation" "See Also"))
                                  (removable-text #'do-it)
                                  (do-it)))))
-                        (:component
+                        #+no (:component
+                         (break "should not happen")
                          (let* ((names     (bp:node-relation builder '(:name . *) node))
-                                (ftype     (node-name (find-child-of-kind builder :ftype node)))
+                                (ftype     (node-name (transform::find-ancestor-of-kind builder :ftype node)))
                                 (namespace (dpans-conversion.transform::namespace<-ftype ftype)))
                            (format t "~V@TGenerating component ~{~A~^, ~}~%"
                                    (* 2 (length file-stack))
@@ -559,6 +564,7 @@
                           :enumeration-list :enumeration-item
                           :definition-list :definition-item
                           :table :header :row :cell
+                          :component :part :none :ftype
                           :issue-reference)
                          (apply #'transform:transform-node transform recurse relation relation-args node kind relations initargs))
                         #+no (:issue-annotation
