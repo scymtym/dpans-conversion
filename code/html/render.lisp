@@ -29,7 +29,7 @@
              (cxml:text "This passage is ")
              (a "RemovableText"
                 (lambda () (cxml:text "removable text")))
-             (cxml:text " which is not formerly part of the standard."))
+             (cxml:text " which is not formally part of the standard."))
            continuation))
 
 (defun node-name (node)
@@ -564,8 +564,9 @@
                           :enumeration-list :enumeration-item
                           :definition-list :definition-item
                           :table :header :row :cell
+                          :issue-reference
                           :component :part :none :ftype
-                          :issue-reference)
+                          :paragraph-break :non-breaking-space)
                          (apply #'transform:transform-node transform recurse relation relation-args node kind relations initargs))
                         #+no (:issue-annotation
                          (div "issue-annotation"
@@ -597,8 +598,8 @@
                                   :element 'span))
                         ;; Structure
 
-                        (:non-breaking-space (cxml:unescaped "&nbsp;")) ; TODO
-                        (:paragraph-break (cxml:with-element "br"))
+                        #+no (:non-breaking-space (break "should not happen") (cxml:unescaped "&nbsp;")) ; TODO
+                        #+no (:paragraph-break (break "should not happen") (cxml:with-element "br"))
                         ;; Tables
                         (:define-figure
                          (break "should not happen")
@@ -608,6 +609,7 @@
                              (cxml:attribute "id" anchor)
                              (cxml:text " ")))) ; HACK
                         (:row-terminator
+                         (break "should not happen")
                          (span "error" (lambda ()
                                          (cxml:text "&"))))
                         ((:displaytwo :displaythree :displayfour :displayfive)
@@ -731,6 +733,7 @@
                         ;; Ignored
                         ((:comment :define-section :assignment :font :chardef :mathchardef
                           :newif :newskip :new :counter-definition :setbox :global :catcode
-                                   :advance :register-read))))
+                                   :advance :register-read)
+                         (break "should not happen"))))
                  (pop stack))))
       (bp:walk-nodes builder #+no (bp:peeking #'peek (a:curry #'visit :top)) (a:curry #'visit :top) tree))))

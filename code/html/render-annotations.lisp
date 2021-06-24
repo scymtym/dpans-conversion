@@ -6,6 +6,7 @@
                (case (bp:node-kind builder node)
                  (:chunk     t)
                  (:reference t)
+                 (:ftype     t)
                  (t          nil)))
              (content ()
                (issue-link transform node target :explicit? t)

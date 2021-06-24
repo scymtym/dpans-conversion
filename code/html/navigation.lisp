@@ -29,10 +29,10 @@
     (setf (index-files transform)
           (remove-if-not (lambda (file)
                            (member (getf (bp:node-initargs builder file) :output-file)
-                                   '("chap-0" "issue-index")
+                                   '("chap-0" "symbol-index" "issue-index")
                                    :test #'equalp))
                          files))
-    (break "~A" (index-files transform) files)))
+    (break "~A ~A" (length (index-files transform)) (index-files transform) files)))
 
 (defmethod transform:transform-node ((transform navigation-sidebar)
                                      recurse relation relation-args node (kind (eql :output-file)) relations
@@ -91,3 +91,16 @@
                (let* ((name    (getf (bp:node-initargs builder node) :name)) ; TODO different format. this is what issues use
                       (target  (format nil "#section-~A" name)))
                  (emit target name))))))
+
+(defmethod transform:transform-node ((transform navigation-sidebar)
+                                     recurse relation relation-args node (kind (eql :component)) relations
+                                     &key)
+  (cxml:with-element "li"
+    (let* ((builder    (transform:builder transform))
+           (name-nodes (bp:node-relation builder '(:name . *) node))
+           (first-node (first name-nodes))
+           (url        (node-url transform (current-file transform) first-node))
+           (names      (map 'list (a:curry #'transform::evaluate-to-string builder) ; TODO what about setf?
+                            name-nodes))
+           (name       (format nil "~{~A~^, ~}" names)))
+      (a url (lambda () (cxml:text name))))))

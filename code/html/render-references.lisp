@@ -21,10 +21,12 @@
         (class   (format nil "~(~A~)-reference" namespace)))
     (if target
         (let* ((name            (case namespace
-                                  (:section (or (let ((initargs (bp:node-initargs builder target)))
-                                                  (getf initargs :name))
-                                                (node-name target)))
-                                  (t        name)))
+                                  ((:section :proposal)
+                                   (or (let ((initargs (bp:node-initargs builder target)))
+                                         (getf initargs :name))
+                                       (node-name target)))
+                                  (t
+                                   name)))
                (url             (node-url transform node target)))
           (a* url class (lambda () (cxml:text name))))
         (span (list class "error") (lambda ()
