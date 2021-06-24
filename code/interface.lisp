@@ -12,7 +12,8 @@
 ;;; Parsing X3J13 cleanup issues plain text sources
 
 (defun find-issues (directory)
-  (let ((candidates (directory (merge-pathnames "passed/*" directory))))
+  (let ((candidates (append (directory (merge-pathnames "proposed/*" directory))
+                            (directory (merge-pathnames "passed/*" directory)))))
     (remove-if (lambda (filename)
                  (string= (pathname-name filename) "character-proposal"))
                candidates)))
@@ -20,7 +21,12 @@
 (defun parse-issues (builder issue-files)
   (a:mappend (lambda (file)
                (with-simple-restart (continue "Skip file ~S" file)
-                 (list (parser:parse-issue-file builder file))))
+                 (let* ((directory (pathname-directory file))
+                        (issues    (nth (- (length directory) 2) directory))
+                        (index     (position #\- issues :from-end t))
+                        (process   (string-upcase (subseq issues 0 index))))
+                  (list (parser:parse-issue-file
+                         builder file :process process)))))
              issue-files))
 
 ;;; Parsing dpANS sources and cleanup issues into a single "document
@@ -30,7 +36,8 @@
                             &key (root-tex-file  (merge-pathnames
                                                   "chap-0.tex"
                                                   dpans-directory))
-                                 (issue-files    (find-issues issues-directory))
+                                 (issue-files    (a:mappend #'find-issues
+                                                            (a:ensure-list issues-directory)))
                                  (root-directory (make-pathname
                                                   :name     nil
                                                   :type     nil
@@ -64,7 +71,7 @@
 
 (defun to-html (input-directory output-directory
                 &key (dpans-directory  (merge-pathnames "dpANS3/" input-directory))
-                     (issues-directory (merge-pathnames "issues/" input-directory))
+                     (issues-directory (directory (merge-pathnames #P"*-issues/" input-directory)))
                      (use-mathjax      t)
                      (use-sidebar      t))
   (let* ((builder     'list)
