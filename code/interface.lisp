@@ -109,9 +109,12 @@
                                                                                                            "quad" "goodbreak"
                                                                                                            "noindent" "ignorespaces")))))
                         (make-instance 'transform::lower-display-tables :builder builder)
+                        (make-instance 'transform::cleanup-components :builder builder)
+                        (make-instance 'transform::cleanup-issues :builder builder)
                         (make-instance 'transform::attach-labels :builder builder)
                         (make-instance 'transform::add-dictionary-sections :builder builder)
                         (make-instance 'transform::split-into-files :builder builder)
+                        (make-instance 'transform::symbol-index :builder builder)
                         (make-instance 'transform::issue-index :builder builder)
                         (make-instance 'transform::note-output-file :builder builder)
                         (make-instance 'transform::build-references :builder builder)
