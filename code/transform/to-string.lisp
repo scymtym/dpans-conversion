@@ -44,3 +44,8 @@
     (write-string name result)
     (when setf?
       (write-string ")" result))))
+
+(defmethod transform-node ((transform to-string) recurse ; TODO define macro
+                           relation relation-args node (kind (eql :possible-reference)) relations
+                           &key name)
+  (write-string name (result transform)))
