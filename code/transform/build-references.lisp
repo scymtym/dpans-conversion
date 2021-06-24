@@ -138,10 +138,9 @@
 
 (defmethod record-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :component)) relations
-                        &rest initargs &key)
+                        &rest initargs &key ftype)
   (let* ((builder   (builder transform))
          (names     (bp:node-relation builder '(:name . *) node))
-         (ftype     (node-name (find-child-of-kind builder :ftype node)))
          (namespace (namespace<-ftype ftype))
          (names     (map 'list (lambda (name-node)
                                  (multiple-value-bind (name setf?)
@@ -249,6 +248,11 @@
              new-node)))
 
   (defmethod link-node ((transform build-references) recurse
+                        relation relation-args node (kind (eql :reference)) relations
+                        &key name namespace)
+    (link node name namespace transform))
+
+  (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :secref)) relations
                         &key)
     (link node (node-name node) :section transform))
@@ -333,8 +337,9 @@
            (name        (normalize name))
            (namespaces  (if namespace
                             (a:ensure-list namespace)
-                            (append (set-difference (namespaces environment) '(:issue :glossary))
-                                    '(:issue :glossary))) )
+                            (append '(:proposal)
+                                    (set-difference (namespaces environment) '(:proposal :issue :glossary))
+                                    '(:issue :glossary))))
            (match       (some (lambda (namespace)
                                 (a:when-let ((target (env:lookup name namespace environment
                                                                  :if-does-not-exist nil)))
@@ -357,4 +362,27 @@
                                                      :target    nil
                                                      initargs)))
             (t
-             (bp:node (builder :chunk :content name)))))))
+             (bp:node (builder :chunk :content name))))))
+
+  (defmethod link-node ((transform build-references) recurse
+                        relation relation-args node (kind (eql :issue)) relations
+                        &rest initargs &key)
+    (let* ((builder         (builder transform))
+           (old-environment (environment transform))
+           (proposals       (remove-if-not (lambda (element)
+                                             (eq (bp:node-kind builder element) :proposal))
+                                           (bp:node-relation builder '(:section . *) node)))
+           (new-environment (env:augmented-environment
+                             old-environment
+                             (map 'list (lambda (proposal)
+                                          (let* ((name (getf (bp:node-initargs builder proposal) :name))
+                                                 (name (normalize name)))
+                                            (cons name :proposal)))
+                                  proposals)
+                             proposals)))
+      (when (not proposals)
+        (break "~A" node))
+      (setf (environment transform) new-environment)
+      (unwind-protect
+           (apply #'reconstitute builder recurse kind relations initargs)
+        (setf (environment transform) old-environment)))))
