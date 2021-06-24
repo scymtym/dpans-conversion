@@ -56,6 +56,7 @@
                              (:file       "drop")
                              (:file       "expand-macros")
                              (:file       "lower-display-tables")
+                             (:file       "cleanup-components")
                              (:file       "add-dictionary-sections")
                              (:file       "split-into-files")
                              (:file       "note-output-file")
