@@ -28,8 +28,21 @@
                     (<<- name (or (guard upper-case-p)
                                   #\- #\+ #\/ #\= #\*))
                     (+ (<<- name (or (guard upper-case-p)
-                                     (guard (digit-char-p))
+                                     (guard digit-char-p)
                                      #\- #\+ #\/ #\= #\*))))
+               ;; May be lower case but /must/ contain dash in that
+               ;; case.
+               (seq (? (<<- name (or #\: #\& #\*)))
+                    (<<- name (or (guard alpha-char-p)
+                                  #\+ #\/ #\= #\*))
+                    (+ (<<- name (or (guard alpha-char-p)
+                                     (guard digit-char-p)
+                                     #\+ #\/ #\= #\*)))
+                    (<<- name #\-) ; must contain dash
+                    (+ (<<- name (or (guard alpha-char-p)
+                                     (guard digit-char-p)
+                                     #\- #\+ #\/ #\= #\*))))
+
                (<<- name (or #\+ #\- #\/ #\= #\T)))
            (:transform (and (or #\s (not (guard alpha-char-p))) (seq)) nil) ; HACK
            ))
@@ -125,11 +138,6 @@
                               :proposal  proposal
                               :explicit? explicit?
                               :bounds    (cons start end))))
-
-(bp:with-builder ('list )
-  (parser.packrat:parse '(section) "Discussion:
-
-EXTENSIONS-POSITION:DISABLE" :grammar 'issues))
 
 ;;; Markup
 

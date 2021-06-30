@@ -9,4 +9,5 @@
 
    (#:bp        #:architecture.builder-protocol)
 
-   (#:transform #:dpans-conversion.transform)))
+   (#:transform #:dpans-conversion.transform)
+   (#:tex       #:dpans-conversion.tex)))

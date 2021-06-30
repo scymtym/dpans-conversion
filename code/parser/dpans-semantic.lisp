@@ -65,21 +65,31 @@
 ;;; Name
 
 (defrule component-name () ; TODO rename to just name? or to symbol?
-  (bounds (start end)
-    (or (seq (<- setf? (:transform "(setf " t))
-             (+ (<<- characters (and (not #\)) :any))) #\))
-        (+ (or #\$ ; Read 1$-$ as 1-
-               (<<- characters (and (not (or #\Space #\Tab #\, #\{ #\})) :any))))))
+    (bounds (start end)
+      (or (seq (<- setf? (:transform "(setf " t))
+               (+ (<<- characters (and (not #\)) :any))) #\))
+          (+ (or (seq #\$ (* (<<- characters (and (not #\$) :any))) #\$); Read 1$-$ as 1-
+                 (<<- characters (and (not (or #\Space #\Tab #\, #\{ #\}))
+                                      (or (seq #\\ :any)
+                                          :any)))))))
   (let ((name (coerce (nreverse characters) 'string)))
     (bp:node* (:symbol :name name :setf? setf? :bounds (cons start end)))))
 
-(defrule entry () ; TODO integrate with `name' and/or `symbol'?
+#+old (defrule entry () ; TODO integrate with `name' and/or `symbol'?
     (bounds (start end)
       (seq "\\entry{" (or (seq/ws #\{ (+ (or #\$ (<<- characters (and (not #\}) :any)))) #\}) ; TODO optional block is a hack
                           (+ (or #\$ (<<- characters (and (not #\}) :any)))))
            #\}))
   (let ((name (coerce (nreverse characters) 'string)))
     (bp:node* (:symbol :name name :bounds (cons start end)))))
+
+(defrule entry ()
+    (bounds (start end)
+            (seq "\\entry{"
+                 (or (seq/ws #\{ (<- name (component-name)) #\}) ; TODO optional block is a hack
+                     (<- name (component-name)))
+                 #\}))
+  name)
 
 (defrule entry-list (environment)
     (* (seq (or (<<- names (entry)) (user-macro-application environment))
@@ -119,7 +129,7 @@
               #\{ (* (<<- arguments (element environment))) #\}
               (? (seq/ws #\{ (* (seq (skippable*) (<<- return-values (element environment)))) #\}))))
   (bp:node* (:call-syntax :which :special-operator :bounds (cons start end))
-    (1 (:name         . *) name)
+    (1 (:name         . 1) name)
     (* (:argument     . *) arguments)
     (* (:return-value . *) return-values)))
 
@@ -261,7 +271,7 @@
               #\{ (* (<<- arguments     (element environment))) #\}
               #\{ (* (<<- return-values (element environment))) #\}))
   (bp:node* (:call-syntax :which :generic-function :bounds (cons start end))
-    (1 (:name         . *) name)
+    (1 (:name         . 1) name)
     (* (:argument     . *) (nreverse arguments))
     (* (:return-value . *) (nreverse return-values))))
 
@@ -285,7 +295,7 @@
               (? #\{) (<- name (element environment)) (? #\})
               #\{ (* (<<- parameters (element environment))) #\}))
   (bp:node* (:call-syntax :which :method :bounds (cons start end))
-    (1 (:name     . *) name)
+    (1 (:name     . 1) name)
     (* (:argument . *) (nreverse parameters))))
 
 (defrule call-syntax-defmacro (environment)

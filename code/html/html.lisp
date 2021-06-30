@@ -20,8 +20,11 @@
     (a:with-output-to-file (stream filename
                                    :element-type '(unsigned-byte 8)
                                    :if-exists    :supersede)
-      (cxml:with-xml-output (cxml:make-octet-stream-sink stream :omit-xml-declaration-p t)
-        (cxml:unescaped "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">")
+      (cxml:with-xml-output (cxml:make-octet-stream-sink stream ; :omit-xml-declaration-p t
+                                                         )
+        #+no (cxml:unescaped "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">")
+        (cxml:unescaped "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.1 plus MathML 2.0//EN\"
+  \"http://www.w3.org/Math/DTD/mathml2/xhtml-math11-f.dtd\">")
         ;; (cxml:unescaped "<!DOCTYPE html>")
         (cxml:with-element "html"
           (cxml:attribute "xmlns" "http://www.w3.org/1999/xhtml")
@@ -33,14 +36,23 @@
               (cxml:attribute "type" "text/css")
               (cxml:attribute "href" (namestring
                                       (merge-pathnames "style.css" relative))))
-            (when use-mathjax
-              (cxml:with-element "script"
-                (cxml:attribute "src" "https://polyfill.io/v3/polyfill.min.js?features=es6")
-                (cxml:text " "))
-              (cxml:with-element "script"
-                (cxml:attribute "id" "MathJax-script")
-                (cxml:attribute "src" "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js")
-                (cxml:text " ")))
+            #+no (when use-mathjax
+                   (cxml:with-element "script"
+                     (cxml:attribute "src" "https://polyfill.io/v3/polyfill.min.js?features=es6")
+                     (cxml:text " "))
+                   (cxml:with-element "script"
+                     (cxml:attribute "id" "MathJax-script")
+                     (cxml:attribute "src" "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js")
+                     (cxml:text " "))
+                   (cxml:with-element "script"
+                     (cxml:attribute "type" "text/javascript")
+                     (cxml:text "MathJax = {
+  options: {
+    includeHtmlTags: {         //  HTML tags that can appear within math
+        span: '\n'
+    }
+  }
+}")))
             (when use-sidebar
               (cxml:with-element "script"
                 (cxml:attribute "src" (namestring
@@ -71,13 +83,8 @@
     (cons (cxml:attribute "class" (format nil "~{~A~^ ~}" class-or-classes)))
     (string (cxml:attribute "class" class-or-classes))))
 
-(defun h* (level class name)
-  (cxml:with-element (coerce (format nil "h~D" level) '(and string (not base-string)))
-    (class-attribute class)
-    (cxml:text name)))
-
-(defun h (level name)
-  (h* level nil name))
+(defun nbsp ()
+  (cxml:unescaped "&nbsp;"))
 
 (defun br ()
   (cxml:with-element "br"))
@@ -114,3 +121,13 @@
     (class-attribute class)
     (cxml:attribute "href" url)
     (funcall continuation)))
+
+(defun h* (level class name-or-continuation)
+  (cxml:with-element (coerce (format nil "h~D" level) '(and string (not base-string)))
+    (class-attribute class)
+    (if (stringp name-or-continuation)
+        (cxml:text name-or-continuation)
+        (funcall name-or-continuation))))
+
+(defun h (level name-or-continuation)
+  (h* level nil name-or-continuation))

@@ -17,15 +17,45 @@
 (defmethod initialize-instance :after ((instance expand-macros) &key)
   (let ((environment (environment instance)))
     (dpans-conversion.parser::register-builtin-macros environment)
+    ;; TODO separate pass for the following?
     (setf (env:lookup "hat" :macro environment)
           (lambda (builder environment)
             (declare (ignore environment))
             (list (bp:node (builder :chunk :content "^"))))
+
           (env:lookup "uppercase" :macro environment)
           (lambda (builder environment argument)
             (declare (ignore environment))
             (let ((string (to-string builder argument)))
-              (list (bp:node (builder :chunk :content (string-upcase string)))))))))
+              (list (bp:node (builder :chunk :content (string-upcase string))))))
+
+          (env:lookup "dots" :macro environment)
+          (lambda (builder environment)
+            (declare (ignore environment))
+            (list (bp:node (builder :chunk :content "…"))))
+
+          (env:lookup "raise" :macro environment)
+          (lambda (builder environment amount box)
+            (declare (ignore environment))
+            (list (bp:node (builder :superscript)
+                    (* (:element . *) (bp:node-relation builder '(:element . *) box)))))
+
+          (env:lookup "lower" :macro environment)
+          (lambda (builder environment amount box)
+            (declare (ignore environment))
+            (list (bp:node (builder :subscript)
+                    (* (:element . *) (bp:node-relation builder '(:element . *) box)))))
+
+          (env:lookup "vrule" :macro environment) ; TODO do we have {h,v}rule?
+          (lambda (builder environment length)
+            (declare (ignore environment))
+            (list (bp:node (builder :chunk :content "|"))))
+
+          (env:lookup "caption" :macro environment)
+          (lambda (builder environment content)
+            (declare (ignore environment))
+            (list (bp:node (builder :caption)
+                    (1 (:element . *) content)))))))
 
 ;; TODO parse \secref as other-command-application and define a macro diversion above?
 (defmethod transform-node ((transform expand-macros) recurse
@@ -163,11 +193,6 @@
                                :if-does-not-exist nil)
                    (env:lookup name :macro environment))))))
 
-(defun evaluate-arguments (transform builder node)
-  (let ((arguments (bp:node-relation builder '(:argument . *) node)))
-    (map 'list (a:curry #'apply-transform transform)
-         arguments)))
-
 (defun substitute-arguments (builder body macro-level arguments)
   (labels ((visit (recurse relation relation-args node kind relations
                    &rest initargs &key level number &allow-other-keys)
@@ -211,14 +236,13 @@
                                     (declare (ignore c))
                                     (let ((stream *standard-output*))
                                       (text.source-location.print:print-annotations
-                                       stream (list (dpans-conversion.base:make-annotation
+                                       stream (list (base:make-annotation
                                                      (env:lookup :current-file :traversal environment)
                                                      (node-bounds builder node) "invoked here" :kind :info)))))))
                         (lookup-macro name environment))))
     (cond
       ((typep macro '(or function (cons keyword)))
-       (let* ((arguments (bp:node-relation builder '(:argument . *) node) ; (evaluate-arguments transform builder node)
-                         )
+       (let* ((arguments (bp:node-relation builder '(:argument . *) node))
               (expansion (expand builder environment macro arguments))
               (debug     (debug-expansion transform)))
          (when (or (eq debug t)
@@ -228,10 +252,10 @@
              (pprint-logical-block (stream (list node) :per-line-prefix "| ")
                (format stream "Expanded ~A ~:S -> ~S~@:_~@:_" name arguments expansion)
                (text.source-location.print:print-annotations
-                stream (list (dpans-conversion.base:make-annotation
+                stream (list (base:make-annotation
                               (env:lookup :current-file :traversal environment)
                               (node-bounds builder macro) "defined here" :kind :info)
-                             (dpans-conversion.base:make-annotation
+                             (base:make-annotation
                               (env:lookup :current-file :traversal environment)
                               (node-bounds builder node) "invoked here" :kind :info))))
              (fresh-line stream)))
@@ -240,33 +264,3 @@
            (values instead :splice '() '((:element . *))))))
       (t
        t))))
-
-#+no (cond (*math?*
-            (let ((arguments (map 'list (a:curry #'evaluate-to-string builder)
-                                  (bp:node-relation builder '(:argument . *) node))))
-              (cxml:text (format nil "\\~A~@[{~{~A~}}~] " name arguments)))
-            nil)
-           ((member name '("newif" "overfullrule" "pageno"
-                           "Head" "HeadI" "longbookline"
-                           "DocumentNumber" "vfill" "vfil" "hfill" "hfil" "noalign"
-                           "eject" "break"
-                           "newskip" "newdimen" "hsize" "topskip"
-                           "leftskip" "parindent" "parskip"
-                           "setbox" "hbox" "fullhsize" "vskip" "hskip" "parfillskip" "relax"
-                           "obeylines" "rightskip" "noindent" "hangindent" "negthinspace"
-                           "quad" "penalty" "Vskip" "medbreak"
-                           "bye")
-                    :test 'string=)
-            nil)
-           (t
-            #+no (destructuring-bind (start . end) (getf initargs :source)
-                   (cerror "Put error indicator into output"
-                           "Undefined macro ~S [~A at ~A:~A in ~A]"
-                           name
-                           (make-snippet (a:read-file-into-string (first file-stack))
-                                         start end)
-                           start end (first file-stack)))
-            (span "error" (lambda ()
-                            (cxml:text (format nil "Undefined macro ~S (source: ~S)"
-                                               name (getf initargs :source)))))
-            nil))

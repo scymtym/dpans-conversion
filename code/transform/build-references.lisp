@@ -120,7 +120,7 @@
     (cond (label ; \beginSection with \defineSection produces a label
            (record-and-reconstitute
             transform recurse kind relations initargs label :section))
-          (name                   ; issue sections have a name initarg
+          (name ; issue sections have a name initarg
            (record-and-reconstitute
             transform recurse kind relations initargs name :section))
           (t
@@ -129,12 +129,18 @@
               transform recurse kind relations initargs id :section))))))
 
 (defmethod record-node ((transform build-references) recurse
-                        relation relation-args node (kind (eql :table)) relations
+                        relation relation-args node (kind (eql :figure)) relations ; TODO will be wrong once we only have figures
                         &rest initargs &key label &allow-other-keys)
-  (if label
+  ;; The caption fallback is used by the table index, not by `:figref'
+  ;; references.
+  (flet ((caption () ; TODO should there be figures without caption?
+           (a:when-let* ((builder      (builder transform))
+                         (caption-node (bp:node-relation builder '(:caption . 1) node)))
+             (to-string builder caption-node))))
+    (a:if-let ((key (or label (caption))))
       (record-and-reconstitute
-       transform recurse kind relations initargs label :figure)
-      (call-next-method)))
+       transform recurse kind relations initargs key :figure)
+      (call-next-method))))
 
 (defmethod record-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :component)) relations
@@ -214,7 +220,7 @@
                      :report (lambda (stream)
                                (format stream "Record a broken link"))
                      nil)))))
-         (link (node name namespace transform)
+         (%link (node name namespace transform make-new-node)
            (let* ((builder         (builder transform))
                   (target          (lookup name namespace transform))
                   (target-initargs (when target
@@ -234,23 +240,32 @@
                   ;; non-termination and could insert the target into
                   ;; the output which is generated for the reference
                   ;; node).
-                  (new-node        (apply #'bp:make+finish-node builder :reference
-                                          :anchor    anchor
-                                          :name      name
-                                          :namespace namespace
-                                          :target    target
-                                          (bp:node-initargs builder node))))
+                  (new-node        (funcall make-new-node builder
+                                            :anchor    anchor
+                                            :name      name
+                                            :namespace namespace
+                                            :target    target)))
              ;; Add the reference to the `:references' of the
              ;; target. This cheats a little by mutating a node (the
              ;; target) after its initial creation.
              (when target
                (vector-push-extend new-node references))
-             new-node)))
+             new-node))
+         (link (node name namespace transform)
+           (%link node name namespace transform
+                  (lambda (builder &rest extra-initargs)
+                    (let ((initargs (bp:node-initargs builder node)))
+                      (apply #'bp:make+finish-node builder :reference
+                             (append extra-initargs initargs)))))))
 
   (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :reference)) relations
-                        &key name namespace)
-    (link node name namespace transform))
+                        &rest initargs &key name namespace)
+    (%link node name namespace transform
+           (lambda (builder &rest extra-initargs)
+             (apply #'reconstitute builder recurse kind relations
+                    (append extra-initargs
+                            (a:remove-from-plist initargs :name :namespace))))))
 
   (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :secref)) relations
@@ -337,8 +352,10 @@
            (name        (normalize name))
            (namespaces  (if namespace
                             (a:ensure-list namespace)
-                            (append '(:proposal)
-                                    (set-difference (namespaces environment) '(:proposal :issue :glossary))
+                            (append '(:function :macro :special-operator :proposal)
+                                    (set-difference (namespaces environment)
+                                                    '(:function :macro :special-operator :proposal
+                                                      :issue :glossary))
                                     '(:issue :glossary))))
            (match       (some (lambda (namespace)
                                 (a:when-let ((target (env:lookup name namespace environment

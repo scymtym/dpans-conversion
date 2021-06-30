@@ -5,8 +5,9 @@
                      transform:file-tracking-mixin
                      output-directory-mixin
                      static-files-mixin)
-  ((%sidebar-transform :reader sidebar-transform
-                       :writer (setf %sidebar-transform))
+  (;;
+   (%sidebar-transform :reader   sidebar-transform
+                       :writer   (setf %sidebar-transform))
    ;;
    (%static-files      :initform (list #+no (load-time-value
                                              (a:read-file-into-string

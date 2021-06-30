@@ -27,7 +27,7 @@
     (* :cell (nreverse cells))))
 
 (defrule header (environment)
-  (bounds (start end) (<<- elements (element environment)))
+    (bounds (start end) (* (<<- elements (element environment))))
   (bp:node* (:header :bounds (cons start end))
     (* :element (nreverse elements))))
 
@@ -36,20 +36,24 @@
 (defrule display-table (environment)
     (bounds (start end)
       (seq/ws (seq "\\display" (or "two" "three" "four" "five"))
-               #\{ (<- caption (chunk)) #\}
-               #\{ (* (<<- row (table-row environment))) #\}))
-  (bp:node* (:table :which :display :bounds (cons start end))
+              (<- caption (block* environment))
+              #\{ (* (<<- row (table-row environment))) #\}))
+  (bp:node* (:figure :bounds (cons start end))
     (1 (:caption . 1) caption)
-    (* (:row     . *) (nreverse row))))
+    (1 (:element . *) (bp:node* (:table :which  :display
+                                        :bounds (cons start end))
+                        (* (:row . *) (nreverse row))))))
 
 (defrule show-table (environment)
     (bounds (start end)
       (seq/ws (seq "\\show" (or "two" "three" "four" "five"))
-              #\{ (<- caption (chunk)) #\}
+              (<- caption (block* environment))
               #\{ (* (<<- rows (table-row environment))) #\}))
-  (bp:node* (:table :which :show :bounds (cons start end))
+  (bp:node* (:figure :bounds (cons start end))
     (1 (:caption . 1) caption)
-    (* (:row     . *) (nreverse rows))))
+    (1 (:element . *) (bp:node* (:table :which  :show
+                                        :bounds (cons start end))
+                        (* (:row . *) (nreverse rows))))))
 
 (defrule figure-table (environment)
     (bounds (start end)
@@ -58,14 +62,16 @@
                                               (:transform "four"  4)
                                               (:transform "five"  5)
                                               (:transform "six"   6))))
-              #\{ (<- caption (chunk)) #\}
-              (* (seq/ws #\{ (<<- header (header environment)) #\})
+              (<- caption (block* environment))
+              (* (seq/ws #\{ (<<- header (header environment)) #\} (seq))
                  count count)
               #\{ (* (<<- rows (table-row environment))) #\}))
-  (bp:node* (:table :which :figure :bounds (cons start end))
+  (bp:node* (:figure :bounds (cons start end))
     (1 (:caption . 1) caption)
-    (* (:header  . *) (nreverse header))
-    (* (:row     . *) (nreverse rows))))
+    (1 (:element . *) (bp:node* (:table :which  :figure
+                                        :bounds (cons start end))
+                        (* (:header . *) (nreverse header))
+                        (* (:row    . *) (nreverse rows))))))
 
 (define-command tabletwo-entry
   (1 :term       (element environment))
@@ -75,8 +81,28 @@
   (2  :header (header environment))
   (1* :entry  (seq (skippable*) (tabletwo-entry environment))))
 
+;;; Figure
+
+#+maybe (defrule caption (environment)
+    (bounds (start end)
+      (seq/ws "\\caption" #\{ (<<- elements (element environment)) #\}))
+  (bp:node* (:caption)
+    (* (:element . *) (nreverse elements))))
+
+(defrule boxfig (environment)
+    (bounds (start end)
+      (seq/ws "\\boxfig"
+              (* (<<- elements (and (not "\\endfig")
+                                    (element environment))))
+              (:transform "\\endfig" nil)))
+  (bp:node* (:figure :bounds (cons start end))
+    (* (:element . *) (nreverse elements))))
+
+;;; Entry point
+
 (defrule dpans-table (environment)
   (or (display-table environment)
       (show-table environment)
       (figure-table environment)
-      (tabletwo environment)))
+      (tabletwo environment)
+      (boxfig environment)))

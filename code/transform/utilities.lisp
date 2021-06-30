@@ -77,6 +77,11 @@
          (concatenate 'string
                       (subseq string 0 (- (length string) 3))
                       "e"))
+        ((or (a:ends-with-subseq "tes" string)  ; attributes
+             (a:ends-with-subseq "pes" string)  ; types
+             (a:ends-with-subseq "mes" string)  ; names
+             (a:ends-with-subseq "ges" string)) ; packages
+         (subseq string 0 (- (length string) 1)))
         ((a:ends-with-subseq "es" string)
          (subseq string 0 (- (length string) 2)))
         ((a:ends-with-subseq "ing" string)

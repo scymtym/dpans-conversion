@@ -83,9 +83,10 @@
                        (list ;; (make-instance 'dpans-conversion.transform::strip-comments)
                         (make-instance 'transform::drop :builder   builder
                                                         :predicate (a:conjoin (transform::kind? :other-command-application)
-                                                                              (transform::initarg? :name (transform::one-of?
-                                                                                                          "write"
-                                                                                                          "bye"))))
+                                                                              (transform::initarg? :name (lambda (value)
+                                                                                                           (a:when-let ((primitive (tex:find-primitive value)))
+                                                                                                             (intersection '(:environment :io)
+                                                                                                                           (tex:tags primitive)))))))
                         (make-instance 'transform::expand-macros :builder           builder
                                                                  :environment       environment
                                                                  :debug-definition? t
@@ -112,22 +113,18 @@
                                                                     (transform::kind? :register-read)
                                                                     (transform::kind? :comment)
                                                                     (a:conjoin (transform::kind? :other-command-application)
-                                                                               (transform::initarg? :name (transform::one-of?
-                                                                                                           "penalty"
-                                                                                                           "noalign"
-                                                                                                           "hfil"
-                                                                                                           "vfil" "vfill" "vskip"
-                                                                                                           "break" "eject" "parskip"
-                                                                                                           "obeylines" "relax"
-                                                                                                           "quad" "goodbreak"
-                                                                                                           "noindent" "ignorespaces")))))
+                                                                               (transform::initarg? :name (lambda (value)
+                                                                                                            (a:when-let ((primitive (tex:find-primitive value)))
+                                                                                                              (member :layout (tex:tags primitive))))))))
                         (make-instance 'transform::lower-display-tables :builder builder)
+                        (make-instance 'transform::cleanup-math :builder builder)
                         (make-instance 'transform::cleanup-components :builder builder)
                         (make-instance 'transform::cleanup-issues :builder builder)
-                        (make-instance 'transform::attach-labels :builder builder)
+                        (make-instance 'transform::attach-labels :builder builder) ; must be after `lower-display-tables'
                         (make-instance 'transform::add-dictionary-sections :builder builder)
                         (make-instance 'transform::split-into-files :builder builder)
                         (make-instance 'transform::symbol-index :builder builder)
+                        (make-instance 'transform::table-index :builder builder)
                         (make-instance 'transform::issue-index :builder builder)
                         (make-instance 'transform::note-output-file :builder builder)
                         (make-instance 'transform::build-references :builder builder)

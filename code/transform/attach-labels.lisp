@@ -14,13 +14,26 @@
     (setf (current-figure transform) name))
   nil)
 
-(defmethod transform-node ((transform attach-labels) recurse
-                           relation relation-args node (kind (eql :table)) relations
-                           &rest initargs &key)
-  (a:if-let ((label (current-figure transform)))
-    (let ((builder (builder transform)))
-      (apply #'reconstitute builder recurse kind relations :label label initargs))
-    (call-next-method)))
+(flet ((attach-label (label transform recurse kind relations initargs)
+         (let ((builder (builder transform)))
+           (setf (current-figure transform) nil)
+           (apply #'reconstitute builder recurse kind relations
+                  :label label initargs))))
+
+  (defmethod transform-node ((transform attach-labels) recurse ; TODO turn all tables into :figure?
+                             relation relation-args node (kind (eql :table)) relations
+                             &rest initargs &key)
+    (a:if-let ((label (current-figure transform)))
+      (break "should not happen")
+      ; (attach-label label transform recurse kind relations initargs)
+      (call-next-method)))
+
+  (defmethod transform-node ((transform attach-labels) recurse
+                             relation relation-args node (kind (eql :figure)) relations
+                             &rest initargs &key)
+    (a:if-let ((label (current-figure transform)))
+      (attach-label label transform recurse kind relations initargs)
+      (call-next-method))))
 
 ;;; Section labels
 

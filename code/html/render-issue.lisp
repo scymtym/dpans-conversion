@@ -55,11 +55,11 @@
   (a:when-let ((value (bp:node-relation builder `(,relation . 1) node)))
     (transform::evaluate-to-string builder value)))
 
-(define-render (:issue process)
+(define-render (:issue process status)
   (let ((builder (transform:builder transform))
         (level 2))
     (labels ((visit (recurse relation relation-args node kind relations
-                     &rest initargs &key name anchor status &allow-other-keys)
+                     &rest initargs &key name anchor &allow-other-keys)
                (ecase kind
                  ((:dash :reference :issue-reference :proposal :enumeration-list :enumeration-item :line :chunk :paragraph-break)
                   (apply #'transform:transform-node transform recurse relation relation-args node kind relations initargs))
@@ -71,14 +71,20 @@
                        (progn
                          (cxml:with-element "section"
                            (cxml:attribute "id" anchor)
+                           (class-attribute
+                            (if (equal "Status" name)
+                                (let ((status (format nil "status-~(~A~)" status)))
+                                  (list status "section"))
+                                "section"))
                            (h level name)
                            (incf level)
-                           (if (or (eql (search "Example" name) 0)
-                                   (eql (search "Test Case" name) 0))
-                               (cxml:with-element "pre"
-                                 (let ((*context* :code))
-                                   (funcall recurse)))
-                               (funcall recurse))))
+                           (cond ((or (eql (search "Example" name) 0)
+                                      (eql (search "Test Case" name) 0))
+                                  (cxml:with-element "pre"
+                                    (let ((*context* :code))
+                                      (funcall recurse))))
+                                 (t
+                                  (funcall recurse)))))
                     (decf level)))
                  (:preamble)
                  (:issue

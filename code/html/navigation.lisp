@@ -29,7 +29,7 @@
     (setf (index-files transform)
           (remove-if-not (lambda (file)
                            (member (getf (bp:node-initargs builder file) :output-file)
-                                   '("chap-0" "symbol-index" "issue-index")
+                                   '("chap-0" "symbol-index" "figure-index" "issue-index")
                                    :test #'equalp))
                          files))
     (break "~A ~A" (length (index-files transform)) (index-files transform) files)))

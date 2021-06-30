@@ -24,7 +24,8 @@
   (let* ((builder  (transform:builder transform))
          (root     (bp:node-relation builder '(:element . 1) node))
          (kind     (bp:node-kind builder root))
-         (filename (make-pathname :type "html" :defaults filename)
+         (filename (make-pathname :type     (file-type transform)
+                                  :defaults filename)
                    #+no (format nil "~@[~A~]~A.html"
                            (when (eq kind :issue)
                              "issues/")
@@ -61,12 +62,10 @@
         (funcall recurse))))
 
 (define-render (:title)
-  (let ((name (transform::to-string (transform:builder transform) node)))
-    (h* 1 "title" name)))
+  (h* 1 "title" recurse))
 
 (define-render (:sub-title)
-  (let ((name (transform::to-string (transform:builder transform) node)))
-    (h* 2 "subtitle" name)))
+  (h* 2 "subtitle" recurse))
 
 (define-render (:chapter anchor)
   (let* ((builder           (transform:builder transform))

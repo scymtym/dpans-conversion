@@ -578,7 +578,11 @@
 (define-environment (item-list :keyword "list"
                                :name?   nil
                                :element (:transform
-                                         (seq (skippable*) (<- item (or (issue-annotation environment) (list-item environment))) (skippable*))
+                                         (seq (skippable*)
+                                              (<- item (or (issue-annotation environment)
+                                                           (reviewer)
+                                                           (list-item environment)))
+                                              (skippable*))
                                          item)))
 
 (defrule enumeration-item-keyword ()

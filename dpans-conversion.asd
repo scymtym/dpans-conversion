@@ -20,9 +20,16 @@
                              (:file       "annotation")
                              (:file       "conditions")))
 
+               (:module     "tex"
+                :pathname   "code/tex"
+                :serial     t
+                :components ((:file       "package")
+                             (:file       "protocol")
+                             (:file       "macros")))
+
                (:module     "parser"
                 :pathname   "code/parser"
-                :depends-on ("base")
+                :depends-on ("base" "tex")
                 :serial     t
                 :components ((:file       "package")
                              (:file       "environment")
@@ -41,7 +48,7 @@
 
                (:module     "transform"
                 :pathname   "code/transform"
-                :depends-on ("base")
+                :depends-on ("base" "tex")
                 :serial     t
                 :components ((:file       "package")
                              (:file       "protocol")
@@ -58,8 +65,11 @@
                              (:file       "lower-display-tables")
                              (:file       "cleanup-components")
                              (:file       "cleanup-issues")
+                             (:file       "cleanup-math")
+                             (:file       "attach-labels")
                              (:file       "issue-index")
                              (:file       "symbol-index")
+                             (:file       "table-index")
                              (:file       "add-dictionary-sections")
                              (:file       "split-into-files")
                              (:file       "note-output-file")
@@ -67,7 +77,7 @@
 
                (:module     "html"
                 :pathname   "code/html"
-                :depends-on ("transform")
+                :depends-on ("transform" "tex")
                 :serial     t
                 :components ((:file       "package")
                              ;; Utilities
@@ -84,6 +94,7 @@
                              (:file       "render-annotations")
                              (:file       "render-component")
                              (:file       "render-issue")
+                             (:file       "render-math")
                              (:file       "navigation")
 
                              (:file       "render")
@@ -93,7 +104,7 @@
 
                (:module     "interface"
                 :pathname   "code"
-                :depends-on ("parser")
+                :depends-on ("parser" "tex")
                 :serial     t
                 :components ((:file       "package")
                              (:file       "interface")))))
