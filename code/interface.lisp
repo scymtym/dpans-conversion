@@ -137,7 +137,7 @@
                                                       :builder          builder
                                                       :output-directory output-directory
                                                       :use-sidebar?     use-sidebar)))
-                        (dpans-conversion.html::render-to-file
+                        #+no (dpans-conversion.html::render-to-file
                          transformed :output environment
                          :use-sidebar      use-sidebar
                          :use-mathjax      use-mathjax
@@ -162,6 +162,80 @@
      :new-inspector? t)
 
     result))
+
+
+(defun to-sexp (input-directory output-file
+                &key (dpans-directory  (merge-pathnames "dpANS3/" input-directory))
+                     (issues-directory (directory (merge-pathnames #P"*-issues/" input-directory))))
+  (let* ((builder     'list)
+         (environment (make-instance 'env:lexical-environment :parent transform::**meta-environment**))
+         ;; Parse
+         (tree        (cached (parse-specification builder dpans-directory issues-directory)))
+         ;; Transform
+         (result      (transform::apply-transforms
+                       (list
+                        (make-instance 'transform::drop :builder   builder
+                                                        :predicate (a:conjoin (transform::kind? :other-command-application)
+                                                                              (transform::initarg? :name (lambda (value)
+                                                                                                           (a:when-let ((primitive (tex:find-primitive value)))
+                                                                                                             (intersection '(:environment :io :misc)
+                                                                                                                           (tex:tags primitive)))))))
+                        (make-instance 'transform::expand-macros :builder           builder
+                                                                 :environment       environment
+                                                                 :debug-definition? t
+                                                                 :debug-expansion   '())
+                        (make-instance 'transform::drop :builder   builder
+                                                        :predicate (a:disjoin
+                                                                    (a:conjoin (transform::kind? :input)
+                                                                               (transform::initarg? :name "setup-for-toc"))
+                                                                    (transform::kind? :definition)
+                                                                    (transform::kind? :assignment)
+                                                                    (transform::kind? :font)
+                                                                    (transform::kind? :chardef)
+                                                                    (transform::kind? :mathchardef)
+                                                                    (transform::kind? :newif)
+                                                                    (transform::kind? :newskip)
+                                                                    (transform::kind? :new)
+                                                                    (transform::kind? :counter-definition)
+                                                                    (transform::kind? :setbox)
+                                                                    (transform::kind? :global)
+                                                                    (transform::kind? :catcode)
+                                                                    (transform::kind? :advance)
+                                                                    (transform::kind? :register-read)
+                                                                    (transform::kind? :comment)
+                                                                    (a:conjoin (transform::kind? :other-command-application)
+                                                                               (transform::initarg? :name (lambda (value)
+                                                                                                            (a:when-let ((primitive (tex:find-primitive value)))
+                                                                                                              (member :layout (tex:tags primitive))))))))
+                        (make-instance 'transform::lower-display-tables :builder builder)
+                        (make-instance 'transform::cleanup-math :builder builder)
+                        (make-instance 'transform::cleanup-components :builder builder)
+                        (make-instance 'transform::cleanup-issues :builder builder)
+                        (make-instance 'transform::attach-labels :builder builder) ; must be after `lower-display-tables'
+                        (make-instance 'transform::add-dictionary-sections :builder builder)
+                        (make-instance 'transform::minimize :builder builder)
+                        (make-instance 'transform::build-references :builder builder))
+                       tree)))
+
+    (a:with-output-to-file (stream output-file :if-exists :supersede)
+      (with-standard-io-syntax
+        (write result :stream stream :circle t)))
+
+    (:inspect (vector environment
+                      :tree
+                      (architecture.builder-protocol.visualization::as-tree
+
+                       tree 'list)
+                      (architecture.builder-protocol.visualization::as-query
+                       tree 'list :editor-note)
+                      :transformed
+                      (architecture.builder-protocol.visualization::as-tree
+                       result 'list)
+                      (architecture.builder-protocol.visualization::as-query
+                       result 'list :component))
+     :new-inspector? t)
+
+    nil))
 
 (defun do-it (&key (use-mathjax     t)
                    (use-sidebar     nil)

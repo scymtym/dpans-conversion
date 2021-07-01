@@ -29,19 +29,19 @@
 (defclass default-reconstitute-mixin ()
   ())
 
-(defun %reconstitute (builder recurse kind relations &rest initargs)
+(defun %reconstitute (builder recurse kind relations &rest initargs) ; TODO the second form seems useful but is probably not used consistently
   (let ((node (apply #'bp:make-node builder kind initargs)))
     (bp:add-relations
      builder node
      (map 'list (lambda (relation)
                   (typecase relation
-                    ((or symbol (cons symbol atom))
+                    ((or symbol (cons symbol atom)) ; NAME or (NAME . CARDINALITY)
                      (multiple-value-bind (relation* cardinality)
                          (bp:normalize-relation relation)
                        (declare (ignore relation*))
                        (let ((right (first (funcall recurse :relations (list relation)))))
                          (list cardinality relation right))))
-                    ((cons t (cons t (cons t null)))
+                    ((cons t (cons t (cons t null))) ; (CARDINALITY NAME RELATED-NODES)
                      relation)))
           relations))))
 

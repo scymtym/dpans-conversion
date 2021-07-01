@@ -51,11 +51,32 @@
             (declare (ignore environment))
             (list (bp:node (builder :chunk :content "|"))))
 
+          ;; This is pretty special. The :caption node has to be
+          ;; picked up by a later transform. Renderers don't
+          ;; understand :caption nodes.
           (env:lookup "caption" :macro environment)
           (lambda (builder environment content)
             (declare (ignore environment))
             (list (bp:node (builder :caption)
-                    (1 (:element . *) content)))))))
+                    (1 (:element . *) content))))
+
+          ;; This is too complicated. It stores the content into a box
+          ;; and inserts that box later.
+          (env:lookup "Vtop" :macro environment)
+          (lambda (builder environment content)
+            (declare (ignore environment))
+            (list content))
+
+          (env:lookup "vadjust" :macro environment)
+          (lambda (builder environment content)
+            (declare (ignore environment))
+            (break "~A" content)
+            (list content))
+
+          (env:lookup "endgraf" :macro environment)
+          (lambda (builder environment)
+            (declare (ignore environment))
+            (list (bp:node (builder :paragraph-break)))))))
 
 ;; TODO parse \secref as other-command-application and define a macro diversion above?
 (defmethod transform-node ((transform expand-macros) recurse
@@ -128,7 +149,7 @@
                          (environment transform))))
     (cond ((functionp (env:lookup name :macro environment
                                   :if-does-not-exist nil))
-           (when (debug-definition? transform)
+           (when t ; (debug-definition? transform)
              (format t "~V@TNot overwriting diverted~:[~; global~] macro ~S~%"
                      (* 2 (depth transform)) global? name)))
           (t
@@ -246,18 +267,20 @@
               (expansion (expand builder environment macro arguments))
               (debug     (debug-expansion transform)))
          (when (or (eq debug t)
-                   (member name #+no '("loopref" "ttref") debug :test #'string-equal))
+                   (member name '("Vtop" "endgraf" "vadjust") #+no debug :test #'string-equal))
            (let ((stream *standard-output*))
              (format stream "~V@T" (* 2 (depth transform)))
              (pprint-logical-block (stream (list node) :per-line-prefix "| ")
                (format stream "Expanded ~A ~:S -> ~S~@:_~@:_" name arguments expansion)
                (text.source-location.print:print-annotations
-                stream (list (base:make-annotation
-                              (env:lookup :current-file :traversal environment)
-                              (node-bounds builder macro) "defined here" :kind :info)
-                             (base:make-annotation
-                              (env:lookup :current-file :traversal environment)
-                              (node-bounds builder node) "invoked here" :kind :info))))
+                stream (append (a:when-let ((definition-bounds (node-bounds builder macro)))
+                                 (list (base:make-annotation
+                                        (env:lookup :current-file :traversal environment)
+                                        definition-bounds "defined here" :kind :info)))
+                               (a:when-let ((invocation-bounds (node-bounds builder node)))
+                                 (list (base:make-annotation
+                                        (env:lookup :current-file :traversal environment)
+                                        invocation-bounds "invoked here" :kind :info))))))
              (fresh-line stream)))
          (let ((instead (bp:node (builder :splice :expansion-of node)
                           (* (:element . *) expansion))))

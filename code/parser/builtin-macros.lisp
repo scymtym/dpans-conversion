@@ -101,6 +101,7 @@
 
     (register "afterassignment" 1)
     (register "overfullrule" 1)
+    (register "vadjust" 1)
 
     ;; Font
     (register "fontdimen" 1)
