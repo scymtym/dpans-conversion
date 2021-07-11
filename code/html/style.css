@@ -1,3 +1,4 @@
+@import 'navigation.css';
 @import 'permalink.css';
 @import 'syntax.css';
 
@@ -9,6 +10,10 @@ body {
     font-size: 16px;
     color: #444;
     padding: 0 10px;
+}
+
+a {
+    color: #444;
 }
 
 .title {
@@ -47,48 +52,6 @@ main {
     width: 50em;
     max-width: 70vw;
     margin-left: 5vw;
-}
-
-/* TODO indicate removable text */
-nav.sidebar {
-    position: sticky;
-    top: 2rem;
-    align-self: start;
-
-    font-size: smaller;
-}
-
-nav.sidebar ol {
-    list-style: none;
-    padding-left: 1em;
-}
-
-nav.sidebar a {
-    text-decoration: none;
-}
-
-/* All sections below the top-level ones are hidden by default. */
-nav.sidebar ol.local-toc li li {
-    display: none;
-}
-
-/* Sections which intersect the viewport of the main area and their
-   ancestors are active. Active sections are visible. */
-nav.sidebar ol.local-toc li.active {
-    display: block;
-}
-
-/* Children of active sections are visible. */
-nav.sidebar ol.local-toc li.active > ol > li {
-    display: block;
-}
-
-nav.sidebar ol.local-toc a {
-    color: #aaa;
-}
-
-nav.sidebar ol.local-toc li.active > a {
-    color: #444;
 }
 
 footer {
