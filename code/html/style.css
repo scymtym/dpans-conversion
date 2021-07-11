@@ -271,6 +271,7 @@ div.component {
 
     position: absolute;
     z-index: 1;
+    transform: translateY(-1.5em);
 }
 .removable-text:hover > .removable-text-tooltip {
     visibility: visible;
@@ -301,6 +302,7 @@ div.component {
 
     position: absolute;
     z-index: 1;
+    transform: translateY(-1.5em);
 }
 .reviewer-note:hover > .reviewer-note-tooltip {
     visibility: visible;
@@ -329,6 +331,7 @@ div.component {
 
     position: absolute;
     z-index: 1;
+    transform: translateY(-1.5em);
 }
 .editor-note:hover > .editor-note-tooltip {
     visibility: visible;
@@ -360,6 +363,7 @@ div.component {
 
     position: absolute;
     z-index: 1;
+    transform: translateY(-1.5em);
 }
 .issue-annotation:hover > .issue-reference {
     visibility: visible;
