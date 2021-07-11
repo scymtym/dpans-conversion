@@ -541,7 +541,7 @@
 
 (defrule simple-section (environment)
     (bounds (start end)
-      (seq/ws "\\beginSimpleChapter"
+      (seq/ws (seq "\\beginSimpleChapter" (? "Left"))
               #\{ (<- name (chunk)) #\}
               (* (<<- elements (and (not "\\endSimpleChapter")
                                     (element environment))))
