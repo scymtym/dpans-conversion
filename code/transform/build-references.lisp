@@ -368,7 +368,7 @@
                         &rest initargs &key name namespace must-resolve?)
     (let* ((environment (environment transform))
            (builder     (builder transform))
-           (name        (normalize name))
+           (name*       (normalize name))
            (namespaces  (if namespace
                             (a:ensure-list namespace)
                             (append '(:function :macro :special-operator :proposal)
@@ -377,7 +377,7 @@
                                                       :issue :glossary))
                                     '(:issue :glossary))))
            (match       (some (lambda (namespace)
-                                (a:when-let ((target (env:lookup name namespace environment
+                                (a:when-let ((target (env:lookup name* namespace environment
                                                                  :if-does-not-exist nil)))
                                   (cons namespace target)))
                               namespaces)))
@@ -385,7 +385,7 @@
              (destructuring-bind (namespace . target) match
                (apply #'bp:make+finish-node builder :reference
                       :namespace namespace
-                      :name      name
+                      :name      name*
                       :target    target
                       (a:remove-from-plist initargs :name))))
             (must-resolve?

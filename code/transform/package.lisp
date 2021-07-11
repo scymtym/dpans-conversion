@@ -9,7 +9,8 @@
 
    (#:bp   #:architecture.builder-protocol)
 
-   (#:base #:dpans-conversion.base))
+   (#:base #:dpans-conversion.base)
+   (#:tex  #:dpans-conversion.tex))
 
   ;; Transform protocol
   (:export

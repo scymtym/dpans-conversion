@@ -12,7 +12,7 @@
    (%debug-expansion   :initarg  :debug-expansion
                        :type     (or (eql t) list)
                        :reader   debug-expansion
-                       :initform '("hat"))))
+                       :initform '())))
 
 (defmethod initialize-instance :after ((instance expand-macros) &key)
   (let ((environment (environment instance)))
@@ -82,13 +82,13 @@
 (defmethod transform-node ((transform expand-macros) recurse
                            relation relation-args node (kind (eql :secref)) relations
                            &key test)
-  (let* ((builder     (builder transform))
-         (name*       (bp:node-relation builder '(:name . 1) node))
-         (name        (case (bp:node-kind builder name*)
-                        (:other-command-application
-                         (getf (bp:node-initargs builder name*) :name))
-                        (t
-                         (to-string builder name*)))))
+  (let* ((builder (builder transform))
+         (name*   (bp:node-relation builder '(:name . 1) node))
+         (name    (case (bp:node-kind builder name*)
+                    (:other-command-application
+                     (getf (bp:node-initargs builder name*) :name))
+                    (t
+                     (to-string builder name*)))))
     (bp:node (builder :secref)
       (1 (:name . 1) (bp:node (builder :name :content name))))))
 
@@ -169,7 +169,10 @@
     (when (debug-definition? transform)
       (format t "~V@TDefining font ~S~%"
               (* 2 (depth transform)) name))
-    (setf (env:lookup name :macro environment) 0))
+    (setf (env:lookup name :macro environment)
+          (lambda (builder environment)
+            (declare (ignore builder environment)) ; TODO we could emit some :change-font node
+            '())))
   nil)
 
 (defmethod transform-node ((transform expand-macros) recurse
@@ -267,7 +270,7 @@
               (expansion (expand builder environment macro arguments))
               (debug     (debug-expansion transform)))
          (when (or (eq debug t)
-                   (member name '("Vtop" "endgraf" "vadjust") #+no debug :test #'string-equal))
+                   (member name debug :test #'string-equal))
            (let ((stream *standard-output*))
              (format stream "~V@T" (* 2 (depth transform)))
              (pprint-logical-block (stream (list node) :per-line-prefix "| ")
