@@ -426,11 +426,37 @@
 ;;; Glossary entry
 
 (defrule glossary-entry-body (environment)
-    (* (<<- elements (and (not (or (paragraph-break)
+    (* (<<- elements (and (not (or "\\gentry"
+                                   "\\indextab"
+                                   "\\endlist"
                                    "\\endissue")) ; HACK
                           (element environment))))
   (nreverse elements))
 
-(define-command gentry
-  (1  :name (chunk))
-  (*> :body (glossary-entry-body environment) :open-delimiter nil :close-delimiter nil))
+(defrule gentry (environment)
+    (bounds (start end)
+      (seq/ws "\\gentry" #\{ (<- name (chunk)) #\}
+              (<- body (glossary-entry-body environment))))
+  (bp:node* (:gentry :bounds (cons start end))
+    (1 (:name . 1) name)
+    (* (:body . *) body)))
+
+(defrule glossary-section (environment)
+    (bounds (start end)
+      (seq (seq #\\ (? "first") "indextab") #\{ (<- name (chunk)) #\}
+           (* (or (skippable+)
+                  (<<- entries (or (issue-annotation environment)
+                                   (editor-note)
+                                   (gentry environment)))))
+           (:transform (seq) (format *trace-output* "Parsed glossary section ~A~%" name))))
+  (bp:node* (:section :level  1
+                      :bounds (cons start end))
+    (1 (:name    . 1) name)
+    (* (:element . *) (nreverse entries))))
+
+(defrule glossary-list (environment)
+  (seq/ws "\\beginlist"
+          (* (<<- sections (glossary-section environment)))
+          "\\endlist")
+  (bp:node* (:splice)
+    (* (:element . *) (nreverse sections))))
