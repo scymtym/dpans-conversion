@@ -19,6 +19,7 @@
                                                (a:read-file-into-string
                                                 ))
                                          (cons #1=#P"style.css"     (merge-pathnames #1# base))
+                                         (cons #4=#P"syntax.css"    (merge-pathnames #4# base)) ; TODO make a mixin
                                          (cons #2=#P"permalink.css" (merge-pathnames #2# base))
                                          (cons #3=#P"permalink.js"  (merge-pathnames #3# base)))))))
 
