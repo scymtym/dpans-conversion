@@ -18,8 +18,7 @@
          (caption      (when caption-node
                          (to-string builder caption-node)))
          (key          (or label caption)))
-    (unless caption-node (break "~A" node))
-    (setf (gethash key (tables transform)) caption-node)) 
+    (setf (gethash key (tables transform)) caption-node))
   (funcall recurse))
 
 ;;; Index generation
@@ -30,7 +29,7 @@
      (lambda (key title)
        (let ((reference (bp:node (builder :reference :namespace :figure ; TODO better use the table objects
                                                      :name      key)
-                          (1 (:title . 1) (print title *trace-output*)))))
+                          (1 (:title . 1) title))))
          (push (bp:node (builder :list-item)
                  (1 (:body . *) reference))
                items)))
