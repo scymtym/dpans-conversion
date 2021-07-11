@@ -15,21 +15,23 @@
           (span "issue-annotation" #'content)
           (div "issue-annotation" #'content)))))
 
-(define-render (:editor-note editor content)
+(define-render (:editor-note editor content anchor)
   (tooltip "editor-note" "editor-note-tooltip"
            (lambda ()
              (span "editor" (lambda () (cxml:text editor)))
              (cxml:text ": ")
              (cxml:text content))
-           (lambda () (cxml:text "‣"))
-           :element 'span))
+           "‣"
+           :element (lambda (class contination)
+                      (span* class anchor contination))))
 
-(define-render (:reviewer-note (reviewer nil) content)
+(define-render (:reviewer-note (reviewer nil) content anchor)
   (tooltip "reviewer-note" "reviewer-note-tooltip"
            (lambda ()
              (when reviewer
                (span "reviewer" (lambda () (cxml:text reviewer)))
                (cxml:text ": "))
              (cxml:text content))
-           (lambda () (cxml:text "‣"))
-           :element 'span))
+           "‣"
+           :element (lambda (class contination)
+                      (span* class anchor contination))))

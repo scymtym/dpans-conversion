@@ -54,6 +54,9 @@
 
       (register-namespace :glossary           'env::equal-namespace)
 
+      (register-namespace :editor-note        'env::equal-namespace)
+      (register-namespace :reviewer-note      'env::equal-namespace)
+
       (register-namespace :issue              'env::equal-namespace)
       (register-namespace :proposal           'env::equal-namespace))
     environment))

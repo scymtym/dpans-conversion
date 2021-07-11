@@ -23,7 +23,7 @@
   ((%stage :accessor stage
            :initform :record))
   (:default-initargs
-   :environment (make-instance 'env:lexical-environment :parent **meta-environment**)))
+   :environment (make-instance 'env:lexical-environment :parent **reference-meta-environment**)))
 
 (defmethod print-object ((object build-references) stream)
   (print-unreadable-object (object stream :type t :identity t)
@@ -176,6 +176,25 @@
   (let ((name (string-downcase (node-name node))))
     (record-and-reconstitute
      transform recurse kind relations initargs name :glossary)))
+
+(flet ((record-note (transform recurse kind relations initargs content)
+         (let ((name (map 'string (lambda (character)
+                                    (case character
+                                      (#\Space #\-)
+                                      (t       (char-downcase character))))
+                          (subseq content 0 (min (length content) 20)))))
+           (record-and-reconstitute
+            transform recurse kind relations initargs name kind))))
+
+  (defmethod record-node ((transform build-references) recurse
+                          relation relation-args node (kind (eql :editor-note)) relations
+                          &rest initargs &key content)
+    (record-note transform recurse kind relations initargs content))
+
+  (defmethod record-node ((transform build-references) recurse
+                          relation relation-args node (kind (eql :reviewer-note)) relations
+                          &rest initargs &key content)
+    (record-note transform recurse kind relations initargs content)))
 
 (defmethod record-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :issue)) relations

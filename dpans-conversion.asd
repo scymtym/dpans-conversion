@@ -70,6 +70,7 @@
                              (:file       "issue-index")
                              (:file       "symbol-index")
                              (:file       "table-index")
+                             (:file       "note-indices")
                              (:file       "add-dictionary-sections")
                              (:file       "split-into-files")
                              (:file       "note-output-file")
