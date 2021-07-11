@@ -24,18 +24,18 @@
 
 (defrule editor-note ()
     (bounds (start end)
-      (seq "\\editornote{" (<- editor (person)) #\:
-           (<- content (balanced-content))
-           #\}))
+      (seq/ws "\\editornote{" (<- editor (person)) #\:
+              (<- content (balanced-content))
+              #\}))
   (bp:node* (:editor-note :editor  editor
                           :content content
                           :bounds  (cons start end))))
 
 (defrule reviewer ()
     (bounds (start end)
-      (seq "\\reviewer{" (? (<- reviewer (:transform (seq (<- temp (person)) #\:) temp))) ; HACK work around parser.packrat bug
-           (<- content (balanced-content))
-           #\}))
+      (seq/ws "\\reviewer{" (? (<- reviewer (:transform (seq/ws (<- temp (person)) #\:) temp))) ; HACK work around parser.packrat bug
+              (<- content (balanced-content))
+              #\}))
   (bp:node* (:reviewer-note :reviewer reviewer
                             :content  content
                             :bounds   (cons start end))))
@@ -68,8 +68,8 @@
     (bounds (start end)
       (or (seq (<- setf? (:transform "(setf " t))
                (+ (<<- characters (and (not #\)) :any))) #\))
-          (+ (or (seq #\$ (* (<<- characters (and (not #\$) :any))) #\$); Read 1$-$ as 1-
-                 (<<- characters (and (not (or #\Space #\Tab #\, #\{ #\}))
+          (+ (or (seq #\$ (* (<<- characters (and (not #\$) :any))) #\$) ; Read 1$-$ as 1-
+                 (<<- characters (and (not (or #\Space #\Tab #\Newline #\, #\{ #\}))
                                       (or (seq #\\ :any)
                                           :any)))))))
   (let ((name (coerce (nreverse characters) 'string)))
@@ -122,10 +122,16 @@
                 (or ,@(map 'list #'list rules))))))))
   (define))
 
+(defrule call-syntax-name ()
+    (must (or (seq/ws #\{ (<- name (component-name)) #\})
+              (<- name (component-name)))
+          "must be a name, optionally within curly braces")
+  name)
+
 (defrule call-syntax-special-operator (environment)
     (bounds (start end)
       (seq/ws (seq "\\Defspec" (? (or (seq "WithValues" (? "Newline")) "NoReturn")))
-              (seq/ws (? #\{) (<- name (component-name)) (? #\}))
+              (<- name (call-syntax-name))
               #\{ (* (<<- arguments (element environment))) #\}
               (? (seq/ws #\{ (* (seq (skippable*) (<<- return-values (element environment)))) #\}))))
   (bp:node* (:call-syntax :which :special-operator :bounds (cons start end))
@@ -136,7 +142,7 @@
 (defrule call-syntax-defun (environment)
     (bounds (start end)
       (seq/ws (seq "\\Defun" (? (or (seq "WithValues" (? "Newline")) "NoReturn")))
-              (? #\{) (<- name (component-name)) (? #\})
+              (<- name (call-syntax-name))
               #\{ (* (<<- arguments (element environment))) #\}
               (? (seq #\{ (* (seq (skippable*) (<<- return-values (element environment)))) #\}))))
   (bp:node* (:call-syntax :which :function :bounds (cons start end))
@@ -267,7 +273,7 @@
 (defrule call-syntax-defgen (environment)
     (bounds (start end)
       (seq/ws (seq "\\Defgen" (? (seq "WithValues" (? "Newline"))))
-               (? #\{) (<- name (element environment)) (? #\})
+              (<- name (call-syntax-name))
               #\{ (* (<<- arguments     (element environment))) #\}
               #\{ (* (<<- return-values (element environment))) #\}))
   (bp:node* (:call-syntax :which :generic-function :bounds (cons start end))
@@ -291,8 +297,7 @@
 
 (defrule call-syntax-defmeth (environment)
     (bounds (start end)
-      (seq/ws "\\Defmeth"
-              (? #\{) (<- name (element environment)) (? #\})
+      (seq/ws "\\Defmeth" (<- name (call-syntax-name))
               #\{ (* (<<- parameters (element environment))) #\}))
   (bp:node* (:call-syntax :which :method :bounds (cons start end))
     (1 (:name     . 1) name)
@@ -301,7 +306,7 @@
 (defrule call-syntax-defmacro (environment)
     (bounds (start end)
       (seq/ws (seq "\\Defmac" (? (or (seq "WithValues" (? "Newline")) "NoReturn")))
-              (? #\{) (<- name (element environment)) (? #\})
+              (<- name (call-syntax-name))
               #\{ (* (<<- arguments (element environment))) #\}
               (? (seq #\{ (* (<<- return-values (element environment))) #\}))))
   (bp:node* (:call-syntax :which :macro :bounds (cons start end))
@@ -311,8 +316,7 @@
 
 (defrule call-syntax-type (environment)
     (bounds (start end)
-      (seq/ws "\\Deftype"
-              (? #\{) (<- name (element environment)) (? #\})
+      (seq/ws "\\Deftype" (<- name (call-syntax-name))
               #\{ (* (<<- elements (element environment))) #\}))
   (bp:node* (:call-syntax :which :type :bounds (cons start end))
     (1 (:name    . 1) name)
@@ -320,8 +324,7 @@
 
 (defrule call-syntax-setf (environment)
     (bounds (start end)
-      (seq/ws "\\Defsetf"
-              (<- name (element environment))
+      (seq/ws "\\Defsetf" (<- name (call-syntax-name))
               #\{ (* (<<- arguments (element environment))) #\}
               #\{ (<- new-value (element environment)) #\}))
   (bp:node* (:call-syntax :which :setf :bounds (cons start end))
