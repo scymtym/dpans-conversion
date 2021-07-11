@@ -30,6 +30,7 @@
                            (when (eq kind :issue)
                              "issues/")
                            filename))
+         (title    (format nil "~@[~A~]~A" (title-prefix transform) title))
          (sidebar-transform (sidebar-transform transform)))
     (with-html-document (stream filename (output-directory transform)
                                 :title       title

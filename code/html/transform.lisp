@@ -6,6 +6,10 @@
                      output-directory-mixin
                      static-files-mixin)
   (;;
+   (%title-prefix      :initarg  :title-prefix
+                       :reader   title-prefix
+                       :initform nil)
+   ;;
    (%sidebar-transform :reader   sidebar-transform
                        :writer   (setf %sidebar-transform))
    ;;

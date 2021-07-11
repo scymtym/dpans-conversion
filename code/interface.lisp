@@ -72,6 +72,7 @@
 (defun to-html (input-directory output-directory
                 &key (dpans-directory  (merge-pathnames "dpANS3/" input-directory))
                      (issues-directory (directory (merge-pathnames #P"*-issues/" input-directory)))
+                     (title-prefix     "Well-specified Common Lisp — ")
                      (use-mathjax      t)
                      (use-sidebar      t))
   (let* ((builder     'list)
