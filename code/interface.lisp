@@ -81,26 +81,30 @@
          (tree        (cached (parse-specification builder dpans-directory issues-directory)))
          ;; Transform
          (transformed (transform::apply-transforms
-                       (list ;; (make-instance 'dpans-conversion.transform::strip-comments)
+                       (list
                         (make-instance 'transform::drop :builder   builder
                                                         :predicate (a:conjoin (transform::kind? :other-command-application)
-                                                                              (transform::initarg? :name (lambda (value)
-                                                                                                           (a:when-let ((primitive (tex:find-primitive value)))
-                                                                                                             (intersection '(:environment :io)
-                                                                                                                           (tex:tags primitive)))))))
+                                                                              (transform::initarg? :name (a:disjoin
+                                                                                                          (lambda (value)
+                                                                                                            (a:when-let ((primitive (tex:find-primitive value)))
+                                                                                                              (intersection '(:environment :io)
+                                                                                                                            (tex:tags primitive))))
+                                                                                                          (lambda (value)
+                                                                                                            (member value '("onecolumn" "twocolumn"
+                                                                                                                            "indextab"
+                                                                                                                            "firstindextab")
+                                                                                                                    :test #'string=))))))
                         (make-instance 'transform::expand-macros :builder           builder
                                                                  :environment       environment
                                                                  :debug-definition? t
                                                                  :debug-expansion   '())
-                        ;; (make-instance 'dpans-conversion.transform::strip-tex-commands)
-                                        ; (make-instance 'dpans-conversion.transform::attach-issue-references)
                         (make-instance 'transform::drop :builder   builder
                                                         :predicate (a:disjoin
                                                                     (a:conjoin (transform::kind? :input)
                                                                                (transform::initarg? :name "setup-for-toc"))
                                                                     (transform::kind? :definition)
                                                                     (transform::kind? :assignment)
-                                                                    (transform::kind? :font)
+                                                                    (transform::kind? :font) ; TODO should be gone at this point
                                                                     (transform::kind? :chardef)
                                                                     (transform::kind? :mathchardef)
                                                                     (transform::kind? :newif)
@@ -116,7 +120,8 @@
                                                                     (a:conjoin (transform::kind? :other-command-application)
                                                                                (transform::initarg? :name (lambda (value)
                                                                                                             (a:when-let ((primitive (tex:find-primitive value)))
-                                                                                                              (member :layout (tex:tags primitive))))))))
+                                                                                                              (intersection '(:font :layout :misc)
+                                                                                                                            (tex:tags primitive))))))))
                         (make-instance 'transform::lower-display-tables :builder builder)
                         (make-instance 'transform::cleanup-math :builder builder)
                         (make-instance 'transform::cleanup-components :builder builder)
@@ -127,6 +132,7 @@
                         (make-instance 'transform::symbol-index :builder builder)
                         (make-instance 'transform::table-index :builder builder)
                         (make-instance 'transform::issue-index :builder builder)
+                        (make-instance 'transform::note-indices :builder builder)
                         (make-instance 'transform::note-output-file :builder builder)
                         (make-instance 'transform::build-references :builder builder)
                                         ; (make-instance 'dpans-conversion.transform::verify)
@@ -137,6 +143,7 @@
                                                       :environment      environment
                                                       :builder          builder
                                                       :output-directory output-directory
+                                                      :title-prefix     title-prefix
                                                       :use-sidebar?     use-sidebar)))
                         #+no (dpans-conversion.html::render-to-file
                          transformed :output environment
