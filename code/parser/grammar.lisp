@@ -24,6 +24,9 @@
 (defrule whitespace/in-line+ ()
   (+ (or #\Space #\Tab)))
 
+(defrule whitespace* ()
+  (* (or #\Space #\Tab #\Newline)))
+
 (defrule comment-line ()
     (bounds (start end)
       (seq #\% (* (<<- content (and (not (end-of-line)) :any))) (end-of-line)))
@@ -235,7 +238,8 @@
             (<- new-environment (:transform (seq)
                                   (env:augmented-environment
                                    environment '((:mode . :traversal)) '(:math))))
-            (* (<<- elements (and (not #\$) (element new-environment))))
+            (* (seq (<<- elements (and (not #\$) (element new-environment)))
+                    (whitespace*))) ; whitespace is not significant in math mode
             #\$))
   (bp:node* (:math :bounds (cons start end))
     (* (:element . *) (nreverse elements))))
@@ -246,7 +250,8 @@
               (<- new-environment (:transform (seq)
                                     (env:augmented-environment
                                      environment '((:mode . :traversal)) '(:math))))
-              (* (<<- elements (and (not #\$) (element new-environment))))
+              (* (seq (<<- elements (and (not #\$) (element new-environment)))
+                      (whitespace*))) ; whitespace is not significant in math mode
               "$$"
               (:transform (seq) nil))) ; HACK
   (bp:node* (:math-display :bounds (cons start end))
