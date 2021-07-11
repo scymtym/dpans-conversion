@@ -75,13 +75,13 @@
          (name              (transform::to-string builder name-node))
          (number-node       (bp:node-relation builder '(:id . 1) node))
          (number            (transform::to-string builder number-node))
-         (id-node           (bp:node-relation builder '(:name3 . 1) node))
-         (id                (transform::to-string builder id-node))
+         #+no (id-node           (bp:node-relation builder '(:name3 . 1) node))
+         #+nod (id                (transform::to-string builder id-node))
          ; (filename          (format nil "chapter-~A.html" number))
          )
     (cxml:with-element "section"
       (cxml:attribute "id" anchor)
-      (h 1 name)
+      (h* 1 "section-title" name) ; TODO does not allow markup in title
       (funcall recurse :relations '(:element)))
     #+no (with-html-document (stream filename (output-directory transform)
                                 :title       (format nil "Chapter ~A: ~A"
@@ -102,16 +102,15 @@
   (let* ((builder   (transform:builder transform))
          (name-node (bp:node-relation builder '(:name . 1) node))
          (name      (transform::evaluate-to-string builder name-node))
-         (id-node   (find-child-of-kind builder :define-section node))
-         (id        (if id-node
+         #+no (id-node   (find-child-of-kind builder :define-section node))
+         #+no (id        (if id-node
                         (node-name id-node)
                         (remove-if (a:rcurry #'member '(#\Space #\Newline))
                                    (node-name node)))))
-    (assert (eq (bp:node-kind builder name-node) :chunk))
     (flet ((do-it ()
              (cxml:with-element "section"
                (cxml:attribute "id" anchor)
-               (h (1+ level) name)
+               (h* (1+ level) "section-title" name)
                (funcall recurse :relations '((:element . *))))))
       (if (find-if (a:rcurry #'a:starts-with-subseq name)
                    '("Note" "Example"))

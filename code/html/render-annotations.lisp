@@ -18,7 +18,7 @@
 (define-render (:editor-note editor content anchor)
   (tooltip "editor-note" "editor-note-tooltip"
            (lambda ()
-             (span "editor" (lambda () (cxml:text editor)))
+             (span "editor" editor)
              (cxml:text ": ")
              (cxml:text content))
            "‣"
@@ -29,7 +29,7 @@
   (tooltip "reviewer-note" "reviewer-note-tooltip"
            (lambda ()
              (when reviewer
-               (span "reviewer" (lambda () (cxml:text reviewer)))
+               (span "reviewer" reviewer)
                (cxml:text ": "))
              (cxml:text content))
            "‣"

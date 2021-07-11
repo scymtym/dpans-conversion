@@ -63,9 +63,6 @@
                (ecase kind
                  ((:dash :reference :issue-reference :proposal :enumeration-list :enumeration-item :line :chunk :paragraph-break)
                   (apply #'transform:transform-node transform recurse relation relation-args node kind relations initargs))
-                 (:possible-reference
-                  (break "should not happen")
-                  (a name (lambda () (cxml:text name))))
                  (:section
                   (unwind-protect
                        (progn

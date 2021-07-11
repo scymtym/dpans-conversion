@@ -18,10 +18,7 @@
   ;; TODO collect runs of bnf-rule
   (let ((builder (transform:builder transform)))
     (cond (*math?*
-           ; (cxml:text "{")
-           (funcall recurse)
-           ; (cxml:text "}")
-           )
+           (funcall recurse))
           ((some (lambda (child)
                    (eq (bp:node-kind builder child) :bnf-rule))
                  (bp:node-relation builder '(:element . *) node))
@@ -51,9 +48,14 @@
                     (funcall recurse)))))
 
 (define-render (:math-display)
-  (math :block (lambda ()
-                 (let ((*math?* t))
-                   (funcall recurse)))))
+  (let* ((builder  (transform:builder transform))
+         (elements (bp:node-relation builder '(:element . *) node)))
+    (if (and (a:length= 1 elements) ; HACK for Credits section on title page
+             (eq (bp:node-kind builder (first elements)) :table))
+        (funcall recurse)
+        (math :block (lambda ()
+                       (let ((*math?* t))
+                         (funcall recurse)))))))
 
 (defmethod transform:transform-node :around
     ((transform transform) recurse relation relation-args node
@@ -63,37 +65,36 @@
          (call-next-method))
         ((a:when-let ((primitive (tex:find-primitive name)))
            (when (member :math (tex:modes primitive))
-             (cond
-               ((typep primitive 'tex::math-symbol)
-                (let ((string (tex::character primitive)))
-                  (cxml:with-element (if (member :relation (tex:tags primitive)) "mo" "mi")
-                    (cxml:text string))))
-               ((string= name "sqrt")
-                (cxml:with-element "msqrt"
-                  (funcall recurse)))
-               ((member :meta-delimiter (tex:tags primitive))
-                (cxml:with-element "mo"
-                  (cxml:attribute "stretchy" "true")
-                  (funcall recurse)))
-               (t
-                (cxml:text (format nil "\\~A" name))
-                (funcall recurse :function  (lambda (recurse relation-args relation node kind relations
-                                                     &rest initargs)
-                                              (cxml:text "{")
-                                              (apply #'transform:transform-node
-                                                     transform recurse relation-args relation node kind relations
-                                                     initargs)
-                                              (cxml:text "}"))
-                                 :relations '((:argument . *)))))
+             (cond ((typep primitive 'tex::math-symbol)
+                    (let ((string (tex::character primitive)))
+                      (cxml:with-element (if (member :relation (tex:tags primitive)) "mo" "mi")
+                        (cxml:text string))))
+                   ((string= name "sqrt")
+                    (cxml:with-element "msqrt"
+                      (funcall recurse)))
+                   ((member :meta-delimiter (tex:tags primitive))
+                    (cxml:with-element "mo"
+                      (cxml:attribute "stretchy" "true")
+                      (funcall recurse)))
+                   (t
+                    (cxml:text (format nil "\\~A" name))
+                    (funcall recurse :function  (lambda (recurse relation-args relation node kind relations
+                                                         &rest initargs)
+                                                  (cxml:text "{")
+                                                  (apply #'transform:transform-node
+                                                         transform recurse relation-args relation node kind relations
+                                                         initargs)
+                                                  (cxml:text "}"))
+                                     :relations '((:argument . *)))))
              t)))
         (t
-         (span "error" (lambda () (cxml:text (let ((*print-level* 2) (*print-circle* t))
-                                               (format nil "unexpanded non-math macro: ~S" node)))))
+         (span "error" (let ((*print-level* 2) (*print-circle* t))
+                         (format nil "unexpanded non-math macro: ~S" node)))
          #+TODO (call-next-method))))
 
 (defmethod transform:transform-node
     ((transform transform) recurse relation relation-args node
      (kind (eql :other-command-application)) relations
      &key name)
-  (span "error" (lambda () (cxml:text (let ((*print-level* 2) (*print-circle* t))
-                                        (format nil "unexpanded macro: ~S" node))))))
+  (span "error" (let ((*print-level* 2) (*print-circle* t))
+                  (format nil "unexpanded macro: ~S" node))))

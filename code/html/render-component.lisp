@@ -2,10 +2,10 @@
 
 (define-render (:ftype)
   (let ((name (node-name node)))
-    (span "ftype" (lambda () (cxml:text name)))))
+    (span "ftype" name)))
 
 (define-render (:none)
-  (span "none" (lambda () (cxml:text "None"))))
+  (span "none" "None"))
 
 (define-render (:part)
   (let ((name (transform::node-name node)))
@@ -21,34 +21,29 @@
           (removable-text #'do-it)
           (do-it)))))
 
-(define-render (:component ftype)
+(define-render (:component)
   (let* ((builder    (transform:builder transform))
          (names      (bp:node-relation builder '(:name . *) node))
-         ; (ftype-tree (bp:node-relation builder '(:ftype . 1) node))
-         ; (ftype      (node-name (transform::find-ancestor-of-kind builder :ftype ftype-tree)))
-         (namespace  (dpans-conversion.transform::namespace<-ftype ftype)))
+         (anchor     (getf (bp:node-initargs builder (first names)) :anchor)))
     (format t "~V@TGenerating component ~{~A~^, ~}~%"
             (* 2 (transform:depth transform))
             (map 'list (a:curry #'transform::evaluate-to-string builder) names))
-    (br)
-    (div "component"
-         (lambda ()
-           (div "header"
-                (lambda ()
-                  (span "left"
-                        (lambda ()
-                          (map nil (lambda (name next-name)
-                                     (multiple-value-bind (name setf?)
-                                         (transform::evaluate-to-string builder name)
-                                       (cxml:with-element "a"
-                                         (cxml:attribute "id" (format nil "~(~A~)-~A"
-                                                                      namespace
-                                                                      name))
-                                         (cxml:text " ")) ; HACK
-                                       (render-name name setf?)
-                                       (when next-name
-                                         (cxml:text ", "))))
-                               names (append (rest names) '(nil)))))
-                  (span "right" (a:curry recurse :relations '((:ftype . 1))))))
-           (funcall recurse :relations '((:element . *)))))
-    (br)))
+    (br) ; TODO
+    (div* "component" anchor
+          (lambda ()
+            (div "header"
+                 (lambda ()
+                   (span "left"
+                         (lambda ()
+                           (map nil (lambda (name next-name)
+                                      (let ((anchor (getf (bp:node-initargs builder name) :anchor)))
+                                        (multiple-value-bind (name setf?)
+                                            (transform::evaluate-to-string builder name)
+                                          (span* "name" anchor
+                                                 (lambda () (render-name name setf?)))
+                                          (when next-name
+                                            (cxml:text ", ")))))
+                                names (append (rest names) '(nil)))))
+                   (span "right" (a:curry recurse :relations '((:ftype . 1))))))
+            (funcall recurse :relations '((:element . *)))))
+    (br))) ; TODO
