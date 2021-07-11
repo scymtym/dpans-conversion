@@ -1,11 +1,18 @@
 (cl:in-package #:dpans-conversion.transform)
 
+;;; `attach-labels' transformation
+;;;
+;;; This transformation traverses the document tree and looks for
+;;; nodes which define labels for other nodes: `:define-figure' nodes
+;;; provide labels for `:table' and `:figure' nodes, `:define-section'
+;;; nodes provide labels for `:section' nodes.
+
 (defclass attach-labels (default-reconstitute-mixin
                          builder-mixin)
   ((%current-figure :accessor current-figure
                     :initform nil)))
 
-;;; Tables labels
+;;; Table labels
 
 (defmethod transform-node ((transform attach-labels) recurse
                            relation relation-args node (kind (eql :define-figure)) relations
@@ -24,7 +31,7 @@
                              relation relation-args node (kind (eql :table)) relations
                              &rest initargs &key)
     (a:if-let ((label (current-figure transform)))
-      (break "should not happen")
+      (break "should not happen") ; TODO remove
       ; (attach-label label transform recurse kind relations initargs)
       (call-next-method)))
 
