@@ -167,7 +167,7 @@
                    ;; Measure new indentation and compute next number
                    (and (seq (indent indent)
                              (<- new-indent (:transform (<- extra (some-indent length))
-                                              (print (+ indent extra)))))
+                                              (+ indent extra))))
                         (seq))
                    (<- next-number (:transform (seq) (1+ number)))
                    ;; Collect lines
