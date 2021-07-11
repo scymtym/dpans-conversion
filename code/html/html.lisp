@@ -53,6 +53,10 @@
     }
   }
 }")))
+            (cxml:with-element "script"
+              (cxml:attribute "src" (namestring
+                                     (merge-pathnames "permalink.js" relative)))
+              (cxml:text " "))
             (when use-sidebar
               (cxml:with-element "script"
                 (cxml:attribute "src" (namestring
@@ -77,11 +81,19 @@
 
 ;;; Element shortcuts
 
+(defun funcall-or-insert-text (string-or-function)
+  (if (stringp string-or-function)
+      (cxml:text string-or-function)
+      (funcall string-or-function)))
+
 (defun class-attribute (class-or-classes)
   (typecase class-or-classes
     (null)
     (cons (cxml:attribute "class" (format nil "~{~A~^ ~}" class-or-classes)))
     (string (cxml:attribute "class" class-or-classes))))
+
+(defun id-attribute (id)
+  (when id (cxml:attribute "id" id)))
 
 (defun nbsp ()
   (cxml:unescaped "&nbsp;"))
@@ -89,45 +101,48 @@
 (defun br ()
   (cxml:with-element "br"))
 
-(defun span (class continuation)
+(defun <> (local-name class id text-or-continuation)
+  (cxml:with-element local-name
+    (class-attribute class)
+    (id-attribute id)
+    (funcall-or-insert-text text-or-continuation)))
+
+(defun span (class text-or-continuation)
   (cxml:with-element "span"
     (class-attribute class)
-    (funcall continuation)))
+    (funcall-or-insert-text text-or-continuation)))
 
-(defun span* (class id continuation)
+(defun span* (class id text-or-continuation)
   (cxml:with-element "span"
     (class-attribute class)
-    (when id (cxml:attribute "id" id))
-    (funcall continuation)))
+    (id-attribute id)
+    (funcall-or-insert-text text-or-continuation)))
 
-(defun div (class continuation)
+(defun div* (class id text-or-continuation)
   (cxml:with-element "div"
     (class-attribute class)
-    (funcall continuation)))
+    (id-attribute id)
+    (funcall-or-insert-text text-or-continuation)))
 
-(defun div* (class id continuation)
-  (cxml:with-element "div"
-    (class-attribute class)
-    (when id (cxml:attribute "id" id))
-    (funcall continuation)))
+(defun div (class text-or-continuation)
+  (div* class nil text-or-continuation))
 
-(defun a (url continuation)
-  (cxml:with-element "a"
-    (cxml:attribute "href" url)
-    (funcall continuation)))
+(defun p* (class id text-or-continuation)
+  (<> "p" class id text-or-continuation))
 
-(defun a* (url class continuation)
+(defun a* (url class title-or-continuation)
   (cxml:with-element "a"
     (class-attribute class)
     (cxml:attribute "href" url)
-    (funcall continuation)))
+    (funcall-or-insert-text title-or-continuation)))
+
+(defun a (url title-or-continuation)
+  (a* url nil title-or-continuation))
 
 (defun h* (level class name-or-continuation)
   (cxml:with-element (coerce (format nil "h~D" level) '(and string (not base-string)))
     (class-attribute class)
-    (if (stringp name-or-continuation)
-        (cxml:text name-or-continuation)
-        (funcall name-or-continuation))))
+    (funcall-or-insert-text name-or-continuation)))
 
 (defun h (level name-or-continuation)
   (h* level nil name-or-continuation))
