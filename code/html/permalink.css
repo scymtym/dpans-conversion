@@ -1,0 +1,20 @@
+.permalink {
+    color: #777;
+    text-decoration: none;
+}
+
+.section-title .permalink {
+    visibility: hidden;
+}
+
+.section-title:hover .permalink {
+    visibility: visible;
+}
+
+.name .permalink {
+    visibility: hidden;
+}
+
+.name:hover .permalink {
+    visibility: visible;
+}

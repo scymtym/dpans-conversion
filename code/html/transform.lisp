@@ -9,13 +9,14 @@
    (%sidebar-transform :reader   sidebar-transform
                        :writer   (setf %sidebar-transform))
    ;;
-   (%static-files      :initform (list #+no (load-time-value
-                                             (a:read-file-into-string
-                                              ))
-                                       (cons #1=#P"style.css"
-                                             (merge-pathnames
-                                              #1# #.(or *compile-file-pathname*
-                                                        *load-pathname*)))))))
+   (%static-files      :initform (let ((base #.(or *compile-file-pathname*
+                                                   *load-pathname*)))
+                                   (list #+no (load-time-value
+                                               (a:read-file-into-string
+                                                ))
+                                         (cons #1=#P"style.css"     (merge-pathnames #1# base))
+                                         (cons #2=#P"permalink.css" (merge-pathnames #2# base))
+                                         (cons #3=#P"permalink.js"  (merge-pathnames #3# base)))))))
 
 (defmethod shared-initialize :after ((instance   transform)
                                      (slot-names t)
