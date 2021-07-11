@@ -756,7 +756,8 @@
             (or (<- node (hbox environment))
                 (<- rhs (name))
                 (seq #\{ (+ (<<- body (and (not (or (skippable) #\})) :any))) #\})
-                (+ (<<- body (and (not (or (skippable) #\} "\\fi")) :any)))))) ; TODO fi is a hack
+                (+ (<<- body (or (escaped-character)
+                                 (and (not (or (skippable) #\} "\\fi")) :any))))))) ; TODO fi is a hack
 
   (let ((name (if (characterp name)
                   (string name)
