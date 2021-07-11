@@ -105,9 +105,9 @@
 
     ;; Font
     (register "fontdimen" 1)
-    (register "font" 1)
+    (register "font" 1) ; TODO aren't we handling this specially?
                                         ; (register "font" :variable)
-    (register "fam" 8)
+    (register "fam" 1)
     (register "textfont" 1) (register "scriptfont" 1) (register "scriptscriptfont" 1)
 
     ;; Tables

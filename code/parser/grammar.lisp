@@ -40,7 +40,7 @@
   (bp:node* (:comment :bounds (cons start end))
     (* (:line . *) (nreverse lines))))
 
-(defrule skippable ()
+(defrule skippable () ; TODO make this inlinable
     (or #\Space #\Tab #\Newline (comment))
   nil)
 
@@ -705,23 +705,20 @@
 
 (defrule argument ()
     (bounds (start end)
-      (or (seq (+ (<<- level #\#))
-               (<- number (:transform (guard digit digit-char-p)
-                                      (digit-char-p digit))))
-          "##")
-      (:transform (seq) nil)) ; HACK work around bug
+      (seq (+ (<<- level #\#))
+           (<- number (:transform (guard digit digit-char-p)
+                        (digit-char-p digit)))))
   (bp:node* (:argument :level  (length level)
                        :number number
                        :bounds (cons start end))))
 
 (defrule parameter ()
     (bounds (start end)
-      (seq (or (seq (+ (<<- level #\#))
-                    (<- number (:transform (guard digit digit-char-p)
-                                           (digit-char-p digit))))
-               "##")
-           (* (<<- delimiter (and (not (or (seq (? (whitespace/in-line+)) #\Newline) #\# #\{)) :any))) ; TODO delimiter cannot be newline, i guess
-           ))
+      (seq (+ (<<- level #\#))
+           (<- number (:transform (guard digit digit-char-p)
+                        (digit-char-p digit)))
+           (* (<<- delimiter (and (not (or (seq (? (whitespace/in-line+)) #\Newline) #\# #\{)) ; TODO delimiter cannot be newline, i guess
+                                  :any)))))
   (let ((delimiter (when delimiter
                      (coerce (nreverse delimiter) 'string))))
     (bp:node* (:argument :level     (length level)
