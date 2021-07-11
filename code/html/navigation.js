@@ -28,5 +28,9 @@ window.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('section[id]').forEach((section) => {
         observer.observe(section);
     });
+    // Track all components that have an `id` applied
+    document.querySelectorAll(".component[id]").forEach((section) => {
+        observer.observe(section);
+    });
 
 });
