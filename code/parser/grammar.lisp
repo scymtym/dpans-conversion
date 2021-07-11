@@ -306,7 +306,7 @@
 
 (defrule include-dictionary (environment)
     (bounds (start end)
-      (seq/ws (seq "\\includeDictionary") #\{
+      (seq/ws "\\includeDictionary" #\{
               (seq (<<- name :any)
                    (* (<<- name (and (not (or (skippable) #\} #\\)) :any))))
               #\}))
@@ -336,38 +336,19 @@
 (define-command ftype
   (1 :name (element environment)))
 
-;; This would not be needed if we could handle expansions better.
-#+no (defrule seesec ()
-    (bounds (start end)
-      (seq "\\" (<- which (or #\s #\S)) "ee" (or "section" "chapter") "\\"
-           (<- name (identifier))))
-  (bp:node* (:block :bounds (cons start end))
-    (* :element (list (bp:node* (:chunk :content (concatenate 'string (string which) "ee ")))
-                      (bp:node* (:secref :bounds (cons start end))
-                        (1 (:name . 1) (bp:node* (:chunk :content name))))))))
-
-#+no (defrule seefig ()
-    (bounds (start end)
-      (seq "\\" (<- which (or #\s #\S)) "ee" "figure" "\\"
-           (<- name (identifier))))
-  (bp:node* (:block :bounds (cons start end))
-    (* :element (list (bp:node* (:chunk :content (concatenate 'string (string which) "ee ")))
-                      (bp:node* (:figref :bounds (cons start end))
-                        (1 (:name . 1) (bp:node* (:chunk :content name))))))))
-
 (defrule secref ()
-  (bounds (start end)
-          (seq "\\secref" (or (seq #\\ (<- name (identifier)))
-                              (<- name (argument)))))
+    (bounds (start end)
+      (seq "\\secref" (or (seq #\\ (<- name (identifier)))
+                          (<- name (argument)))))
   (bp:node* (:secref :bounds (cons start end))
     (1 (:name . 1) (if (stringp name)
                        (bp:node* (:chunk :content name)) ; TODO chunk is a hack
                        name))))
 
 (defrule chapref ()
-  (bounds (start end)
-    (seq "\\chapref" (or (seq #\\ (<- name (identifier)))
-                         (<- name (argument)))))
+    (bounds (start end)
+      (seq "\\chapref" (or (seq #\\ (<- name (identifier)))
+                           (<- name (argument)))))
   (bp:node* (:secref :bounds (cons start end))
     (1 (:name . 1) (if (stringp name)
                        (bp:node* (:chunk :content name))
@@ -571,7 +552,8 @@
 (defrule list-item (environment)
     (bounds (start end)
       (seq/ws (item-keyword)
-              (seq (* (<<- body (and (not (or (seq "\\item" (? "item") #\{)#+was(item-keyword) "\\endlist")) (element environment)))))))
+              (* (<<- body (and (not (or (seq "\\item" (? "item") #\{)#+was(item-keyword) "\\endlist"))
+                                (element environment))))))
   (bp:node* (:list-item :bounds (cons start end))
     (* (:body . *) (nreverse body))))
 
