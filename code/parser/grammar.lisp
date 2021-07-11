@@ -14,6 +14,8 @@
      (check-type ,name-var string)
      ,@body))
 
+(defvar *depth* 0)
+
 ;;; Lexical stuff
 
 (defrule end-of-line ()
@@ -523,14 +525,18 @@
 (defrule section (environment)
     (bounds (start end)
       (seq/ws (seq "\\begin" (<- count (subs)) (or #\s #\S) "ection")
-              #\{ (<- name (chunk)) #\}
-              (* (<<- elements (and (not (seq "\\end" (<- count (subs)) (or #\s #\S) "ection"))
-                                    (element environment))))
-              (seq "\\end" (<- count (subs)) (or #\s #\S) "ection")
-              (:transform (seq) nil)))
+              (or (seq/ws #\{ (* (<<- name (element environment))) #\}
+                          (:transform (seq) (format *trace-output* "~V@T[ section ~A~%" *depth* name) (incf *depth*))
+                          (* (<<- elements (and (not (seq "\\end" (<- count (subs)) (or #\s #\S) "ection"))
+                                                (element environment))))
+                          (seq "\\end" (<- count (subs)) (or #\s #\S) "ection")
+                          (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] section ~A~%" *depth* name))
+                          (:transform (seq) nil))
+                  (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX section ~A~%" *depth* name) (:fail)))))
   (bp:node* (:section :level  (1+ count)
                       :bounds (cons start end))
-    (1 (:name    . 1) name)
+    (1 (:name    . 1) (bp:node* (:splice) ; TODO splice is a hack
+                        (* (:element . *) (nreverse name))))
     (* (:element . *) (nreverse elements))))
 
 (defrule simple-section (environment)
@@ -557,15 +563,23 @@
   (bp:node* (:list-item :bounds (cons start end))
     (* (:body . *) (nreverse body))))
 
-(define-environment (item-list :keyword "list"
-                               :name?   nil
-                               :element (:transform
-                                         (seq (skippable*)
-                                              (<- item (or (issue-annotation environment)
-                                                           (reviewer)
-                                                           (list-item environment)))
-                                              (skippable*))
-                                         item)))
+(defrule item-list (environment)
+    (bounds (start end)
+      (seq/ws "\\beginlist"
+              (:transform (seq) (format *trace-output* "~V@T[ item list~%" *depth*) (incf *depth*))
+              (or (seq/ws
+                   (* (and (not "\\endlist")
+                           (seq (skippable*)
+                                (<<- elements (or (issue-annotation environment)
+                                                  (reviewer)
+                                                  (editor-note)
+                                                  (list-item environment)))
+                                (skippable*))))
+                   (:transform "\\endlist" nil)
+                   (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] item list~%" *depth*)))
+                  (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX item list~%" *depth*) (:fail)))))
+  (bp:node* (:item-list :bounds (cons start end))
+    (* :element (nreverse elements))))
 
 (defrule enumeration-item-keyword ()
   (seq "\\item" (? "item") #\{ (+ (guard digit-char-p)) ".}"))
@@ -573,26 +587,57 @@
 (defrule enumeration-item (environment)
     (bounds (start end)
       (seq/ws (enumeration-item-keyword)
-              (* (<<- body (and (not (or (enumeration-item-keyword) "\\endlist")) (element environment))))))
+              (* (<<- body (and (not (or (seq "\\item" (? "item") #\{)#+was (enumeration-item-keyword) "\\endlist")) (element environment))))))
   (bp:node* (:enumeration-item :bounds (cons start end))
     (* (:body . *) (nreverse body))))
 
-(define-environment (enumeration-list :keyword "list"
-                               :name?   nil
-                               :element (:transform
-                                         (seq (skippable*) (<- item (or (issue-annotation environment) (enumeration-item environment))) (skippable*))
-                                         item)))
+(defrule enumeration-list (environment)
+    (bounds (start end)
+      (seq/ws "\\beginlist"
+              (:transform (seq) (format *trace-output* "~V@T[ enum list~%" *depth*) (incf *depth*))
+              (or (seq/ws (* (and (not "\\endlist")
+                               (seq (skippable*)
+                                    (<<- elements (or (issue-annotation environment)
+                                                      (enumeration-item environment)))
+                                    (skippable*))))
+                       (:transform  "\\endlist" nil)
+                       (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] enum list~%" *depth*)))
+                  (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX enum list~%" *depth*) (:fail)))))
+  (bp:node* (:enumeration-list :bounds (cons start end))
+    (* :element (nreverse elements))))
+#+no (define-environment (enumeration-list :keyword "list"
+                                      :name?   nil
+                                      :element (:transform
+                                                (seq (skippable*) (<- item (or (issue-annotation environment) (enumeration-item environment))) (skippable*))
+                                                item)))
 
 (defrule definition-item (environment)
     (bounds (start end)
-      (seq/ws "\\itemitem" #\{ (* (<<- keys (element environment))) #\}
-              (* (<<- body (and (not (or "\\itemitem" "\\endlist"))
+      (seq/ws (seq "\\item" (? "item")) #\{ (* (<<- keys (element environment))) #\}
+              (* (<<- body (and (not (or (seq "\\item" (? "item") #\{) "\\endlist"))
                                 (element environment))))))
   (bp:node* (:definition-item :bounds (cons start end))
     (* (:key  . *) (nreverse keys))
     (* (:body . *) (nreverse body))))
 
-(define-environment (definition-list :keyword "list"
+(defrule definition-list (environment)
+    (bounds (start end)
+      (seq/ws "\\beginlist"
+              (:transform (seq) (format *trace-output* "~V@T[ definition list~%" *depth*) (incf *depth*))
+              (or (seq/ws (* (and (not "\\endlist")
+                                  (seq (skippable*)
+                                       (<<- elements
+                                            (or (issue-annotation environment)
+                                                (definition-item environment)))
+                                       (skippable*))))
+                          (:transform "\\endlist" nil)
+                          (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] definition list ~D~%" *depth* (length elements))))
+                  (seq (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX definition list~%" *depth*) (:fail))
+                       (:transform (seq) (if (yes-or-no-p) (:fail) (:fatal "rest of list"))))
+                  )))
+  (bp:node* (:definition-list :bounds (cons start end))
+    (* :element (nreverse elements))))
+#+no (define-environment (definition-list :keyword "list"
                                      :name?   nil
                                      :element (:transform
                                                (seq (skippable*) (<- item (or (issue-annotation environment) (definition-item environment))) (skippable*))
@@ -1385,116 +1430,125 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
    (parser.packrat:parse '(font 'nil) "\\Font\\prbeleven = cmbx10 \\sc \\mh")))
 
 (defrule element (environment)
-  (or ;; Lexical stuff
-      (comment)
-      (spacing-command)
-      (verb)
-      (indexed-char)
+  (and ;; Do not allow unpaired \\end* unless within a macro
+       (or (:transform (seq)
+             (unless (env:lookup :definition :traversal environment
+                                             :if-does-not-exist nil)
+               (:fail)))
+           (not (seq "\\" (or "endissue"
+                              "endlist"
+                              (seq "end" (* "sub") "section")
+                              ))))
+       (or ;; Lexical stuff
+           (comment)
+           (spacing-command)
+           (verb)
+           (indexed-char)
 
-      ;; TeX stuff
-      (catcode environment) (chardef environment) (mathchardef environment)
-      (newskip/dimen environment) (ifdim environment)
-      (new environment)
-      ; (skip environment)
-      (countdef environment)
-      (advance environment)
+           ;; TeX stuff
+           (catcode environment) (chardef environment) (mathchardef environment)
+           (newskip/dimen environment) (ifdim environment)
+           (new environment)
+                                        ; (skip environment)
+           (countdef environment)
+           (advance environment)
 
-      (if-case environment)
-      (newif environment) (user-if environment)
+           (if-case environment)
+           (newif environment) (user-if environment)
 
-      (register-assignment environment) (register-reference environment) (register-copy environment)
-      (box-assignment environment)      (box-reference environment)
-      (user-assignment environment)     (user-reference environment)
+           (register-assignment environment) (register-reference environment) (register-copy environment)
+           (box-assignment environment)      (box-reference environment)
+           (user-assignment environment)     (user-reference environment)
 
-      (string* environment)
-      (expandafter environment)
+           (string* environment)
+           (expandafter environment)
 
-      (romannumeral environment)
+           (romannumeral environment)
 
-      (hbox environment)
-      (hrule environment)
-      (font environment)
+           (hbox environment)
+           (hrule environment)
+           (font environment)
 
-      ;; TeX table stuff
-      (halign environment)
-      (settabs environment)
-      (column-separator)    ; TODO only in table or command definition
-      (span)
-      (row-terminator)
+           ;; TeX table stuff
+           (halign environment)
+           (settabs environment)
+           (column-separator) ; TODO only in table or command definition
+           (span)
+           (row-terminator)
 
-      (openout environment)
+           (openout environment)
 
-      ;; Markup
-      #+no (b environment) (bf environment) #+no (bold environment)
-      #+no (i environment) #+no (ital environment) (it environment)
-      (f environment)
-      (tt environment)
-      (rm environment)
+           ;; Markup
+           #+no (b environment) (bf environment) #+no (bold environment)
+                                                 #+no (i environment) #+no (ital environment) (it environment)
+           (f environment)
+           (tt environment)
+           (rm environment)
 
-      (input environment)
-      (include-dictionary environment)
+           (input environment)
+           (include-dictionary environment)
 
-      ;; Semantic
-      (head environment)
-      (head1 environment)
-      (chapter environment)
-      (section environment)
-      (simple-section environment)
-      (define-section)
-      (define-figure)
+           ;; Semantic
+           (head environment)
+           (head1 environment)
+           (chapter environment)
+           (section environment)
+           (simple-section environment)
+           (define-section)
+           (define-figure)
 
-      (item-list environment)
-      (enumeration-list environment)
-      (definition-list environment)
+           (item-list environment)         (list-item environment)
+           (enumeration-list environment)  (enumeration-item environment)
+           (definition-list environment)   (definition-item environment)
 
-      (code)
+           (code)
 
-      (issue-annotation environment)
-      (editor-note)
-      (reviewer)
+           (issue-annotation environment)
+           (editor-note)
+           (reviewer)
 
-      (component-label environment)
-      (none environment)
-      (component environment)
+           (component-label environment)
+           (none environment)
+           (component environment)
 
-      (term environment)
-      (newterm environment)
-      (newtermidx environment)
-      (ftype environment)
+           (term environment)
+           (newterm environment)
+           (newtermidx environment)
+           (ftype environment)
 
-      (reference environment)
+           (reference environment)
 
-      (index environment)
+           (index environment)
 
-      (lambda-list-keyword)
-      (call-syntax environment)
-      (param environment)
-      (kwd environment)
-      (row-terminator* environment)
-      (bnf-rule environment)
+           (lambda-list-keyword)
+           (call-syntax environment)
+           (param environment)
+           (kwd environment)
+           (row-terminator* environment)
+           (bnf-rule environment)
 
-      (dpans-table environment)
+           (dpans-table environment)
 
-      ;; Glossary
-      (gentry environment)
+           ;; Glossary
+           (glossary-list environment) (gentry environment)
 
-      (def environment)
-      (argument)                        ; TODO
-      (let-macro environment)
-      (global-modifier environment) ; TODO should not be needed
-      (user-macro-application environment)
+           (def environment)
+           (argument)                   ; TODO
+           (let-macro environment)
+           (global-modifier environment) ; TODO should not be needed
+           (user-macro-application environment)
 
-      (block* environment)
-      (bracket-group environment)
-      (math-display environment) ; must precede `math-group'
-      (math-group environment)
+           (block* environment)
+           (bracket-group environment)
+           (math-display environment)   ; must precede `math-group'
+           (math-group environment)
 
-      (tilde environment)
-      (mdash)
-      (paragraph-break)
-      (chunk)
+           (tilde environment)
+           (mdash)
+           (paragraph-break)
+           (chunk)
 
-      (skippable+)))
+           (skippable+))))
 
 (defrule document (filename include-depth environment) ; TODO file
     (bounds (start end) (* (<<- elements (element environment))))

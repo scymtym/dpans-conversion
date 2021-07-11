@@ -55,8 +55,11 @@
 (defrule issue-annotation (environment)
     (bounds (start end)
       (seq "\\issue" #\{ (<- (name proposal) (issue-name)) #\} (? #\Newline)
-           (* (<<- elements (and (not "\\endissue") (element environment))))
-           "\\endissue" #\{ (<- (name proposal) (issue-name)) #\} (? #\Newline)))
+           (or (seq (:transform (seq) (format *trace-output* "~V@T[ issue ~A~%" *depth* name) (incf *depth*))
+                    (* (<<- elements (and (not "\\endissue") (element environment))))
+                    "\\endissue" #\{ (<- (name proposal) (issue-name)) #\} (? #\Newline)
+                    (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] issue ~A~%" *depth* name)))
+               (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX issue ~A~%" *depth* name) (:fail)))))
   (bp:node* (:issue-annotation :name     name
                                :proposal proposal
                                :bounds   (cons start end))
