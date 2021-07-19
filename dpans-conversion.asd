@@ -114,3 +114,26 @@
                 :serial     t
                 :components ((:file       "package")
                              (:file       "interface")))))
+
+(defsystem "dpans-conversion/commandline-interface"
+  :depends-on ("alexandria"
+               "uiop"
+
+               "configuration.options"
+
+               "dpans-conversion")
+
+  :components ((:module     "commandline-interface"
+                :pathname   "code/commandline-interface"
+                :serial     t
+                :components ((:file "package")
+                             (:file "schema")
+                             (:file "main"))))
+
+  :build-operation asdf:program-op
+  :build-pathname  "dpans-converter"
+  :entry-point     "dpans-conversion.commandline-interface:main"
+
+  :perform (image-op (operation component)
+             (uiop:dump-image (asdf:output-file operation component)
+                              :executable t :compression t)))
