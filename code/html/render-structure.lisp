@@ -46,21 +46,7 @@
                                                 :output-directory (output-directory transform))))))))
 
 (define-render (:file filename include-depth)
-  (funcall recurse)
-  #+no (if (zerop include-depth)
-      (let* ((builder           (transform:builder transform))
-             (title-node        (find-child-of-kind builder :title node))
-             (title             (transform::to-string builder title-node))
-             (sidebar-transform (sidebar-transform transform)))
-        (with-html-document (stream "chap-0.html" (output-directory transform)
-                                    :title       title
-                                    :use-mathjax t ; use-mathjax
-                                    :use-sidebar (when sidebar-transform t))
-          (when sidebar-transform
-            (transform:apply-transform sidebar-transform node))
-          (div "content" recurse)))
-      (with-simple-restart (continue "Skip included file ~S" filename)
-        (funcall recurse))))
+  (funcall recurse))
 
 (define-render (:title)
   (h* 1 "title" recurse))
