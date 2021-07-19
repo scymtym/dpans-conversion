@@ -67,8 +67,6 @@
                       relations))))))
     (bp:walk-nodes builder #'visit body)))
 
-(defvar *math?* nil) ; TODO hack
-
 (defun render-name (name setf?)
   (when setf?
     (cxml:text "(setf")

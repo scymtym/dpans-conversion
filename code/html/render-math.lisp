@@ -2,6 +2,8 @@
 
 (cl:in-package #:dpans-conversion.html)
 
+(defvar *math?* nil) ; TODO hack
+
 (define-render (:splice) ; TODO remove after expansion?
   (funcall recurse))
 
@@ -57,6 +59,45 @@
                        (let ((*math?* t))
                          (funcall recurse)))))))
 
+(defmethod transform:transform-node
+    ((transform transform) recurse relation relation-args node
+     (kind (eql :over)) relations
+     &key)
+  (unless *math?* (error "Only valid in math mode"))
+  (cxml:with-element "mover"
+    (funcall recurse :relations '((:left  . *)))
+    (funcall recurse :relations '((:right . *)))))
+
+(defmethod transform:transform-node
+    ((transform transform) recurse relation relation-args node
+     (kind (eql :subscript)) relations
+     &key)
+  (cond (*math?*
+         (cxml:with-element "msub"
+           (cxml:with-element "mrow"
+             (funcall recurse :relations '((:left  . *))))
+           (cxml:with-element "mo"
+             (funcall recurse :relations '((:right . *))))))
+        (t
+         (funcall recurse :relations '((:left  . *)))
+         (cxml:with-element "sub"
+           (funcall recurse :relations '((:right . *)))))))
+
+(defmethod transform:transform-node
+    ((transform transform) recurse relation relation-args node
+     (kind (eql :superscript)) relations
+     &key)
+  (cond (*math?*
+         (cxml:with-element "msup"
+           (cxml:with-element "mrow"
+             (funcall recurse :relations '((:left  . *))))
+           (cxml:with-element "mo"
+             (funcall recurse :relations '((:right . *))))))
+        (t
+         (funcall recurse :relations '((:left  . *)))
+         (cxml:with-element "sup"
+           (funcall recurse :relations '((:right . *)))))))
+
 (defmethod transform:transform-node :around
     ((transform transform) recurse relation relation-args node
      (kind (eql :other-command-application)) relations
@@ -72,6 +113,12 @@
                    ((string= name "sqrt")
                     (cxml:with-element "msqrt"
                       (funcall recurse)))
+                   ((string= name "underline")
+                    (cxml:with-element "span"
+                      (cxml:attribute "style" "text-decoration: underline;")
+                      (funcall recurse)))
+                   ((string= name "buildrel")
+                    (funcall recurse))
                    ((member :meta-delimiter (tex:tags primitive))
                     (cxml:with-element "mo"
                       (cxml:attribute "stretchy" "true")
