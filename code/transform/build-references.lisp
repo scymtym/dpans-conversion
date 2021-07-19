@@ -1,5 +1,16 @@
 (cl:in-package #:dpans-conversion.transform)
 
+(defun namespace<-index-namespace (index-namespace)
+  (ecase index-namespace
+    (:symbol              :symbol)
+    (:lambda-list-keyword :lambda-list-keyword)
+    (:code                :index/code)
+    (:keyword             :keyword)
+    (:text                :index/text)
+    (:term                :index/term)
+    (:constant            :index/constant)
+    (:package             :package)))
+
 ;;; `build-references' transform
 ;;;
 ;;; This transform operates in two stages
@@ -208,9 +219,16 @@
                         &rest initargs &key name issue-name)
   (let ((key (cons (string-downcase issue-name)
                    (string-downcase name))))
-    (format t "recording proposal ~S~%" key)
     (record-and-reconstitute
      transform recurse kind relations initargs key :issue)))
+
+(defmethod record-node ((transform build-references) recurse
+                        relation relation-args node (kind (eql :index)) relations
+                        &rest initargs &key namespace)
+  (let ((namespace (namespace<-index-namespace namespace))
+        (name      (string-downcase (node-name node))))
+    (record-and-reconstitute
+     transform recurse kind relations initargs name namespace)))
 
 ;;; Link stage
 
@@ -280,11 +298,12 @@
   (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :reference)) relations
                         &rest initargs &key name namespace)
-    (%link node name namespace transform
-           (lambda (builder &rest extra-initargs)
-             (apply #'reconstitute builder recurse kind relations
-                    (append extra-initargs
-                            (a:remove-from-plist initargs :name :namespace))))))
+    (let ((name (or name (node-name node)))) ; TODO either initarg or relation
+      (%link node name namespace transform
+             (lambda (builder &rest extra-initargs)
+               (apply #'reconstitute builder recurse kind relations
+                      (append extra-initargs
+                              (a:remove-from-plist initargs :name :namespace)))))))
 
   (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :secref)) relations
@@ -339,7 +358,7 @@
   (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :term)) relations
                         &key)
-    (link node (node-name node) :glossary transform))
+    (link node (node-name* node) :glossary transform))
 
   (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :issue-reference)) relations
@@ -383,20 +402,25 @@
                               namespaces)))
       (cond (match
              (destructuring-bind (namespace . target) match
-               (apply #'bp:make+finish-node builder :reference
-                      :namespace namespace
+               (apply #'reconstitute builder recurse :reference relations
                       :name      name*
+                      :namespace namespace
                       :target    target
-                      (a:remove-from-plist initargs :name))))
+                      (a:remove-from-plist initargs :name :namespace))
+               #+no (apply #'bp:make+finish-node builder :reference
+                           :name      name*
+                           :namespace namespace
+                           :target    target
+                           (a:remove-from-plist initargs :name :namespace))))
             (must-resolve?
              (let ((namespace (typecase namespace
                                 (null "?")
                                 (cons (first namespace))
                                 (t    namespace))))
                (apply #'reconstitute builder recurse :reference relations
-                                                     :namespace namespace
-                                                     :target    nil
-                                                     initargs)))
+                      :namespace namespace
+                      :target    nil
+                      (a:remove-from-plist initargs :nanespace))))
             (t
              (bp:node (builder :chunk :content name))))))
 
