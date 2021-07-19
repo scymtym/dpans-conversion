@@ -13,6 +13,8 @@
 
                "eclector.examples.highlight" ; for listings
 
+               "text.source-location.print" ; error reports and debugging
+
                "cxml") ; html output
 
   :components ((:module     "base"
