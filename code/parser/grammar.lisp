@@ -8,13 +8,16 @@
 
 ;;; Utilities
 
+(defun mode (environment)
+  (env:lookup :mode :traversal environment :if-does-not-exist :normal))
+
 (defmacro with-name-string ((name-var name-node) &body body)
   (check-type name-var symbol)
   `(let ((,name-var (getf (bp:node-initargs* ,name-node) :content)))
      (check-type ,name-var string)
      ,@body))
 
-(defvar *depth* 0)
+#+dpans-debug (defvar *depth* 0)
 
 ;;; Lexical stuff
 
@@ -103,9 +106,10 @@
                    :bounds (cons start end))))
 
 (defrule escaped-character ()
-    (seq #\\ (<- character (or #\\ #\@ #\= #\Space #\' #\[ #\]
-                               #\Newline ; not sure about newline
-                               #\% #\# #\_ #\{ #\} #\& #\$ #\. #\^ #\")))
+    (seq #\\ (or (seq #\\ (<- character #\_))
+                 (<- character (or #\\ #\@ #\= #\Space #\' #\[ #\]
+                                   #\Newline ; not sure about newline
+                                   #\% #\# #\_ #\{ #\} #\& #\$ #\. #\^ #\"))))
   character)
 
 (defrule indexed-char ()
@@ -113,12 +117,17 @@
   (let ((code (parse-integer (coerce (nreverse id) 'string) :radix 8)))
     (bp:node* (:chunk :content (string (code-char code))))))
 
-(defrule chunk ()
+(defrule chunk (environment)
     (+ (<<- characters (or (escaped-character)
                            (and (not (or #\{ #\} #\\ #\% #\& #\$ #\~ ; #\.
                                          (seq (+ #\#) (+ (guard digit digit-char-p))) ; argument
                                          (mdash)
-                                         (paragraph-break))) ; TODO make non-result version
+                                         (paragraph-break)
+                                         ;; Allow ^ and _ in normal mode
+                                         (:transform (or #\^ #\_)
+                                           (when (eq (mode environment) :normal)
+                                             (:fail)))
+                                         )) ; TODO make non-result version
                                 :any))))
   (bp:node* (:chunk :content (coerce (nreverse (remove nil characters)) 'string))))
 
@@ -331,14 +340,14 @@
              (1 (:element . *) ))))))
 
 (define-command term
-  (1 :name (chunk)))
+  (1* :name (element environment)))
 
 (define-command newterm
-  (1 :name (chunk)))
+  (1 :name (chunk environment)))
 
 (define-command newtermidx
-  (1 :name (chunk))
-  (1 :term (chunk)))
+  (1 :name (chunk environment))
+  (1 :term (chunk environment)))
 
 (define-command ftype
   (1 :name (element environment)))
@@ -361,18 +370,20 @@
                        (bp:node* (:chunk :content name))
                        name))))
 
-(define-command keyref ; lambda list keyword reference
+#+no (define-command keyref ; lambda list keyword reference
   (1 :name (element environment)))
 
-#+later (defrule simple-reference ()
+(defrule simple-reference (environment)
     (bounds (start end)
-      (seq/ws (seq "\\" (<- namespace (or (:transform "type" :typef)
-                                          (:transform "decl" :declaration)
-                                          (:transform "spec" :special-operator)
-                                          (:transform "fun"  :function)
-                                          (:transform "mac"  :macro)
-                                          (:transform "var"  :variable)
-                                          (:transform "con"  :constant)))
+      (seq/ws (seq "\\" (<- namespace (or ; (:transform "type" :typef)
+                                          ; (:transform "decl" :declaration)
+                                          ; (:transform "spec" :special-operator)
+                                          ; (:transform "fun"  :function)
+                                          ; (:transform "mac"  :macro)
+                                          ; (:transform "var"  :variable)
+                                          ; (:transform "con"  :constant)
+                                          (:transform "key"  :lambda-list-keyword)
+                                          (:transform "pack" :package)))
                    "ref")
               #\{ (<- name (element environment)) #\}))
   (bp:node* (:reference :namespace namespace
@@ -418,7 +429,6 @@
 (defrule reference (environment)
   (or (chapref)
       (secref)
-      (keyref environment)
       (typeref environment)
       (declref environment)
       (specref environment)
@@ -429,22 +439,22 @@
       (figref environment)
       (miscref environment)))
 
-#+later (defrule simple-index (environment)
+(defrule simple-index (environment)
     (bounds (start end)
       (seq/ws (seq "\\idx" (<- namespace (or (:transform "ref"     :symbol)
                                              (:transform "keyref"  :lambda-list-keyword)
-                                             (:transform "code"    :?)
+                                             (:transform "code"    :code)
                                              (:transform "kwd"     :keyword)
-                                             (:transform "text"    :?)
-                                             (:transform "term"    :?)
+                                             (:transform "text"    :text)
+                                             (:transform "term"    :term)
                                              (:transform "example" :constant)
-                                             (:transform "packref" :?))))
+                                             (:transform "packref" :package))))
               #\{ (<- name (element environment)) #\}))
   (bp:node* (:index :namespace namespace
                     :bounds    (cons start end))
     (1 (:name . 1) name)))
 
-(macrolet
+#+no (macrolet
     ((define ()
        (let ((rules '()))
          (flet ((one-index (keyword
@@ -457,7 +467,7 @@
                        (bounds (start end)
                          (seq ,string
                               (skippable*) #\{ (<- name (element environment)) (skippable*) #\}))
-                       (bp:node* (:index :which  ,which :bounds (cons start end))
+                       (bp:node* (:index :which ,which :bounds (cons start end))
                          (1 (:name . 1) name))))))
            `(progn
               ,@(map 'list #'one-index '(#:ref #:keyref #:code #:kwd
@@ -488,7 +498,7 @@
         (a:ensure-list name-and-options)
       `(defrule ,name ( environment)
            (bounds (start end)
-             (seq ,start-string ,@(when name? '(#\{ (<- name (chunk)) #\}))
+             (seq ,start-string ,@(when name? '(#\{ (<- name (chunk environment)) #\}))
                   (skippable*)
                   (* (<<- elements (and (not ,end-string)
                                         ,element)))
@@ -501,10 +511,10 @@
 (defrule chapter (environment)
     (bounds (start end)
       (seq (seq "\\" "begin" (or #\c #\C) "hapter")
-           #\{ (<- id (chunk)) #\}
-           #\{ (<- name (chunk)) #\}
-           #\{ (<- name2 (chunk)) #\}
-           #\{ (<- name3 (chunk)) #\}
+           #\{ (<- id (chunk environment)) #\}
+           #\{ (<- name (chunk environment)) #\}
+           #\{ (<- name2 (chunk environment)) #\}
+           #\{ (<- name3 (chunk environment)) #\}
            (skippable*)
            (* (<<- elements
                    (and (not (seq "\\" "end" (or #\c #\C) "hapter")) (element environment))))
@@ -531,13 +541,14 @@
     (bounds (start end)
       (seq/ws (seq "\\begin" (<- count (subs)) (or #\s #\S) "ection")
               (or (seq/ws #\{ (* (<<- name (element environment))) #\}
-                          (:transform (seq) (format *trace-output* "~V@T[ section ~A~%" *depth* name) (incf *depth*))
+                          #+dpans-debug (:transform (seq) (format *trace-output* "~V@T[ section ~A~%" *depth* name) (incf *depth*))
                           (* (<<- elements (and (not (seq "\\end" (<- count (subs)) (or #\s #\S) "ection"))
                                                 (element environment))))
                           (seq "\\end" (<- count (subs)) (or #\s #\S) "ection")
-                          (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] section ~A~%" *depth* name))
+                          #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] section ~A~%" *depth* name))
                           (:transform (seq) nil))
-                  (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX section ~A~%" *depth* name) (:fail)))))
+                  #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX section ~A~%" *depth* name) (:fail))
+                  #-dpans-debug (:transform (seq) (:fail)))))
   (bp:node* (:section :level  (1+ count)
                       :bounds (cons start end))
     (1 (:name    . 1) (bp:node* (:splice) ; TODO splice is a hack
@@ -547,7 +558,7 @@
 (defrule simple-section (environment)
     (bounds (start end)
       (seq/ws (seq "\\beginSimpleChapter" (? "Left"))
-              #\{ (<- name (chunk)) #\}
+              #\{ (<- name (chunk environment)) #\}
               (* (<<- elements (and (not "\\endSimpleChapter")
                                     (element environment))))
               "\\endSimpleChapter"
@@ -571,7 +582,7 @@
 (defrule item-list (environment)
     (bounds (start end)
       (seq/ws "\\beginlist"
-              (:transform (seq) (format *trace-output* "~V@T[ item list~%" *depth*) (incf *depth*))
+              #+dpans-debug (:transform (seq) (format *trace-output* "~V@T[ item list~%" *depth*) (incf *depth*))
               (or (seq/ws
                    (* (and (not "\\endlist")
                            (seq (skippable*)
@@ -581,8 +592,9 @@
                                                   (list-item environment)))
                                 (skippable*))))
                    (:transform "\\endlist" nil)
-                   (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] item list~%" *depth*)))
-                  (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX item list~%" *depth*) (:fail)))))
+                   #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] item list~%" *depth*)))
+                  #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX item list~%" *depth*) (:fail))
+                  #-dpans-debug (:transform (seq) (:fail)))))
   (bp:node* (:item-list :bounds (cons start end))
     (* :element (nreverse elements))))
 
@@ -599,15 +611,16 @@
 (defrule enumeration-list (environment)
     (bounds (start end)
       (seq/ws "\\beginlist"
-              (:transform (seq) (format *trace-output* "~V@T[ enum list~%" *depth*) (incf *depth*))
+              #+dpans-debug (:transform (seq) (format *trace-output* "~V@T[ enum list~%" *depth*) (incf *depth*))
               (or (seq/ws (* (and (not "\\endlist")
                                (seq (skippable*)
                                     (<<- elements (or (issue-annotation environment)
                                                       (enumeration-item environment)))
                                     (skippable*))))
                        (:transform  "\\endlist" nil)
-                       (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] enum list~%" *depth*)))
-                  (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX enum list~%" *depth*) (:fail)))))
+                       #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] enum list~%" *depth*)))
+                  #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX enum list~%" *depth*) (:fail))
+                  #-dpans-debug (:transform (seq) (:fail)))))
   (bp:node* (:enumeration-list :bounds (cons start end))
     (* :element (nreverse elements))))
 #+no (define-environment (enumeration-list :keyword "list"
@@ -628,7 +641,7 @@
 (defrule definition-list (environment)
     (bounds (start end)
       (seq/ws "\\beginlist"
-              (:transform (seq) (format *trace-output* "~V@T[ definition list~%" *depth*) (incf *depth*))
+              #+dpans-debug (:transform (seq) (format *trace-output* "~V@T[ definition list~%" *depth*) (incf *depth*))
               (or (seq/ws (* (and (not "\\endlist")
                                   (seq (skippable*)
                                        (<<- elements
@@ -636,10 +649,9 @@
                                                 (definition-item environment)))
                                        (skippable*))))
                           (:transform "\\endlist" nil)
-                          (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] definition list ~D~%" *depth* (length elements))))
-                  (seq (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX definition list~%" *depth*) (:fail))
-                       (:transform (seq) (if (yes-or-no-p) (:fail) (:fatal "rest of list"))))
-                  )))
+                          #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] definition list ~D~%" *depth* (length elements))))
+                  #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX definition list~%" *depth*) (:fail))
+                  #-dpans-debug (:transform (seq) (:fail)))))
   (bp:node* (:definition-list :bounds (cons start end))
     (* :element (nreverse elements))))
 #+no (define-environment (definition-list :keyword "list"
@@ -648,15 +660,15 @@
                                                (seq (skippable*) (<- item (or (issue-annotation environment) (definition-item environment))) (skippable*))
                                                item)))
 
-(defrule define-section ()
+(defrule define-section (environment)
     (bounds (start end)
-      (seq "\\DefineSection" #\{ (<- name (chunk)) #\}))
+      (seq "\\DefineSection" #\{ (<- name (chunk environment)) #\}))
   (bp:node* (:define-section :bounds (cons start end))
     (1 (:name . 1) name)))
 
-(defrule define-figure ()
+(defrule define-figure (environment)
     (bounds (start end)
-      (seq "\\DefineFigure" #\{ (<- name (chunk)) #\}))
+      (seq "\\DefineFigure" #\{ (<- name (chunk environment)) #\}))
   (bp:node* (:define-figure :bounds (cons start end))
     (1 (:name . 1) name)))
 
@@ -804,6 +816,9 @@
     (when spec
       (values (typecase spec
                 (integer (make-list spec :initial-element 't))
+                ((cons (eql :definition))
+                 (let ((arity (length (bp:node-relation 'list '(:argument . *) spec)))) ; TODO use only one format
+                   (make-list arity :initial-element 't)))
                 (list    (first spec)))
               t))))
 
@@ -1157,7 +1172,7 @@
       (seq/ws "\\advance" (<- name (or (register-reference environment)
                                        (defined-variable environment)))
               (? "by") (<- amount (or (numeric-expression environment)
-                                      (chunk))))) ; TODO numeric-expression
+                                      (chunk environment))))) ; TODO numeric-expression
   (bp:node* (:advance :bounds (cons start end))
     (1 (:variable . 1) name)
     (1 (:amount   . 1) amount)))
@@ -1219,7 +1234,7 @@
                               ; (defined-variable environment)
                               (user-macro-application environment)
                               (hbox environment)
-                              (chunk)))))
+                              (chunk environment)))))
   (bp:node* (:assignment :global? global?)
     (1 (:variable . 1) variable)
     (1 (:value    . 1) value)))
@@ -1257,7 +1272,7 @@
       (defined-variable environment)))
 
 (defrule register-assignment (environment)
-  (seq/ws (seq "\\" (or "count" "skip")) (<- name (name)) #\= (<- value (chunk))))
+  (seq/ws (seq "\\" (or "count" "skip")) (<- name (name)) #\= (<- value (chunk environment))))
 
 (defrule register-reference (environment)
   (seq/ws (seq "\\" (or "ht" "dp" "box" "dimen")) (register-number environment)))
@@ -1481,6 +1496,9 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
 
            (openout environment)
 
+           ;; TeX math
+           (math-operators environment)
+
            ;; Markup
            #+no (b environment) (bf environment) #+no (bold environment)
                                                  #+no (i environment) #+no (ital environment) (it environment)
@@ -1497,8 +1515,8 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
            (chapter environment)
            (section environment)
            (simple-section environment)
-           (define-section)
-           (define-figure)
+           (define-section environment)
+           (define-figure environment)
 
            (item-list environment)         (list-item environment)
            (enumeration-list environment)  (enumeration-item environment)
@@ -1520,8 +1538,11 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
            (ftype environment)
 
            (reference environment)
+           (simple-reference environment)
 
-           (index environment)
+
+           ;; (index environment)
+           (simple-index environment)
 
            (lambda-list-keyword)
            (call-syntax environment)
@@ -1549,9 +1570,13 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
            (tilde environment)
            (mdash)
            (paragraph-break)
-           (chunk)
+           (chunk environment)
 
            (skippable+))))
+
+(defrule elements (environment)
+    (* (<<- elements (element environment)))
+  (nreverse elements))
 
 (defrule document (filename include-depth environment) ; TODO file
     (bounds (start end) (* (<<- elements (element environment))))

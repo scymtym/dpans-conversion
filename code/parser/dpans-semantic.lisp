@@ -15,7 +15,9 @@
            (<<- content (and (not #\}) :any))))
   (with-output-to-string (stream)
     (map nil (lambda (fragment)
-               (princ fragment stream))
+               (etypecase fragment
+                 (character (write-char fragment stream))
+                 (string    (write-string fragment stream))))
          (a:flatten (nreverse content)))))
 
 (defrule person ()
@@ -55,11 +57,12 @@
 (defrule issue-annotation (environment)
     (bounds (start end)
       (seq "\\issue" #\{ (<- (name proposal) (issue-name)) #\} (? #\Newline)
-           (or (seq (:transform (seq) (format *trace-output* "~V@T[ issue ~A~%" *depth* name) (incf *depth*))
+           (or (seq #+dpans-debug (:transform (seq) (format *trace-output* "~V@T[ issue ~A~%" *depth* name) (incf *depth*))
                     (* (<<- elements (and (not "\\endissue") (element environment))))
                     "\\endissue" #\{ (<- (name proposal) (issue-name)) #\} (? #\Newline)
-                    (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] issue ~A~%" *depth* name)))
-               (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX issue ~A~%" *depth* name) (:fail)))))
+                    #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] issue ~A~%" *depth* name)))
+               #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX issue ~A~%" *depth* name) (:fail))
+               #-dpans-debug (:transform (seq) (:fail)))))
   (bp:node* (:issue-annotation :name     name
                                :proposal proposal
                                :bounds   (cons start end))
@@ -126,8 +129,8 @@
   (define))
 
 (defrule call-syntax-name ()
-    (must (or (seq/ws #\{ (<- name (component-name)) #\})
-              (<- name (component-name)))
+    (must (or (seq/ws #\{ (<- name (or (argument) (component-name))) #\}) ; TODO handle this better
+              (<- name (or (argument) (component-name))))
           "must be a name, optionally within curly braces")
   name)
 
@@ -139,7 +142,7 @@
               (? (seq/ws #\{ (* (seq (skippable*) (<<- return-values (element environment)))) #\}))))
   (bp:node* (:call-syntax :which :special-operator :bounds (cons start end))
     (1 (:name         . 1) name)
-    (* (:argument     . *) arguments)
+    (* (:argument     . *) (nreverse arguments))
     (* (:return-value . *) return-values)))
 
 (defrule call-syntax-defun (environment)
@@ -372,7 +375,7 @@
 (defrule bnf-rule (environment)
     (bounds (start end)
       (seq/ws "\\auxbnf"
-               #\{ (<- name (chunk)) #\}
+               #\{ (<- name (chunk environment)) #\}
                #\{
                (and (<- new-environment (:transform (seq)
                                           (env:augmented-environment
@@ -438,7 +441,7 @@
 
 (defrule gentry (environment)
     (bounds (start end)
-      (seq/ws "\\gentry" #\{ (<- name (chunk)) #\}
+      (seq/ws "\\gentry" #\{ (<- name (chunk environment)) #\}
               (<- body (glossary-entry-body environment))))
   (bp:node* (:gentry :bounds (cons start end))
     (1 (:name . 1) name)
@@ -446,7 +449,7 @@
 
 (defrule glossary-section (environment)
     (bounds (start end)
-      (seq (seq #\\ (? "first") "indextab") #\{ (<- name (chunk)) #\}
+      (seq (seq #\\ (? "first") "indextab") #\{ (<- name (chunk environment)) #\}
            (* (or (skippable+)
                   (<<- entries (or (issue-annotation environment)
                                    (editor-note)
