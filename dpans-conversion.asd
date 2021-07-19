@@ -39,6 +39,7 @@
                              (:file       "meta-grammar")
                              ;; TeX sources
                              (:file       "grammar")
+                             (:file       "tex-math")
                              (:file       "tex-tables")
 
                              (:file       "dpans-tables")
