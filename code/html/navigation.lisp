@@ -5,13 +5,12 @@
 (defclass navigation-sidebar (transform:builder-mixin
                               output-directory-mixin
                               static-files-mixin)
-  ((%static-files :initform (let ((base #.(or *compile-file-pathname*
-                                              *load-pathname*)))
-                              (list #+no (load-time-value
-                                          (a:read-file-into-string
-                                           ))
-                                    (cons #1=#P"navigation.js"  (merge-pathnames #1# base))
-                                    (cons #2=#P"navigation.css" (merge-pathnames #2# base)))))
+  ((%static-files :initform (load-time-value
+                             (collect-static-files
+                              '("navigation.js"
+                                "navigation.css")
+                              #.(or *compile-file-pathname*
+                                    *load-pathname*))))
    ;; State
    (%index-files  :accessor index-files
                   :initform nil)
