@@ -55,7 +55,6 @@
                             (t
                              nil))))
     (when (and status-node (not status)) (break "~A" node))
-    (print (list passed? status))
     (setf (proposal transform) proposal)
     (unwind-protect
          (apply #'reconstitute builder recurse kind relations

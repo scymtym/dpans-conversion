@@ -88,16 +88,3 @@
            (new-elements (append elements (list symbol-index))))
       (bp:node (builder :collection)    ; TODO use reconstitute
         (* (:element . *) new-elements)))))
-
-#+table (bp:node (builder :table)
-  (* (:row . *) (map 'list (lambda (name-and-nodes)
-                             (destructuring-bind (name . nodes) name-and-nodes
-                               (bp:node (builder :row)
-                                 (* (:cell . *) (map 'list (lambda (namespace)
-                                                             (bp:node (builder :cell)
-                                                               (1 (:body . *) (a:if-let ((node (getf nodes namespace)))
-                                                                                (bp:node (builder :reference :name name
-                                                                                                             :namespace namespace) )
-                                                                                (bp:node (builder :chunk :content ""))))))
-                                                     namespaces)))))
-                     rows)))
