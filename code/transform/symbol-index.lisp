@@ -25,10 +25,22 @@
          name-nodes))
   (call-next-method))
 
+(defmethod transform-node ((transform symbol-index)
+                           recurse relation relation-args node (kind (eql :index)) relations
+                           &key namespace)
+  (let* ((builder   (builder transform))
+         (table     (table transform))
+         (name-node (or (bp:node-relation builder '(:title . 1) node)
+                        (bp:node-relation builder '(:name . 1) node)))
+         (name      (string-downcase (to-string builder node))))
+    (when (member namespace '(:symbol :keyword :package :lambda-list-keyword))
+      (setf (getf (gethash name table) namespace) name-node)))
+  (call-next-method))
+
 ;;; Index generation
 
 (defun symbol-bindings (builder name nodes)
-  (let ((namespaces (namespaces **meta-environment**)))
+  (let ((namespaces (namespaces **reference-meta-environment**)))
     (loop :with first? = t
           :for namespace :in namespaces
           :for node = (getf nodes namespace)
