@@ -14,6 +14,12 @@ body {
 
 a {
     color: #444;
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+    text-decoration-style: dashed;
 }
 
 .title {
@@ -49,8 +55,8 @@ main {
 }
 
 .content {
-    width: 50em;
-    max-width: 70vw;
+    width: 60em;
+    max-width: 80vw;
     margin-left: 5vw;
 }
 
@@ -114,6 +120,11 @@ table {
 .section-reference {
 }
 
+.package-reference {
+    color: darkolivegreen;
+    font-family: mono;
+}
+
 .lambda-list-keyword-reference {
     color: brown;
     font-family: mono;
@@ -147,6 +158,15 @@ table {
 .variable-reference {
     color: darkred;
     font-family: mono;
+}
+
+.constant-reference {
+    color: brown;
+    font-family: mono;
+}
+
+.issue-reference, .proposal-reference {
+    font-weight: bold;
 }
 
 .parameter {
@@ -209,7 +229,8 @@ div.component {
 /* Removable text -- not formally part of the standard */
 
 .removable-text {
-    color: #777;
+    opacity: .7;
+    /* color: #777; */
 
     border-color: #aaa;
     border-left-style: dashed;
@@ -223,6 +244,7 @@ div.component {
 .removable-text .removable-text-tooltip {
     visibility: hidden;
 
+    opacity: 1;
     color: #444;
     background: #aaa;
     border-style: solid;
