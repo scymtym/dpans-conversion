@@ -47,6 +47,11 @@
          (name    (bp:node-relation builder '(:name . 1) node)))
     (to-string builder name)))
 
+(defun node-name* (node)
+  (let* ((builder 'list)
+         (name    (bp:node-relation builder '(:name . *) node)))
+    (apply #'to-string builder name)))
+
 (defun namespace<-ftype (ftype)
   (a:eswitch (ftype :test #'string=)
     ("Symbol"                    :symbol)

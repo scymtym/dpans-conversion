@@ -58,7 +58,16 @@
       (register-namespace :reviewer-note      'env::equal-namespace)
 
       (register-namespace :issue              'env::equal-namespace)
-      (register-namespace :proposal           'env::equal-namespace))
+      (register-namespace :proposal           'env::equal-namespace)
+
+      ; (register-namespace :index/symbol       'env::equal-namespace)
+      (register-namespace :lambda-list-keyword 'env::equal-namespace)
+      (register-namespace :index/code         'env::equal-namespace)
+      (register-namespace :keyword            'env::equal-namespace)
+      (register-namespace :index/text         'env::equal-namespace)
+      (register-namespace :index/term         'env::equal-namespace)
+      (register-namespace :index/example      'env::equal-namespace)
+      (register-namespace :package            'env::equal-namespace))
     environment))
 
 (defun namespaces (environment)

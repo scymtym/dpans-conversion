@@ -38,13 +38,15 @@
           (lambda (builder environment amount box)
             (declare (ignore environment))
             (list (bp:node (builder :superscript)
-                    (* (:element . *) (bp:node-relation builder '(:element . *) box)))))
+                    (1 (:left  . *) (bp:node (builder :chunk :content "")))
+                    (* (:right . *) (bp:node-relation builder '(:element . *) box)))))
 
           (env:lookup "lower" :macro environment)
           (lambda (builder environment amount box)
             (declare (ignore environment))
             (list (bp:node (builder :subscript)
-                    (* (:element . *) (bp:node-relation builder '(:element . *) box)))))
+                    (1 (:left  . *) (bp:node (builder :chunk :content "")))
+                    (* (:right . *) (bp:node-relation builder '(:element . *) box)))))
 
           (env:lookup "vrule" :macro environment) ; TODO do we have {h,v}rule?
           (lambda (builder environment length)
@@ -208,14 +210,19 @@
   ;; Leave all nodes that are not macro invocation unchanged.
   t)
 
-(defun lookup-macro (name environment)
+(defun lookup-macro (name environment
+                     &key (if-does-not-exist nil if-does-not-exist-supplied-p))
   (let ((mode (env:lookup :mode :traversal environment
                           :if-does-not-exist :normal)))
     (ecase mode
-      (:normal (env:lookup name :macro environment))
+      (:normal (apply #'env:lookup name :macro environment
+                      (when if-does-not-exist-supplied-p
+                        (list :if-does-not-exist if-does-not-exist))))
       (:math   (or (env:lookup name :math environment
-                               :if-does-not-exist nil)
-                   (env:lookup name :macro environment))))))
+                                    :if-does-not-exist nil)
+                   (apply #'env:lookup name :macro environment
+                          (when if-does-not-exist-supplied-p
+                            (list :if-does-not-exist if-does-not-exist))))))))
 
 (defun substitute-arguments (builder body macro-level arguments)
   (labels ((visit (recurse relation relation-args node kind relations
@@ -270,7 +277,7 @@
               (expansion (expand builder environment macro arguments))
               (debug     (debug-expansion transform)))
          (when (or (eq debug t)
-                   (member name debug :test #'string-equal))
+                   (member name '("realtypespec") #+no debug :test #'string-equal))
            (let ((stream *standard-output*))
              (format stream "~V@T" (* 2 (depth transform)))
              (pprint-logical-block (stream (list node) :per-line-prefix "| ")

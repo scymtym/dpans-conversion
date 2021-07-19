@@ -67,7 +67,9 @@
     (:display
      (let* ((builder   (builder transform))
             (caption   (current-caption transform))
-            (namespace (cond ((search "operator" caption :test #'char-equal)
+            (namespace (cond ((search "declaration identifier" caption :test #'char-equal)
+                              '(:declaration))
+                             ((search "operator" caption :test #'char-equal)
                               '(:function :macro :special-operator))
                              ((and (search "function" caption :test #'char-equal)
                                    (not (search "relat" caption :test #'char-equal)))

@@ -22,5 +22,6 @@
 
 (defmethod apply-transforms ((transforms sequence) (ast t))
   (reduce (lambda (ast transform)
+            (format *trace-output* "Applying transform ~A~%" transform)
             (apply-transform transform ast))
           transforms :initial-value ast))

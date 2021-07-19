@@ -1,16 +1,16 @@
 (cl:in-package #:dpans-conversion.transform)
 
-(defun to-string (builder ast)
+(defun to-string (builder ast &rest asts)
   (let ((transform (make-instance 'to-string :builder builder)))
-    (apply-transform transform ast)))
+    (apply-transform transform ast)
+    (when asts
+      (map nil (a:curry #'apply-transform transform) asts))
+    (get-output-stream-string (result transform))))
 
 (defclass to-string (builder-mixin)
-  ((%result :reader   result
+  ((%result :initarg  :result
+            :reader   result
             :initform (make-string-output-stream))))
-
-(defmethod apply-transform ((transform to-string) (ast t))
-  (call-next-method)
-  (get-output-stream-string (result transform)))
 
 (defmethod transform-node ((transform to-string) recurse ; TODO define macro
                            relation relation-args node (kind t) relations
