@@ -11,6 +11,8 @@
                "computation.environment"
                "computation.environment.visualization" ; debugging
 
+               "eclector.examples.highlight" ; for listings
+
                "cxml") ; html output
 
   :components ((:module     "base"
@@ -71,6 +73,7 @@
                              (:file       "symbol-index")
                              (:file       "table-index")
                              (:file       "note-indices")
+                             (:file       "parse-listings")
                              (:file       "add-dictionary-sections")
                              (:file       "split-into-files")
                              (:file       "note-output-file")
@@ -96,6 +99,7 @@
                              (:file       "render-component")
                              (:file       "render-issue")
                              (:file       "render-math")
+                             (:file       "render-listings")
                              (:file       "navigation")
 
                              (:file       "render")
