@@ -279,7 +279,7 @@
 
                         ;; Semantic Markup
                         (:term
-                         (let* ((name (node-name node))
+                         (let* ((name (transform::node-name* node))
                                 (url  (format nil "#term-~A" name)))
                            (a* url "term" recurse)))
                         (:newterm (span "newterm" recurse))
@@ -299,21 +299,6 @@
                            (a* url "lambda-list-keyword-reference" (lambda ()
                                                                      (cxml:text "&")
                                                                      (funcall recurse)))))
-
-                        (:code (cxml:with-element "pre"
-                                 (cxml:with-element "code"
-                                   (cxml:unescaped (format-code content)))))
-                        #+no(:math
-                             (cxml:text (if *math?* "$" "\\("))
-                             (let ((*math?* t))
-                               (funcall recurse :function (a:curry #'visit :math)))
-                             (cxml:text (if *math?* "$" "\\)")))
-                        #+no (:math-display
-                              (cxml:text "\\[ ")
-                              (let ((*math?* t))
-                                (funcall recurse :function (a:curry #'visit :math)))
-                              (cxml:text " \\]"))
-
                         (:symbol
                          (render-name-node builder node))
                         (:param (span "parameter" recurse))
@@ -454,8 +439,6 @@
                                        (br))
                                  (bp:node-relation builder '(:name . *) node)))))
 
-                        (:index)        ; drop index stuff here
-
                         ((:dash :subscript :superscript
                                 :issue-annotation :editor-note :reviewer-note
                           :file :title :sub-title :chapter :section
@@ -469,9 +452,10 @@
                                 :issue-reference
                           :component :part :none :ftype
                           :paragraph-break :non-breaking-space
-                          :math :math-display
+                          :math :math-display :over
                           :other-command-application
-                                :splice :chunk :block)
+                                :splice :chunk :block
+                                :listing :syntax :index)
                          (apply #'transform:transform-node transform recurse relation relation-args node kind relations initargs))
                         ;; Glossary
                         (:gentry

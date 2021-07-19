@@ -1,5 +1,8 @@
 (cl:in-package #:dpans-conversion.html)
 
+(define-render (:index anchor)
+  (<> "a" nil anchor ""))
+
 (defun node-url (transform reference-node target-node)
   (let* ((output-directory   (output-directory transform))
          (builder            (transform:builder transform))
