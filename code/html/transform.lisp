@@ -1,5 +1,14 @@
 (cl:in-package #:dpans-conversion.html)
 
+(deftype annotation ()
+  '(member :reviewer-note :editor-note :issue :removable-text))
+
+(defun every-annotation? (thing)
+  (and (typep thing 'sequence) (every (a:of-type 'annotation) thing)))
+
+(deftype list-of-annotation ()
+  '(and list (satisfies every-annotation?)))
+
 (defclass transform (transform:builder-mixin
                      transform:environment-mixin
                      transform:file-tracking-mixin
@@ -9,6 +18,10 @@
    (%title-prefix      :initarg  :title-prefix
                        :reader   title-prefix
                        :initform nil)
+   (%annotations       :initarg  :annotations
+                       :type     list-of-annotation
+                       :reader   annotations
+                       :initform '())
    ;;
    (%sidebar-transform :reader   sidebar-transform
                        :writer   (setf %sidebar-transform))
@@ -33,6 +46,9 @@
                 (make-instance 'navigation-sidebar :builder          builder
                                                    :output-directory output-directory))
               nil))))
+
+(defmethod render-annotation? ((transform transform) (annotation t))
+  (member annotation (annotations transform)))
 
 (defmethod prepare-transform ((transform transform))
   (call-next-method)

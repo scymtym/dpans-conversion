@@ -16,10 +16,9 @@
                  (funcall recurse :relations '((:name . 1))))
                (cxml:with-element "dd"
                  (funcall recurse :relations '((:element . *)))))))
-      (if (find-if (a:rcurry #'a:starts-with-subseq name)
-                   '("Note" "Example" "Pronunciation" "See Also"))
-          (removable-text #'do-it)
-          (do-it)))))
+      (maybe-removable-text
+       transform name #'do-it
+       :removable '("Note" "Example" "Pronunciation" "See Also")))))
 
 (define-render (:component)
   (let* ((builder    (transform:builder transform))

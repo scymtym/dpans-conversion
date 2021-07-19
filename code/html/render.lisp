@@ -25,6 +25,13 @@
              (cxml:text " which is not formally part of the standard."))
            continuation))
 
+(defun maybe-removable-text (transform name continuation
+                             &key (removable '("Note" "Example")))
+  (if (and (render-annotation? transform :removable-text)
+           (find-if (a:rcurry #'a:starts-with-subseq name) removable))
+      (removable-text continuation)
+      (funcall continuation)))
+
 (defun node-name (node)
   (let* ((builder 'list)
          (name    (bp:node-relation builder '(:name . 1) node)))
