@@ -17,56 +17,30 @@
 (defrule whitespace+ ()
   (+ (or #\Space #\Tab)))
 
+(defrule whitespace-including-newline ()
+  (or #\Space #\Tab #\Newline))
+
 (defrule dash ()
     (bounds (start end) (seq "--" (? (<- third? #\-))))
   (bp:node* (:dash :which  (if third? :em :en)
                    :bounds (cons start end))))
 
-(defrule possible-reference ()
-    (bounds (start end)
-      (seq (or (seq (? (<<- name (or #\: #\& #\*)))
-                    (<<- name (or (guard upper-case-p)
-                                  #\- #\+ #\/ #\= #\*))
-                    (+ (<<- name (or (guard upper-case-p)
-                                     (guard digit-char-p)
-                                     #\- #\+ #\/ #\= #\*))))
-               ;; May be lower case but /must/ contain dash in that
-               ;; case.
-               (seq (? (<<- name (or #\: #\& #\*)))
-                    (<<- name (or (guard alpha-char-p)
-                                  #\+ #\/ #\= #\*))
-                    (+ (<<- name (or (guard alpha-char-p)
-                                     (guard digit-char-p)
-                                     #\+ #\/ #\= #\*)))
-                    (<<- name #\-) ; must contain dash
-                    (+ (<<- name (or (guard alpha-char-p)
-                                     (guard digit-char-p)
-                                     #\- #\+ #\/ #\= #\*))))
-
-               (<<- name (or #\+ #\- #\/ #\= #\T)))
-           (:transform (and (or #\s (not (guard alpha-char-p))) (seq)) nil) ; HACK
-           ))
-  (let ((name (coerce (nreverse name) 'string)))
-    (bp:node* (:possible-reference :name name :bounds (cons start end)))))
+(defrule in-paragraph-markup ()
+  (or (dash)
+      (issue-reference 't 'nil)
+      (issue-reference 'nil 't)
+      (possible-reference)
+      (code)))
 
 (defrule chunk ()
     (bounds (start end)
-      (+ (<<- content (and (not (or #\Newline
-                                    (dash)
-                                    (issue-reference 't 'nil)
-                                    (issue-reference 'nil 't)
-                                    (possible-reference)))
-                           :any))))
+      (+ (<<- content (and (not (or #\Newline (in-paragraph-markup))) :any))))
   (let ((content (coerce (nreverse content) 'string)))
     (bp:node* (:chunk :content content :bounds (cons start end)))))
 
 (defrule line ()
     (bounds (start end)
-      (+ (<<- elements (or (dash)
-                           (issue-reference 't 'nil)
-                           (issue-reference 'nil 't)
-                           (possible-reference)
-                           (chunk)))))
+      (+ (<<- elements (or (in-paragraph-markup) (chunk)))))
   (bp:node* (:line :bounds (cons start end))
     (* (:element . *) (nreverse elements))))
 
@@ -109,7 +83,7 @@
 (defrule issue-name ()
     (* (<<- name (or (proper-issue-character)
                      (and ;; Must not end in -, . or &.
-                          (seq :any (proper-issue-character))
+                          (seq :any (and (not (whitespace-including-newline)) :any))
                           (or #\- #\. #\&))))
        2)
   (coerce (nreverse name) 'string))
@@ -138,6 +112,81 @@
                               :proposal  proposal
                               :explicit? explicit?
                               :bounds    (cons start end))))
+
+(defrule possible-reference ()
+    (bounds (start end)
+      (seq (or (seq (? (<- initial (or #\: #\& #\*)))
+                    (<<- name (or (guard upper-case-p)
+                                  #\- #\+ #\/ #\= #\*))
+                    (+ (<<- name (or (guard upper-case-p)
+                                     (guard digit-char-p)
+                                     #\- #\+ #\/ #\= #\*))))
+               ;; May be lower case but /must/ contain dash in that
+               ;; case.
+               (seq (? (<- initial (or #\: #\& #\*)))
+                    (<<- name (or (guard alpha-char-p)
+                                  #\+ #\/ #\= #\*))
+                    (+ (<<- name (or (guard alpha-char-p)
+                                     (guard digit-char-p)
+                                     #\+ #\/ #\= #\*)))
+                    (<<- name #\-) ; must contain dash
+                    (+ (<<- name (or (guard alpha-char-p)
+                                     (guard digit-char-p)
+                                     #\- #\+ #\/ #\= #\*))))
+
+               (<<- name (or #\+ #\- #\/ #\= #\T)))
+           (:transform (and (or #\s (not (guard alpha-char-p))) (seq)) nil) ; HACK
+           ))
+  (flet ((to-string (characters)
+           (coerce characters 'string)))
+    (let ((name (nreverse name)))
+      (multiple-value-bind (name title)
+          (cond ((eql initial #\&)
+                 (values (to-string name) (to-string (list* initial name))))
+                ((null initial)
+                 (to-string name))
+                (t
+                 (to-string (list* initial name))))
+        (bp:node* (:possible-reference :name      name
+                                       :namespace (case initial
+                                                    (#\& :lambda-list-keyword))
+                                       :bounds    (cons start end))
+          (bp:? (:title . 1) (when title
+                               (bp:node* (:chunk :content title)))))))))
+
+;;; Code
+
+(defrule balanced-code-content ()
+    (or (seq (? (seq (<<- content #\#)
+                     (? (<<- content (or #\c #\C #\s #\S)))))
+             (<<- content #\()
+             (* (<<- content (or (balanced-code-content)
+                                 (and (not (or #\( #\) #\" #\;
+                                               ", "
+                                               (seq (and (not #\.) :any) ".)")))
+                                      :any))))
+             (<<- content #\)))
+        (seq (<<- content #\")
+             (* (or (seq (<<- content #\\) (<<- content #\"))
+                    (and (not #\") (<<- content))))
+             (<<- content #\"))
+        (seq (<<- content #\;)
+             (* (and (not #\Newline) (<<- content)))
+             (<<- content #\Newline)))
+  (with-output-to-string (stream)
+    (map nil (lambda (fragment)
+               (etypecase fragment
+                 (character (write-char fragment stream))
+                 (string    (write-string fragment stream))))
+         (a:flatten (nreverse content)))))
+
+(defrule code ()
+    (bounds (start end)
+      (and #\( (<- content (balanced-code-content))))
+  (bp:node* (:code :content content :bounds (cons start end))))
+
+(bp:with-builder ('list)
+  (parser.packrat:parse '(code) "(This paragraph will be superseded by cleanup issue DECLARATION-SCOPE if it passes.)"))
 
 ;;; Markup
 
@@ -198,11 +247,11 @@
 ;;; Structure
 
 (defrule preamble ()
-  (bounds (start end)
-          (seq (* (<<- content (and (not (seq #\Newline (or (* "=" 3) (section-label)))) :any)))
-               (? (seq (* "=" 3)
-                       (* (or (whitespace) #\Newline))))
-               (and (or (long-label) (short-label)) (seq))))
+    (bounds (start end)
+      (seq (* (<<- content (and (not (seq #\Newline (or (* "=" 3) (section-label)))) :any)))
+           (? (seq (* "=" 3)
+                   (* (or (whitespace) #\Newline))))
+           (and (or (long-label) (short-label)) (seq))))
   (bp:node* (:preamble :content (coerce (nreverse content) 'string)
                        :bounds  (cons start end))))
 
@@ -213,6 +262,8 @@
     "Background"
     "Benefits"
     "Category" ; TODO should not happen
+    "Adoption Cost" ; TODO not sure
+    "Conversion Cost" ; TODO not sure
     "Cost of Non-Adoption"
     "Cost to Common Lisp implementors" ; TODO
     "Cost to Implementors"
@@ -314,7 +365,7 @@
     (bounds (start end)
       (seq "Status:" (whitespace+) (+ (<<- content (and (not (section-label)) :any)))))
   (let ((content (coerce (nreverse content) 'string)))
-    (print content)
+    content
     (bp:node* (:chunk :content content :bounds (cons start end)))))
 
 (defrule section-related-issues ()
@@ -382,7 +433,6 @@
     (bounds (start end)
       (seq (? (<- preamble (preamble)))
            (+ (or (<-  name            (section-name))
-                  ; (<-  status          (section-status))
                   (<-  related-issues  (section-related-issues))
                   (<-  required-issues (section-required-issues))
                   (<-  forum           (section-forum))
@@ -390,15 +440,14 @@
                   (<<- sections        (section))
                   (seq (whitespace*) #\Newline)))))
   (unless (find :proposal sections :key #'bp:node-kind*)
-    (break "No Proposal"))
+    (cerror "Use the issue anyway" "No Proposal"))
   (bp:node* (:issue :filename filename
                     :process  process
                     :bounds   (cons start end))
     (1    (:name           . 1)    name)
-    ; (1    (:status         . 1)    status)
     (*    (:required-issue . *)    required-issues)
     (*    (:related-issue  . *)    related-issues)
     (1    (:forum          . 1)    forum)
     (1    (:category       . 1)    category)
-    (bp:? (:preamble       . bp:?) preamble)
-    (*    (:section        . *)    (nreverse sections))))
+    (*    (:section        . *)    (nreverse sections))
+    (bp:? (:preamble       . bp:?) preamble)))
