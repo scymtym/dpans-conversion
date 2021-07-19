@@ -1,6 +1,7 @@
 (cl:in-package #:dpans-conversion.parser)
 
-(define-condition parse-error (base:annotation-mixin)
+(define-condition parse-error (base:annotation-mixin
+                               error)
   ((%message :initarg  :message
              :type     (or null string)
              :reader   message
