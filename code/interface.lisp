@@ -52,13 +52,12 @@
       (* (:issue         . *) issues))))
 
 (when nil
-  (:inspect
+  (clouseau:inspect
    (architecture.builder-protocol.visualization:as-tree
     (parse-specification 'list
                          "~/code/cl/common-lisp/dpans-conversion/data/dpANS3/"
                          "~/code/cl/common-lisp/dpans/issues/")
-    'list)
-   :new-inspector? t))
+    'list)))
 
 ;;; Complete conversion
 
@@ -74,9 +73,11 @@
                      (issues-directory (directory (merge-pathnames #P"*-issues/" input-directory)))
                      (title-prefix     "Well-specified Common Lisp — ")
                      (use-mathjax      t)
-                     (use-sidebar      t))
+                     (use-sidebar      t)
+                     (inspect?         t))
   (let* ((builder     'list)
          (environment (make-instance 'env:lexical-environment :parent transform::**meta-environment**))
+         (reference-environment (make-instance 'env:lexical-environment :parent transform::**reference-meta-environment**))
          ;; Parse
          (tree        (cached (parse-specification builder dpans-directory issues-directory)))
          ;; Transform
@@ -94,10 +95,18 @@
                                                                                                                             "indextab"
                                                                                                                             "firstindextab")
                                                                                                                     :test #'string=))))))
+
                         (make-instance 'transform::expand-macros :builder           builder
                                                                  :environment       environment
                                                                  :debug-definition? t
                                                                  :debug-expansion   '())
+                        (make-instance 'transform::parse-listings :builder     builder
+                                                                  :environment environment)
+                        (make-instance 'transform::expand-macros :builder           builder
+                                                                 :environment       environment
+                                                                 :debug-definition? t
+                                                                 :debug-expansion   '())
+
                         (make-instance 'transform::drop :builder   builder
                                                         :predicate (a:disjoin
                                                                     (a:conjoin (transform::kind? :input)
@@ -134,7 +143,7 @@
                         (make-instance 'transform::issue-index :builder builder)
                         (make-instance 'transform::note-indices :builder builder)
                         (make-instance 'transform::note-output-file :builder builder)
-                        (make-instance 'transform::build-references :builder builder)
+                        (make-instance 'transform::build-references :builder builder :environment reference-environment)
                                         ; (make-instance 'dpans-conversion.transform::verify)
                         )
                        tree))
@@ -155,19 +164,19 @@
 
                         (transform:apply-transform transform transformed))))
 
-    (:inspect (vector environment
-                      :tree
-                      (architecture.builder-protocol.visualization::as-tree
+    (when inspect?
+      (clouseau:inspect
+       (list (cons :evaluation-environment environment)
+             (cons :reference-environment  reference-environment)
+             (cons :raw-document           (vector (architecture.builder-protocol.visualization::as-tree
 
-                       tree 'list)
-                      (architecture.builder-protocol.visualization::as-query
-                       tree 'list :editor-note)
-                      :transformed
-                      (architecture.builder-protocol.visualization::as-tree
-                       transformed 'list)
-                      (architecture.builder-protocol.visualization::as-query
-                       transformed 'list :component))
-     :new-inspector? t)
+                                                    tree 'list)
+                                                   (architecture.builder-protocol.visualization::as-query
+                                                    tree 'list :editor-note)))
+             (cons :processed-document     (vector (architecture.builder-protocol.visualization::as-tree
+                                                    transformed 'list)
+                                                   (architecture.builder-protocol.visualization::as-query
+                                                    transformed 'list :component))))))
 
     result))
 
