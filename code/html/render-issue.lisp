@@ -48,7 +48,7 @@
     (let ((status (format nil "status-~(~A~)" status)))
       (class-attribute (list status "proposal")))
     (cxml:attribute "id" anchor)
-    (h 2 (format nil "Proposal~@[ ~A~]" name))
+    (h* 2 "section-title" (format nil "Proposal~@[ ~A~]" name))
     (funcall recurse)))
 
 (defun special-section-string (builder relation node)
@@ -61,7 +61,7 @@
     (labels ((visit (recurse relation relation-args node kind relations
                      &rest initargs &key name anchor &allow-other-keys)
                (ecase kind
-                 ((:dash :reference :issue-reference :proposal :enumeration-list :enumeration-item :line :chunk :paragraph-break)
+                 ((:dash :reference :issue-reference :proposal :enumeration-list :enumeration-item :line :chunk :paragraph-break :listing :syntax :splice :block)
                   (apply #'transform:transform-node transform recurse relation relation-args node kind relations initargs))
                  (:section
                   (unwind-protect
@@ -73,7 +73,7 @@
                                 (let ((status (format nil "status-~(~A~)" status)))
                                   (list status "section"))
                                 "section"))
-                           (h level name)
+                           (h* level "section-title" name)
                            (incf level)
                            (cond ((or (eql (search "Example" name) 0)
                                       (eql (search "Test Case" name) 0))

@@ -94,3 +94,15 @@
                             name-nodes))
            (name       (format nil "~{~A~^, ~}" names)))
       (a url name))))
+
+(defmethod transform:transform-node ((transform navigation-sidebar)
+                                     recurse relation relation-args node
+                                     (kind (eql :proposal)) relations
+                                     &key name)
+  (cxml:with-element "li"
+    (let* ((title   (format nil "Proposal ~A" name))
+           (url     (node-url transform (current-file transform) node)))
+      (a url title))
+    (cxml:with-element "ol"             ; TODO avoid if empty
+      (cxml:text " ")
+      (funcall recurse))))
