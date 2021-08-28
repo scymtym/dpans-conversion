@@ -1,0 +1,85 @@
+* Introduction
+
+  This repository contains code for parsing
+
+* Sources
+
+
+** dpANS TeX sources
+
+   + https://github.com/xach/dpans
+
+   + http://www.cs.cmu.edu/afs/cs/Web/Groups/AI/lang/lisp/doc/standard/ansi/dpans/
+
+* Other Efforts
+
+  + https://github.com/lokedhs/parse-lisp-spec
+
+  + https://github.com/robert-strandh/dpANS-parser
+
+  + https://gitlab.com/vancan1ty/clstandard_build/ ::
+
+       Seems to be focused on producing an enhanced PDF version.
+
+  + https://github.com/yitzchak/dpANS3-parser ::
+
+       Most similar so far(?)
+
+  + https://github.com/tvraman/aster-math/ ::
+
+       General TeX parsing
+
+  + https://mr.gy/ansi-common-lisp/ ::
+
+       Is a conversion to HTML and also has a (dead) link to a
+       converter.
+
+       Converter in wayback machine: https://web.archive.org/web/20150804121327/http://users-phys.au.dk/harder/dpans.html
+
+  + Texinfo conversion for GCL ::
+
+       https://ftp.nluug.nl/gnu/gcl/old/ seems to have it:
+       https://ftp.nluug.nl/gnu/gcl/old/gcl-info+texi.tgz
+
+** Document Processing
+
+   + CommonDoc
+
+   + That docutils port
+
+   + https://github.com/mbutterick/pollen
+
+* Material
+
+  + TeX Resources :: https://www.tug.org/interest.html#plain
+
+  + TeX Primitive Control Sequences ::
+       http://www.tug.org/utilities/plain/cseq.html
+
+  + A Gentle Introduction to TeXt ::
+       https://ctan.mirror.norbert-ruehl.de/info/gentle/gentle.pdf
+
+  + TeX for the Impatient ::
+       ftp://ftp.gwdg.de/pub/ctan/info/impatient/book.pdf
+
+  + Einführung in TeX (German) ::
+       https://www.ruhr-uni-bochum.de/TeX/einfuehrung-in-tex.pdf
+
+  + Unicode and Special Characters ::
+       https://agiletribe.wordpress.com/2015/04/07/adding-unicode-characters-to-latex-documents/
+
+  + Porter Stemmer Algorithm (Possibly needed for glossary references) ::
+       http://snowball.tartarus.org/algorithms/porter/stemmer.html
+
+  + Kent Pitman's CL References ::
+       http://www.nhplace.com/kent/CL/index.html
+
+  + TeX to Unicode (for HTML and CLIM renderes) ::
+       https://golopot.github.io/tex-to-unicode/
+
+* Notes
+
+  #+BEGIN_EXAMPLE
+    <TMA> for the table of contents: replace ".tc" with ".toc" in chap-0.tex ; for
+        the index: run: sort -t: -k2 chap-*.idx > index.idx
+  #+END_EXAMPLE
