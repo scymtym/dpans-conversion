@@ -156,20 +156,30 @@
 
 ;;; Code
 
+(defrule code-symbol-ish ()
+    (+ (and (not (or #\( #\) #\" #\;
+                     ", "
+                     (seq (and (not #\.) :any) ".)")))
+            (<<- characters)))
+  (when (and (some #'upper-case-p characters)
+             (some #'lower-case-p characters))
+    (:fail))
+  (nreverse characters))
+
 (defrule balanced-code-content ()
-    (or (seq (? (seq (<<- content #\#)
+    (or ;; Literals starting with # and lists
+        (seq (? (seq (<<- content #\#)
                      (? (<<- content (or #\c #\C #\s #\S)))))
              (<<- content #\()
              (* (<<- content (or (balanced-code-content)
-                                 (and (not (or #\( #\) #\" #\;
-                                               ", "
-                                               (seq (and (not #\.) :any) ".)")))
-                                      :any))))
+                                 (code-symbol-ish))))
              (<<- content #\)))
+        ;; String literals
         (seq (<<- content #\")
              (* (or (seq (<<- content #\\) (<<- content #\"))
                     (and (not #\") (<<- content))))
              (<<- content #\"))
+        ;; Comments
         (seq (<<- content #\;)
              (* (and (not #\Newline) (<<- content)))
              (<<- content #\Newline)))
