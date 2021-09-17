@@ -29,6 +29,28 @@
   ((%content :initarg :content
              :reader  content)))
 
+(defun parse-tex (string environment)
+  (multiple-value-bind (success? position value)
+      (bp:with-builder ('list)
+        (handler-case
+            (let ((environment (dpans-conversion.parser::augment-environment!
+                                (make-instance 'env::lexical-environment :parent environment)
+                                nil)))
+              (parser.packrat:parse `(dpans-conversion.parser::elements ,environment)
+                                    string
+                                    :grammar 'dpans-conversion.parser::dpans))
+          (error (c) ; TODO do this properly
+            (break "~A" c)
+            (values nil))))
+    (if (and (eq success? t) (= position (length token)))
+        (make-instance 'tex-macro :name (bp:node ('list :splice)
+                                          (* (:element . *) value)))
+        (progn
+          (when (search "IN" string)
+            (break "~A ~A ~A" success? position (length token)))
+          (eclector.reader:interpret-token
+           client stream (coerce token 'simple-string) '())))))
+
 (defun read-maybe-tex (client stream)
   (loop :with readtable   = eclector.reader:*readtable*
         :with token       = (make-array 1 :element-type 'character
@@ -42,7 +64,7 @@
         :with brace-level = 0
         :for char = (read-char stream nil nil t)
         :for type = (eclector.readtable:syntax-type readtable char)
-        :do (flet ((collect (for-tex)
+        :do (flet ((collect (#+no for-tex)
                      (vector-push-extend char token)
                      #+no (when for-tex
                        (vector-push-extend char (or argument name))))
@@ -50,52 +72,42 @@
                      (unread-char char stream)
                      (loop-finish)))
               (case char
-                ((nil)
+                ((nil) ; end of listing
                  (loop-finish))
-                ((#\Space #\Tab #\Newline #\,)
-                 (if (plusp brace-level)
-                     (collect t)
-                     (done)))
+                ((#\Space #\Tab #\Newline #\,) ; possible end of token
+                 (cond ((plusp brace-level)
+                        (collect #+no t))
+                       ((a:starts-with-subseq "\\OUT" token)
+                        (collect #+no t)
+                        (loop :for char = (read-char stream nil nil t)
+                              :until (or (null char) (char= char #\Newline))
+                              :do (vector-push-extend char token))
+                        (vector-push-extend #\Newline token)
+                        (loop-finish))
+                       (t
+                        (done))))
                 (#\\
-                 (collect nil))
+                 (collect #+no nil))
                 (#\{
                  (incf brace-level)
                  (setf argument (make-array 10 :element-type 'character
                                                :adjustable   t
                                                :fill-pointer 0))
-                 (collect nil))
+                 (collect #+no nil))
                 (#\}
                  (push argument arguments)
                  (setf argument nil)
                  (decf brace-level)
-                 (collect nil))
+                 (collect #+no nil))
                 (t
                  (if (and (eq type :terminating-macro)
                           (zerop brace-level))
                      (done)
-                     (collect t)))))
+                     (collect #+no t)))))
         :finally (return
                    (let ((string      (coerce token 'simple-string))
                          (environment (environment client)))
-                     (multiple-value-bind (success? position value)
-                         (bp:with-builder ('list)
-                           (handler-case
-                               (parser.packrat:parse `(dpans-conversion.parser::elements ,environment)
-                                                     string
-                                                     :grammar 'dpans-conversion.parser::dpans)
-                             (error (c) ; TODO do this properly
-                               (when (search "IN" string)
-                                 (break "~A" c))
-                               (values nil))))
-
-                       (if (and (eq success? t) (= position (length token)))
-                           (make-instance 'tex-macro :name (bp:node ('list :splice)
-                                                             (* (:element . *) value)))
-                           (progn
-                             (when (search "IN" string)
-                               (break "~A ~A ~A" success? position (length token)))
-                             (eclector.reader:interpret-token
-                              client stream (coerce token 'simple-string) '()))))))))
+                     (parse-tex string environment)))))
 
 (defun read-unreadable (stream)
   (loop :for char = (read-char stream)
@@ -159,6 +171,14 @@
       (eclector.reader:interpret-symbol-token client input-stream token nil nil)
       (call-next-method)))
 
+(defmethod eclector.reader:check-feature-expression
+    ((client read-client) (feature-expression t))
+  t)
+
+(defmethod eclector.reader:evaluate-feature-expression
+    ((client read-client) (feature-expression t))
+  t)
+
 ;; TODO read-time-evaluation
 
 ;;;
@@ -212,7 +232,8 @@
   (vector-push-extend character (cdr (first (stack client)))))
 
 (defmethod eclector.examples.highlight.render:enter-node
-    ((client highlight-client) (node eclector.examples.highlight.cst:standard-symbol-node))
+    ((client highlight-client)
+     (node   eclector.examples.highlight.cst:standard-symbol-node))
   (finish-chunk client)
   (let* ((builder 'list)
          (which   (a:make-keyword (class-name (class-of node))))
@@ -280,8 +301,10 @@
         :finally (return result)))
 
 (defun format-code (builder root environment code)
-  (let* ((code          (remove-tex-escapes code))
-         (package       (find-package '#:cl-user))
+  (let* ((code          code ; (remove-tex-escapes code)
+                        )
+         (package       "COMMON-LISP-USER" ; (find-package '#:cl-user)
+                        )
          (read-client   (make-instance 'read-client :input           code
                                                     :current-package package
                                                     :environment     environment))
@@ -302,9 +325,15 @@
 (defmethod transform-node ((transform parse-listings) recurse
                            relation relation-args node (kind (eql :code)) relations
                            &rest initargs &key content)
-  (let* ((builder     (builder transform))
-         (environment (environment transform))
-         (node        (apply #'bp:make-node builder :listing
-                             (a:remove-from-plist initargs :content))))
-    (format-code builder node environment content)
-    (bp:finish-node builder :listing node)))
+  (tagbody
+   :start
+     (restart-case
+         (let* ((builder     (builder transform))
+                (environment (environment transform))
+                (node        (apply #'bp:make-node builder :listing
+                                    (a:remove-from-plist initargs :content))))
+           (format-code builder node environment content)
+           (return-from transform-node (bp:finish-node builder :listing node)))
+       (retry ()
+         "Try parsing the listing again"
+         (go :start)))))

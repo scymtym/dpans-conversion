@@ -27,15 +27,27 @@
         (:fatal (error 'parse-error :annotations (list (base:make-annotation filename (cons position (1+ position)) "here"))
                                     :message     value))))))
 
+(defun augment-environment! (environment filename)
+  (setf (env:lookup :global?       :traversal environment) t
+        (env:lookup :current-file  :traversal environment) filename
+        (env:lookup :include-depth :traversal environment) 0)
+  environment)
+
+(defun parse-tex-string (builder input filename
+                         &key (environment (make-instance 'env::lexical-environment
+                                                          :parent **meta-environment**)))
+  ;; Populate the environment.
+  (augment-environment! environment filename)
+  (register-builtin-macros environment)
+  ;; Parse.
+  (%parse-tex builder input environment filename 0))
+
 (defun parse-tex-file (builder file &key (filename     (uiop:enough-pathname
                                                         file *default-pathname-defaults*))
                                          include-depth)
   (let ((input       (a:read-file-into-string file))
         (environment (make-instance 'env::lexical-environment :parent **meta-environment**)))
-
-    (setf (env:lookup :global?       :traversal environment) t
-          (env:lookup :current-file  :traversal environment) filename
-          (env:lookup :include-depth :traversal environment) 0)
+    (augment-environment! environment filename)
     (register-builtin-macros environment)
 
     (%parse-tex builder input environment filename include-depth)
