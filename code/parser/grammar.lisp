@@ -61,28 +61,10 @@
 
 (defrule identifier ()
     (+ (<<- content (guard alpha-char-p)))
-    #+no (seq (<<- content (and (not (or #\{ #\} #\\ #\. #\, #\! #\; #\# #\& #\$ #\= #\< #\> #\- #\_ #\| #\[ #\] #\^ #\" #\' #\`
-                                    (terminator)))
-                           :any))
-         (* (<<- content (and (not (or #\{ #\} #\\ #\. #\, #\! #\; #\# #\& #\$ #\= #\< #\> #\- #\_ #\| #\[ #\] #\^ #\" #\' #\`
-                                       (guard digit-char-p)
-                                       (terminator)))
-                              :any))))
-  #+todo (when (digit-char-p (a:lastcar content)) ; only single-character like \0, maybe?
-    (break))
   (coerce (nreverse content) 'string))
 
 (defrule identifier-with-dot ()
     (+ (<<- content (or (guard alpha-char-p) #\. #\, #\! #\;)))
-    #+no (seq (<<- content (and (not (or #\{ #\} #\\ #\# #\& #\$ #\= #\< #\> #\- #\_ #\| #\[ #\] #\^ #\" #\' #\`
-                                    (terminator)))
-                           :any))
-         (* (<<- content (and (not (or #\{ #\} #\\ #\# #\& #\$ #\= #\< #\> #\- #\_ #\| #\[ #\] #\^ #\" #\' #\`
-                                       (guard digit-char-p)
-                                       (terminator)))
-                              :any))))
-  #+todo (when (digit-char-p (a:lastcar content))
-    (break))
   (coerce (nreverse content) 'string))
 
 (defrule name ()
@@ -126,8 +108,8 @@
                                            (paragraph-break)
                                            ;; Allow ^ and _ in normal mode
                                            (:transform (or #\^ #\_)
-                                                       (when (eq (mode environment) :normal)
-                                                         (:fail)))
+                                             (when (eq (mode environment) :normal)
+                                               (:fail)))
                                            )) ; TODO make non-result version
                                   :any)))))
   (bp:node* (:chunk :content (coerce (nreverse (remove nil characters)) 'string)
@@ -201,9 +183,6 @@
   (let ((content (coerce (nreverse content) 'string)))
     (bp:node* (:verbatim :content content))))
 
-#+no (define-command (b :kind :bold)
-  (1* :element (element environment)))
-
 (defrule bf (environment)
     (bounds (start end)
       (seq "{\\bf" (* (<<- elements (and (not (or #\} #\&)) (element environment)))) #\}))
@@ -211,9 +190,6 @@
     (* :element (nreverse elements))))
 
 (define-command (bold :kind :bold)
-  (1* :element (element environment)))
-
-#+no (define-command (i :kind :italic)
   (1* :element (element environment)))
 
 (define-command (ital :kind :italic)
@@ -1504,8 +1480,8 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
            (math-operators environment)
 
            ;; Markup
-           #+no (b environment) (bf environment) #+no (bold environment)
-                                                 #+no (i environment) #+no (ital environment) (it environment)
+           (bf environment)
+           (it environment)
            (f environment)
            (tt environment)
            (rm environment)
@@ -1543,7 +1519,6 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
 
            (reference environment)
            (simple-reference environment)
-
 
            ;; (index environment)
            (simple-index environment)
