@@ -41,6 +41,14 @@
        https://ftp.nluug.nl/gnu/gcl/old/ seems to have it:
        https://ftp.nluug.nl/gnu/gcl/old/gcl-info+texi.tgz
 
+  + TeX parser implemented in Java ::
+
+       https://github.com/nlct/texparser
+
+  + LaTeX parser implemented in Haskell ::
+
+       https://github.com/synsem/texhs
+
 ** Document Processing
 
    + CommonDoc
