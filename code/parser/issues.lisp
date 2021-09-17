@@ -25,22 +25,25 @@
   (bp:node* (:dash :which  (if third? :em :en)
                    :bounds (cons start end))))
 
-(defrule in-paragraph-markup ()
+(defrule in-paragraph-markup (allow-code?)
   (or (dash)
       (issue-reference 't 'nil)
       (issue-reference 'nil 't)
       (possible-reference)
-      (code)))
+      (and (:transform (seq) (unless allow-code? (:fail)))
+           (code))))
 
-(defrule chunk ()
+(defrule chunk (allow-code?)
     (bounds (start end)
-      (+ (<<- content (and (not (or #\Newline (in-paragraph-markup))) :any))))
+      (+ (<<- content (and (not (or #\Newline (in-paragraph-markup allow-code?)))
+                           :any))))
   (let ((content (coerce (nreverse content) 'string)))
     (bp:node* (:chunk :content content :bounds (cons start end)))))
 
-(defrule line ()
+(defrule line (allow-code?)
     (bounds (start end)
-      (+ (<<- elements (or (in-paragraph-markup) (chunk)))))
+      (+ (<<- elements (or (in-paragraph-markup allow-code?)
+                           (chunk allow-code?)))))
   (bp:node* (:line :bounds (cons start end))
     (* (:element . *) (nreverse elements))))
 
@@ -66,8 +69,8 @@
   (or (:transform (seq) (unless (zerop amount) (:fail))) ; TODO parser.packrat bug
       (* (whitespace) amount amount)))
 
-(defrule indented-line ()
-    (seq (whitespace+) (<- line (line)))
+(defrule indented-line (allow-code?)
+    (seq (whitespace+) (<- line (line allow-code?)))
   line)
 
 ;;; Names and references
@@ -217,11 +220,11 @@
           (seq (<- (number style) (or (enumeration-number) (enumeration-letter))) #\.)))
   (list (- end start) style))
 
-(defrule enumeration-item (indent number)
+(defrule enumeration-item (indent number allow-code?)
     (bounds (start end)
       (seq (indent indent)
            (<- (length style) (enumeration-bullet number))
-           (<<- lines (line))
+           (<<- lines (line allow-code?))
            (? (seq #\Newline
                    ;; Measure new indentation and compute next number
                    (and (seq (indent indent)
@@ -233,19 +236,19 @@
                    (* (and (not (seq (indent indent)
                                      (or (section-label)
                                          (enumeration-bullet next-number))))
-                           (or (seq (indent new-indent) (<<- lines (line)))
+                           (or (seq (indent new-indent) (<<- lines (line allow-code?)))
                                (<<- lines (paragraph-break))
                                (seq (whitespace*) #\Newline))))))))  ; TODO make a rule for empty lines
   (bp:node* (:enumeration-item :bounds (cons start end))
     (* (:body . *) (nreverse lines))))
 
-(defrule enumeration-list (indent)
+(defrule enumeration-list (indent allow-code?)
     (bounds (start end)
       (seq (indent indent) (and (<- extra-indent (any-indent)) (seq)) ; TODO indent should be measured beforehand
            (<- count (:transform (seq) 1))
            (<- new-indent (:transform (seq) (+ indent extra-indent)))
            (+ (seq (* (seq (whitespace*) #\Newline)) ; empty lines TODO make a rule
-                   (<<- items (enumeration-item new-indent count))
+                   (<<- items (enumeration-item new-indent count allow-code?))
                    (:transform (seq) (incf count))))))
   (let* ((item  (first items))
          (style (when item
@@ -266,42 +269,43 @@
                        :bounds  (cons start end))))
 
 (defvar *sections*
-  `(,(lambda (name)
-       (or (string-equal name "Aesthetics")
-           (string-equal name "Esthetics"))) ; TODO fix in source?
-    "Background"
-    "Benefits"
-    "Category" ; TODO should not happen
-    "Adoption Cost" ; TODO not sure
-    "Conversion Cost" ; TODO not sure
-    "Cost of Non-Adoption"
-    "Cost to Common Lisp implementors" ; TODO
-    "Cost to Implementors"
-    "Cost to Users"
-    "Current practice"
-    "Date"
-    "Discussion"
-    ,(lambda (name)
-       (or (string-equal name "Edit History")
-           (string-equal name "Edit-History")))
-    "Example"
-    "Forum" ; TODO should not happen
-    "Issue" ; TODO should not happen
-    "Note" ; only seen in test-not-if-not so far
-    "Performance impact"
-    "Problem Description"
-    "Rationale"
-    "References"
-    "Status"
-    "Test Case")) ; TODO normalize to Test Case_s_ in source?
+  (flet ((one-of (&rest names)
+           (lambda (name)
+             (some (a:curry #'string-equal name) names))))
+    `((,(one-of "Aesthetics" "Esthetics")      t) ; TODO fix in source?
+      ("Background"                            t)
+      ("Benefits"                              t)
+      ("Category"                              t) ; TODO should not happen
+      ("Adoption Cost"                         t) ; TODO not sure
+      ("Conversion Cost"                       t) ; TODO not sure
+      ("Cost of Non-Adoption"                  t)
+      ("Cost to Common Lisp implementors"      t) ; TODO
+      ("Cost to Implementors"                  t)
+      ("Cost to Users"                         t)
+      ("Current practice"                      t)
+      ("Date"                                  nil)
+      ("Discussion"                            t)
+      (,(one-of "Edit History" "Edit-History") nil)
+      ("Example"                               t)
+      ("Forum"                                 nil) ; TODO should not happen
+      ("Issue"                                 nil) ; TODO should not happen
+      ("Note"                                  t)   ; only seen in test-not-if-not so far
+      ("Performance impact"                    t)
+      ("Problem Description"                   t)
+      ("Rationale"                             t)
+      ("References"                            nil)
+      ("Status"                                nil) ; TODO can this happen?
+      ("Test Case"                             t)))) ; TODO normalize to Test Case_s_ in source?
 
 (defun section-name? (name)
   (find-if (lambda (section)
-             (typecase section
-               (string ; TODO should this be exact match?
-                (a:starts-with-subseq section name :test #'char-equal))
-               (function
-                (funcall section name))))
+             (destructuring-bind (test allow-code?) section
+               (declare (ignore allow-code?))
+               (typecase test
+                 (string ; TODO should this be exact match?
+                  (a:starts-with-subseq test name :test #'char-equal))
+                 (function
+                  (funcall test name)))))
            *sections*))
 
 ;;; Section of the form
@@ -319,21 +323,22 @@
          (key  (a:if-let ((index (position #\: name)))
                  (subseq name 0 index)
                  name)))
-    (unless (section-name? key)
-      (:fail))
-    name))
+    (a:if-let ((section (section-name? key)))
+      (list name (second section))
+      (:fail))))
 
 (defrule long-section (indent)
     (bounds (start end)
       (seq (indent indent)
-           (<- name (long-label)) (whitespace*) #\Newline (whitespace*) #\Newline
+           (<- (name allow-code?) (long-label))
+           (whitespace*) #\Newline (whitespace*) #\Newline
            (* (or (and (not (seq (indent indent) (section-label)))
                        (or (<<- elements (paragraph-break))
                            (and (<- new-indent (:transform :any (+ indent 2)))
-                                (<<- elements (or (enumeration-list new-indent)
+                                (<<- elements (or (enumeration-list new-indent allow-code?)
                                                   (long-section new-indent))))
-                           (<<- elements (enumeration-list indent))
-                           (seq (indent indent) (<<- elements (line)))))
+                           (<<- elements (enumeration-list indent allow-code?))
+                           (seq (indent indent) (<<- elements (line allow-code?)))))
                   #\Newline))))
   (bp:node* (:section :name name :bounds (cons start end))
     (* (:element . *) (nreverse elements))))
@@ -345,21 +350,24 @@
 (defrule short-label ()
     (seq (+ (<<- name (and (not (or #\: #\Newline)) :any)))
          #\: (and (whitespace) (seq)))
-  (let* ((name (coerce (nreverse name) 'string))
+  (let* ((name (coerce (nreverse name) 'string)) ; TODO make a function
          (key  (a:if-let ((index (position #\: name)))
                  (subseq name 0 index)
                  name)))
-    (unless (section-name? key)
-      (:fail))
-    name))
+    (a:if-let ((section (section-name? key)))
+      (list name (second section))
+      (:fail))))
 
 (defrule short-section (indent)
     (bounds (start end)
-      (seq (indent indent) (<- name (short-label)) (whitespace+) (<<- elements (line)) #\Newline
+      (seq (indent indent)
+           (<- (name allow-code?) (short-label))
+           (whitespace+) (<<- elements (line allow-code?)) #\Newline
            (* (and (or (whitespace) (not (section-label)))
                    (or (<<- elements (paragraph-break))
-                       (seq (<<- elements (or (seq (indent indent) (enumeration-list indent))
-                                              (indented-line)))
+                       (seq (<<- elements (or (seq (indent indent)
+                                                   (enumeration-list indent allow-code?))
+                                              (indented-line allow-code?)))
                             #\Newline))))))
   (bp:node* (:section :name name :bounds (cons start end))
     (* (:element . *) (nreverse elements))))
@@ -421,10 +429,10 @@
            (* (or (and (not (section-label)) ; TODO (section-content) or something
                        (or (<<- elements (paragraph-break))
                            (and (<- new-indent (:transform (seq) 2))
-                                (<<- elements (or (enumeration-list 0)
-                                                  (enumeration-list new-indent)
+                                (<<- elements (or (enumeration-list 0 't)
+                                                  (enumeration-list new-indent 't)
                                                   (long-section new-indent))))
-                           (<<- elements (line))))
+                           (<<- elements (line 't))))
                   #\Newline))))
   (bp:node* (:proposal :name       proposal-name
                        :issue-name issue-name
