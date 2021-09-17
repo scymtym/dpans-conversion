@@ -19,7 +19,7 @@
       (cxml:with-element "thead"
         (funcall recurse :relations '(:header))))
     (cxml:with-element "tbody"
-      (funcall recurse :relations '(:row))))
+      (funcall recurse :relations '((:row . *)))))
   #+no (span* "float" anchor
          (lambda ()
            (cxml:with-element "table"
@@ -27,7 +27,7 @@
                (cxml:with-element "thead"
                  (funcall recurse :relations '(:header))))
              (cxml:with-element "tbody"
-               (funcall recurse :relations '(:row))))
+               (funcall recurse :relations '((:row . *)))))
            (when (member '(:caption . 1) relations :test #'equal)
              (div "caption" (lambda () (funcall recurse :relations '((:caption . 1)))))))))
 

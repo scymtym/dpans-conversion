@@ -9,14 +9,14 @@
            (or (column-separator) (<<- spans (span)))))
   (let ((span (when spans (1+ (length spans)))))
     (bp:node* (:cell :span span :bounds (cons start end))
-      (* :element (nreverse elements)))))
+      (* (:element . *) (nreverse elements)))))
 
 (defrule table-cell/last (environment)
     (bounds (start end)
       (seq (* (<<- elements (and (not (row-terminator)) (element environment))))
            (row-terminator)))
   (bp:node* (:cell :bounds (cons start end))
-    (* :element (nreverse elements))))
+    (* (:element . *) (nreverse elements))))
 
 (defrule table-row (environment)
     (bounds (start end)
@@ -24,7 +24,7 @@
            (<<- cells (table-cell/last environment))
            (skippable*)))
   (bp:node* (:row :bounds (cons start end))
-    (* :cell (nreverse cells))))
+    (* (:cell . *) (nreverse cells))))
 
 (defrule header (environment)
     (bounds (start end) (* (<<- elements (element environment))))

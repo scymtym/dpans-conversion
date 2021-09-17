@@ -118,18 +118,20 @@
     (bp:node* (:chunk :content (string (code-char code))))))
 
 (defrule chunk (environment)
-    (+ (<<- characters (or (escaped-character)
-                           (and (not (or #\{ #\} #\\ #\% #\& #\$ #\~ ; #\.
-                                         (seq (+ #\#) (+ (guard digit digit-char-p))) ; argument
-                                         (mdash)
-                                         (paragraph-break)
-                                         ;; Allow ^ and _ in normal mode
-                                         (:transform (or #\^ #\_)
-                                           (when (eq (mode environment) :normal)
-                                             (:fail)))
-                                         )) ; TODO make non-result version
-                                :any))))
-  (bp:node* (:chunk :content (coerce (nreverse (remove nil characters)) 'string))))
+    (bounds (start end)
+      (+ (<<- characters (or (escaped-character)
+                             (and (not (or #\{ #\} #\\ #\% #\& #\$ #\~ ; #\.
+                                           (seq (+ #\#) (+ (guard digit digit-char-p))) ; argument
+                                           (mdash)
+                                           (paragraph-break)
+                                           ;; Allow ^ and _ in normal mode
+                                           (:transform (or #\^ #\_)
+                                                       (when (eq (mode environment) :normal)
+                                                         (:fail)))
+                                           )) ; TODO make non-result version
+                                  :any)))))
+  (bp:node* (:chunk :content (coerce (nreverse (remove nil characters)) 'string)
+                    :bounds  (cons start end))))
 
 (defrule paragraph-break ()
   (bounds (start end) (seq #\Newline (* (or #\Space #\Tab)) #\Newline))
