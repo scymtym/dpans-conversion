@@ -68,10 +68,51 @@
        (symbol-value '*cache*)
        (setf *cache* ,expression)))
 
+(defun make-drop-1 (builder)
+  (make-instance 'transform::drop :builder   builder
+                                  :predicate (a:conjoin (transform::kind? :other-command-application)
+                                                        (transform::initarg? :name (a:disjoin
+                                                                                    (lambda (value)
+                                                                                      (a:when-let ((primitive (tex:find-primitive value)))
+                                                                                        (intersection '(:environment :io) ; TODO maybe :misc
+                                                                                                      (tex:tags primitive))))
+                                                                                    (lambda (value)
+                                                                                      (member value '("onecolumn" "twocolumn"
+                                                                                                      "indextab"
+                                                                                                      "firstindextab")
+                                                                                              :test #'string=)))))))
+
+(defun make-drop-2 (builder)
+  (make-instance 'transform::drop :builder   builder
+                                  :predicate (a:disjoin
+                                              (a:conjoin (transform::kind? :input)
+                                                         (transform::initarg? :name "setup-for-toc"))
+                                              (transform::kind? :definition)
+                                              (transform::kind? :assignment)
+                                              (transform::kind? :font) ; TODO should be gone at this point
+                                              (transform::kind? :chardef)
+                                              (transform::kind? :mathchardef)
+                                              (transform::kind? :newif)
+                                              (transform::kind? :newskip)
+                                              (transform::kind? :new)
+                                              (transform::kind? :counter-definition)
+                                              (transform::kind? :setbox)
+                                              (transform::kind? :global)
+                                              (transform::kind? :catcode)
+                                              (transform::kind? :advance)
+                                              (transform::kind? :register-read)
+                                              (transform::kind? :comment)
+                                              (a:conjoin (transform::kind? :other-command-application)
+                                                         (transform::initarg? :name (lambda (value)
+                                                                                      (a:when-let ((primitive (tex:find-primitive value)))
+                                                                                        (intersection '(:font :layout :misc)
+                                                                                                      (tex:tags primitive)))))))))
+
 (defun to-html (input-directory output-directory
                 &key (dpans-directory  (merge-pathnames "dpANS3/" input-directory))
                      (issues-directory (directory (merge-pathnames #P"*-issues/" input-directory)))
                      (title-prefix     "Well-specified Common Lisp — ")
+                     (annotations      '())
                      (use-mathjax      t)
                      (use-sidebar      t)
                      (inspect?         t))
@@ -79,23 +120,11 @@
          (environment (make-instance 'env:lexical-environment :parent transform::**meta-environment**))
          (reference-environment (make-instance 'env:lexical-environment :parent transform::**reference-meta-environment**))
          ;; Parse
-         (tree        (cached (parse-specification builder dpans-directory issues-directory)))
+         (tree        (parse-specification builder dpans-directory issues-directory))
          ;; Transform
          (transformed (transform::apply-transforms
                        (list
-                        (make-instance 'transform::drop :builder   builder
-                                                        :predicate (a:conjoin (transform::kind? :other-command-application)
-                                                                              (transform::initarg? :name (a:disjoin
-                                                                                                          (lambda (value)
-                                                                                                            (a:when-let ((primitive (tex:find-primitive value)))
-                                                                                                              (intersection '(:environment :io)
-                                                                                                                            (tex:tags primitive))))
-                                                                                                          (lambda (value)
-                                                                                                            (member value '("onecolumn" "twocolumn"
-                                                                                                                            "indextab"
-                                                                                                                            "firstindextab")
-                                                                                                                    :test #'string=))))))
-
+                        (make-drop-1 builder)
                         (make-instance 'transform::expand-macros :builder           builder
                                                                  :environment       environment
                                                                  :debug-definition? t
@@ -107,30 +136,7 @@
                                                                  :debug-definition? t
                                                                  :debug-expansion   '())
 
-                        (make-instance 'transform::drop :builder   builder
-                                                        :predicate (a:disjoin
-                                                                    (a:conjoin (transform::kind? :input)
-                                                                               (transform::initarg? :name "setup-for-toc"))
-                                                                    (transform::kind? :definition)
-                                                                    (transform::kind? :assignment)
-                                                                    (transform::kind? :font) ; TODO should be gone at this point
-                                                                    (transform::kind? :chardef)
-                                                                    (transform::kind? :mathchardef)
-                                                                    (transform::kind? :newif)
-                                                                    (transform::kind? :newskip)
-                                                                    (transform::kind? :new)
-                                                                    (transform::kind? :counter-definition)
-                                                                    (transform::kind? :setbox)
-                                                                    (transform::kind? :global)
-                                                                    (transform::kind? :catcode)
-                                                                    (transform::kind? :advance)
-                                                                    (transform::kind? :register-read)
-                                                                    (transform::kind? :comment)
-                                                                    (a:conjoin (transform::kind? :other-command-application)
-                                                                               (transform::initarg? :name (lambda (value)
-                                                                                                            (a:when-let ((primitive (tex:find-primitive value)))
-                                                                                                              (intersection '(:font :layout :misc)
-                                                                                                                            (tex:tags primitive))))))))
+                        (make-drop-2 builder)
                         (make-instance 'transform::lower-display-tables :builder builder)
                         (make-instance 'transform::cleanup-math :builder builder)
                         (make-instance 'transform::cleanup-components :builder builder)
@@ -153,33 +159,47 @@
                                                       :builder          builder
                                                       :output-directory output-directory
                                                       :title-prefix     title-prefix
-                                                      :use-sidebar?     use-sidebar)))
+                                                      :use-sidebar?     use-sidebar
+                                                      :annotations      annotations)))
                         #+no (dpans-conversion.html::render-to-file
-                         transformed :output environment
-                         :use-sidebar      use-sidebar
-                         :use-mathjax      use-mathjax
+                              transformed :output environment
+                              :use-sidebar      use-sidebar
+                              :use-mathjax      use-mathjax
 
-                         :transform        transform
-                         :output-directory output-directory)
+                              :transform        transform
+                              :output-directory output-directory)
 
                         (transform:apply-transform transform transformed))))
-
     (when inspect?
       (clouseau:inspect
        (list (cons :evaluation-environment environment)
              (cons :reference-environment  reference-environment)
-             (cons :raw-document           (vector (architecture.builder-protocol.visualization::as-tree
-
+             (cons :raw-document           (vector (architecture.builder-protocol.inspection:as-tree
                                                     tree 'list)
-                                                   (architecture.builder-protocol.visualization::as-query
+                                                   (architecture.builder-protocol.inspection:as-query
                                                     tree 'list :editor-note)))
-             (cons :processed-document     (vector (architecture.builder-protocol.visualization::as-tree
+             (cons :processed-document     (vector (architecture.builder-protocol.inspection:as-tree
                                                     transformed 'list)
-                                                   (architecture.builder-protocol.visualization::as-query
+                                                   (architecture.builder-protocol.inspection:as-query
                                                     transformed 'list :component))))))
 
     result))
 
+(defun inspect-tree (tree &key environment intermediate-tree)
+  (flet ((tree-and-query (tree)
+           (values
+            (architecture.builder-protocol.inspection:as-tree
+             tree 'list)
+            (architecture.builder-protocol.inspection:as-query
+             tree 'list :editor-note))))
+    (multiple-value-bind (intermediate-tree intermediate-query)
+        (when intermediate-tree (tree-and-query intermediate-tree))
+      (multiple-value-bind (final-tree final-query)
+          (tree-and-query tree)
+        (let ((data (vector environment
+                            :intermediate intermediate-tree intermediate-query
+                            :final        final-tree        final-query)))
+          (clouseau:inspect data :new-process t))))))
 
 (defun to-sexp (input-directory output-file
                 &key (dpans-directory  (merge-pathnames "dpANS3/" input-directory))
@@ -191,39 +211,12 @@
          ;; Transform
          (result      (transform::apply-transforms
                        (list
-                        (make-instance 'transform::drop :builder   builder
-                                                        :predicate (a:conjoin (transform::kind? :other-command-application)
-                                                                              (transform::initarg? :name (lambda (value)
-                                                                                                           (a:when-let ((primitive (tex:find-primitive value)))
-                                                                                                             (intersection '(:environment :io :misc)
-                                                                                                                           (tex:tags primitive)))))))
+                        (make-drop-1 builder)
                         (make-instance 'transform::expand-macros :builder           builder
                                                                  :environment       environment
                                                                  :debug-definition? t
                                                                  :debug-expansion   '())
-                        (make-instance 'transform::drop :builder   builder
-                                                        :predicate (a:disjoin
-                                                                    (a:conjoin (transform::kind? :input)
-                                                                               (transform::initarg? :name "setup-for-toc"))
-                                                                    (transform::kind? :definition)
-                                                                    (transform::kind? :assignment)
-                                                                    (transform::kind? :font)
-                                                                    (transform::kind? :chardef)
-                                                                    (transform::kind? :mathchardef)
-                                                                    (transform::kind? :newif)
-                                                                    (transform::kind? :newskip)
-                                                                    (transform::kind? :new)
-                                                                    (transform::kind? :counter-definition)
-                                                                    (transform::kind? :setbox)
-                                                                    (transform::kind? :global)
-                                                                    (transform::kind? :catcode)
-                                                                    (transform::kind? :advance)
-                                                                    (transform::kind? :register-read)
-                                                                    (transform::kind? :comment)
-                                                                    (a:conjoin (transform::kind? :other-command-application)
-                                                                               (transform::initarg? :name (lambda (value)
-                                                                                                            (a:when-let ((primitive (tex:find-primitive value)))
-                                                                                                              (member :layout (tex:tags primitive))))))))
+                        (make-drop-2 builder)
                         (make-instance 'transform::lower-display-tables :builder builder)
                         (make-instance 'transform::cleanup-math :builder builder)
                         (make-instance 'transform::cleanup-components :builder builder)
@@ -253,9 +246,53 @@
 
     nil))
 
+(defun make-environment ()
+  (make-instance 'env:lexical-environment
+                 :parent transform::**meta-environment**))
+
+(defun to-clim (input-directory
+                &key (dpans-directory  (merge-pathnames "dpANS3/" input-directory))
+                     (issues-directory (directory (merge-pathnames #P"*-issues/" input-directory))))
+  (let* ((builder     'list)
+         (environment (make-environment))
+         ;; Parse
+         (tree        (parse-specification builder dpans-directory issues-directory))
+         ;; Transform
+         (result      (transform::apply-transforms
+                       (list
+                        (make-drop-1 builder)
+                        (make-instance 'transform::expand-macros :builder           builder
+                                                                 :environment       environment
+                                                                 :debug-definition? t
+                                                                 :debug-expansion   '())
+                        (make-instance 'transform::parse-listings :builder     builder
+                                                                  :environment environment)
+                        (make-instance 'transform::expand-macros :builder           builder
+                                                                 :environment       environment
+                                                                 :debug-definition? t
+                                                                 :debug-expansion   '())
+                        (make-drop-2 builder)
+                        (make-instance 'transform::lower-display-tables :builder builder)
+                        (make-instance 'transform::cleanup-math :builder builder)
+                        (make-instance 'transform::cleanup-components :builder builder)
+                        (make-instance 'transform::cleanup-issues :builder builder)
+                        (make-instance 'transform::attach-labels :builder builder) ; must be after `lower-display-tables'
+                        (make-instance 'transform::add-dictionary-sections :builder builder)
+                        (make-instance 'transform::build-references :builder builder))
+                       tree)))
+    (inspect-tree result :intermediate-tree tree :environment environment)
+    ; (setf dpans-conversion.clim::*ast* result)
+    nil))
+
 (defun do-it (&key (use-mathjax     t)
                    (use-sidebar     nil)
-                   (debug-expansion nil))
-  (to-html #P"~/code/cl/common-lisp/dpans/" #P"/tmp/output/"
-           :use-mathjax use-mathjax
-           :use-sidebar use-sidebar))
+                   (debug-expansion nil)
+                   title-prefix
+                   (annotations     '()))
+  (apply #'to-html #P"~/code/cl/common-lisp/dpans/" #P"/tmp/output/"
+         :use-mathjax use-mathjax
+         :use-sidebar use-sidebar
+         (append (when title-prefix
+                   (list :title-prefix title-prefix))
+                 (when annotations
+                   (list :annotations annotations)))))
