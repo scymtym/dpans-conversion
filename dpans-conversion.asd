@@ -6,7 +6,7 @@
                "parser.packrat.grammar.string"
 
                "architecture.builder-protocol"
-               "architecture.builder-protocol.visualization" ; debugging
+               "architecture.builder-protocol.inspection" ; debugging
 
                "computation.environment"
                "computation.environment.visualization" ; debugging

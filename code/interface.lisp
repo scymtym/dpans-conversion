@@ -53,7 +53,7 @@
 
 (when nil
   (clouseau:inspect
-   (architecture.builder-protocol.visualization:as-tree
+   (architecture.builder-protocol.inspection:as-tree
     (parse-specification 'list
                          "~/code/cl/common-lisp/dpans-conversion/data/dpANS3/"
                          "~/code/cl/common-lisp/dpans/issues/")
@@ -240,15 +240,14 @@
 
     (:inspect (vector environment
                       :tree
-                      (architecture.builder-protocol.visualization::as-tree
-
+                      (architecture.builder-protocol.inspection:as-tree
                        tree 'list)
-                      (architecture.builder-protocol.visualization::as-query
+                      (architecture.builder-protocol.inspection:as-query
                        tree 'list :editor-note)
                       :transformed
-                      (architecture.builder-protocol.visualization::as-tree
+                      (architecture.builder-protocol.inspection:as-tree
                        result 'list)
-                      (architecture.builder-protocol.visualization::as-query
+                      (architecture.builder-protocol.inspection:as-query
                        result 'list :component))
      :new-inspector? t)
 
