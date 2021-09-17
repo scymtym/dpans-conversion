@@ -385,44 +385,48 @@
   (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :possible-reference)) relations
                         &rest initargs &key name namespace must-resolve?)
-    (let* ((environment (environment transform))
-           (builder     (builder transform))
-           (name*       (normalize name))
-           (namespaces  (if namespace
-                            (a:ensure-list namespace)
-                            (append '(:function :macro :special-operator :proposal)
-                                    (set-difference (namespaces environment)
-                                                    '(:function :macro :special-operator :proposal
-                                                      :issue :glossary))
-                                    '(:issue :glossary))))
-           (match       (some (lambda (namespace)
-                                (a:when-let ((target (env:lookup name* namespace environment
-                                                                 :if-does-not-exist nil)))
-                                  (cons namespace target)))
-                              namespaces)))
-      (cond (match
-             (destructuring-bind (namespace . target) match
-               (apply #'reconstitute builder recurse :reference relations
-                      :name      name*
-                      :namespace namespace
-                      :target    target
-                      (a:remove-from-plist initargs :name :namespace))
-               #+no (apply #'bp:make+finish-node builder :reference
-                           :name      name*
-                           :namespace namespace
-                           :target    target
-                           (a:remove-from-plist initargs :name :namespace))))
-            (must-resolve?
-             (let ((namespace (typecase namespace
-                                (null "?")
-                                (cons (first namespace))
-                                (t    namespace))))
-               (apply #'reconstitute builder recurse :reference relations
-                      :namespace namespace
-                      :target    nil
-                      (a:remove-from-plist initargs :nanespace))))
-            (t
-             (bp:node (builder :chunk :content name))))))
+    (let ((environment (environment transform))
+          (builder     (builder transform)))
+      (multiple-value-bind (namespaces name*)
+          (cond (namespace
+                 (values (a:ensure-list namespace) (normalize name)))
+                ((a:starts-with #\& name)
+                 (values '(:lambda-list-keyword) (normalize (subseq name 1))))
+                (t
+                 (values (append '(:function :macro :special-operator :proposal)
+                                 (set-difference (namespaces environment)
+                                                 '(:function :macro :special-operator :proposal
+                                                   :issue :glossary))
+                                 '(:issue :glossary))
+                         (normalize name))))
+        (let ((match (some (lambda (namespace)
+                             (a:when-let ((target (env:lookup name* namespace environment
+                                                              :if-does-not-exist nil)))
+                               (cons namespace target)))
+                           namespaces)))
+          (cond (match
+                    (destructuring-bind (namespace . target) match
+                      (apply #'reconstitute builder recurse :reference relations
+                                                            :name      name*
+                                                            :namespace namespace
+                                                            :target    target
+                                                            (a:remove-from-plist initargs :name :namespace))
+                      #+no (apply #'bp:make+finish-node builder :reference
+                                  :name      name*
+                                  :namespace namespace
+                                  :target    target
+                                  (a:remove-from-plist initargs :name :namespace))))
+                (must-resolve?
+                 (let ((namespace (typecase namespace
+                                    (null "?")
+                                    (cons (first namespace))
+                                    (t    namespace))))
+                   (apply #'reconstitute builder recurse :reference relations
+                                                         :namespace namespace
+                                                         :target    nil
+                                                         (a:remove-from-plist initargs :nanespace))))
+                (t
+                 (bp:node (builder :chunk :content name))))))))
 
   (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :issue)) relations
