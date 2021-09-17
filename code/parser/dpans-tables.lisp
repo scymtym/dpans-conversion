@@ -4,9 +4,11 @@
 
 (defrule table-cell/inner (environment)
     (bounds (start end)
-      (seq (* (<<- elements (and (not (or (column-separator) (row-terminator) (span)))
+      (seq (* (<<- elements (and (not (or (column-separator environment)
+                                          (row-terminator)
+                                          (span)))
                                  (element environment))))
-           (or (column-separator) (<<- spans (span)))))
+           (or (column-separator environment) (<<- spans (span)))))
   (let ((span (when spans (1+ (length spans)))))
     (bp:node* (:cell :span span :bounds (cons start end))
       (* (:element . *) (nreverse elements)))))
@@ -22,7 +24,7 @@
     (bounds (start end)
       (seq (* (<<- cells (table-cell/inner environment)))
            (<<- cells (table-cell/last environment))
-           (skippable*)))
+           (skippable* environment)))
   (bp:node* (:row :bounds (cons start end))
     (* (:cell . *) (nreverse cells))))
 
@@ -79,7 +81,7 @@
 
 (define-command tabletwo
   (2  :header (header environment))
-  (1* :entry  (seq (skippable*) (tabletwo-entry environment))))
+  (1* :entry  (seq (skippable* environment) (tabletwo-entry environment))))
 
 ;;; Figure
 

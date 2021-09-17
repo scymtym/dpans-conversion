@@ -17,6 +17,13 @@
      (check-type ,name-var string)
      ,@body))
 
+(defrule has-syntax? (character syntax environment)
+    (seq)
+  (unless (eq (env:lookup character :characters environment
+                              :if-does-not-exist syntax) ; TODO populate environment accordingly?
+              syntax)
+    (:fail)))
+
 #+dpans-debug (defvar *depth* 0)
 
 ;;; Lexical stuff
@@ -30,33 +37,36 @@
 (defrule whitespace* ()
   (* (or #\Space #\Tab #\Newline)))
 
-(defrule comment-line ()
-    (bounds (start end)
-      (seq #\% (* (<<- content (and (not (end-of-line)) :any))) (end-of-line)))
+(defrule comment-line (environment)
+    (and (has-syntax? #\% :comment environment)
+         (bounds (start end)
+           (seq #\% (* (<<- content (and (not (end-of-line)) :any))) (end-of-line))))
   (let ((content (coerce (nreverse content) 'string)))
     (bp:node* (:comment-line :content content :bounds (cons start end)))))
 
-(defrule comment ()
-    (bounds (start end)
-      (seq (<<- lines (comment-line))
-           (* (seq (? (whitespace/in-line+)) (<<- lines (comment-line))))))
+(defrule comment (environment)
+    (and #\% ; efficiency hack
+         (bounds (start end)
+           (seq (<<- lines (comment-line environment))
+                (* (seq (? (whitespace/in-line+))
+                        (<<- lines (comment-line environment)))))))
   (bp:node* (:comment :bounds (cons start end))
     (* (:line . *) (nreverse lines))))
 
-(defrule skippable () ; TODO make this inlinable
-    (or #\Space #\Tab #\Newline (comment))
+(defrule skippable (environment) ; TODO make this inlinable
+    (or #\Space #\Tab #\Newline (and #\% (comment environment)))
   nil)
 
-(defrule skippable+ ()
-    (+ (skippable))
+(defrule skippable+ (environment)
+    (+ (skippable environment))
   nil)
 
-(defrule skippable* ()
-    (* (skippable))
+(defrule skippable* (environment)
+    (* (skippable environment))
   nil)
 
-(defrule terminator ()
-    (and (or (skippable) (not :any))
+(defrule terminator (environment)
+    (and (or (skippable environment) (not :any))
          (seq)))
 
 (defrule identifier ()
@@ -77,7 +87,8 @@
   nil)
 
 (defrule tilde (environment)
-    (bounds (start end) #\~)
+    (and (has-syntax? '#\~ :non-breaking-space environment)
+         (bounds (start end) #\~))
   (if (env:lookup "~" :macro environment :if-does-not-exist nil)
       (bp:node* (:other-command-application :name "~" :bounds (cons start end)))
       (bp:node* (:non-breaking-space :bounds (cons start end)))))
@@ -94,17 +105,21 @@
                                    #\% #\# #\_ #\{ #\} #\& #\$ #\. #\^ #\"))))
   character)
 
-(defrule indexed-char ()
-    (seq "\\char" (skippable*) (? #\') (+ (<<- id (guard digit-char-p))))
+(defrule indexed-char (environment)
+    (seq "\\char" (skippable* environment) (? #\') (+ (<<- id (guard digit-char-p))))
   (let ((code (parse-integer (coerce (nreverse id) 'string) :radix 8)))
     (bp:node* (:chunk :content (string (code-char code))))))
 
 (defrule chunk (environment)
     (bounds (start end)
       (+ (<<- characters (or (escaped-character)
-                             (and (not (or #\{ #\} #\\ #\% #\& #\$ #\~ ; #\.
-                                           (seq (+ #\#) (+ (guard digit digit-char-p))) ; argument
+                             (and (not (or #\{ #\} #\\   ; #\.
+                                           (and #\$ (has-syntax? '#\$ :math-group environment))
+                                           (and #\# (argument environment))
                                            (mdash)
+                                           (and #\~ (tilde environment))
+                                           (and #\% (comment-line environment))
+                                           (and #\& (column-separator environment))
                                            (paragraph-break)
                                            ;; Allow ^ and _ in normal mode
                                            (:transform (or #\^ #\_)
@@ -146,10 +161,10 @@
                    `(seq
                      ,@(flet ((one (expression)
                                 `(,@(when open-delimiter
-                                      `((skippable*) ,open-delimiter))
+                                      `((skippable* environment) ,open-delimiter))
                                   ,expression
                                   ,@(when close-delimiter
-                                      `((skippable*) ,close-delimiter)))))
+                                      `((skippable* environment) ,close-delimiter)))))
                          (case cardinality
                            (1  (one `(<- ,variable ,expression)))
                            (1* (one `(* (<<- ,variable ,expression))))
@@ -220,27 +235,29 @@
 (define-group bracket-group :bracket-group #\[  #\])
 
 (defrule math-group (environment)
-  (bounds (start end)
-    (seq/ws #\$
-            (<- new-environment (:transform (seq)
-                                  (env:augmented-environment
-                                   environment '((:mode . :traversal)) '(:math))))
-            (* (seq (<<- elements (and (not #\$) (element new-environment)))
-                    (whitespace*))) ; whitespace is not significant in math mode
-            #\$))
+    (and (has-syntax? '#\$ :math-group environment)
+         (bounds (start end)
+           (seq/ws #\$
+                   (<- new-environment (:transform (seq)
+                                         (env:augmented-environment
+                                          environment '((:mode . :traversal)) '(:math))))
+                   (* (seq (<<- elements (and (not #\$) (element new-environment)))
+                           (whitespace*))) ; whitespace is not significant in math mode
+                   #\$)))
   (bp:node* (:math :bounds (cons start end))
     (* (:element . *) (nreverse elements))))
 
 (defrule math-display (environment)
-    (bounds (start end)
-      (seq/ws "$$"
-              (<- new-environment (:transform (seq)
-                                    (env:augmented-environment
-                                     environment '((:mode . :traversal)) '(:math))))
-              (* (seq (<<- elements (and (not #\$) (element new-environment)))
-                      (whitespace*))) ; whitespace is not significant in math mode
-              "$$"
-              (:transform (seq) nil))) ; HACK
+    (and (has-syntax? '#\$ :math-group environment)
+         (bounds (start end)
+           (seq/ws "$$"
+                   (<- new-environment (:transform (seq)
+                                         (env:augmented-environment
+                                          environment '((:mode . :traversal)) '(:math))))
+                   (* (seq (<<- elements (and (not #\$) (element new-environment)))
+                           (whitespace*))) ; whitespace is not significant in math mode
+                   "$$"
+                   (:transform (seq) nil)))) ; HACK
   (bp:node* (:math-display :bounds (cons start end))
     (* (:element . *) (nreverse elements))))
 
@@ -272,9 +289,9 @@
 (defrule input (environment)
     (bounds (start end)
       (seq/ws "\\input"
-              (or (<- argument (argument)) ; HACK
+              (or (<- argument (argument environment)) ; HACK
                   (seq (<<- name :any)
-                       (* (<<- name (and (not (or (skippable) #\} #\\)) :any)))))
+                       (* (<<- name (and (not (or (skippable environment) #\} #\\)) :any)))))
                                         ; (terminator)
               ))
   (cond ((env:lookup :definition :traversal environment ; delay \input within \def
@@ -302,7 +319,7 @@
     (bounds (start end)
       (seq/ws "\\includeDictionary" #\{
               (seq (<<- name :any)
-                   (* (<<- name (and (not (or (skippable) #\} #\\)) :any))))
+                   (* (<<- name (and (not (or (skippable environment) #\} #\\)) :any))))
               #\}))
   (cond ((env:lookup :definition :traversal environment ; delay \input within \def
                                  :if-does-not-exist nil)
@@ -330,19 +347,19 @@
 (define-command ftype
   (1 :name (element environment)))
 
-(defrule secref ()
+(defrule secref (environment)
     (bounds (start end)
       (seq "\\secref" (or (seq #\\ (<- name (identifier)))
-                          (<- name (argument)))))
+                          (<- name (argument environment)))))
   (bp:node* (:secref :bounds (cons start end))
     (1 (:name . 1) (if (stringp name)
                        (bp:node* (:chunk :content name)) ; TODO chunk is a hack
                        name))))
 
-(defrule chapref ()
+(defrule chapref (environment)
     (bounds (start end)
       (seq "\\chapref" (or (seq #\\ (<- name (identifier)))
-                           (<- name (argument)))))
+                           (<- name (argument environment)))))
   (bp:node* (:secref :bounds (cons start end))
     (1 (:name . 1) (if (stringp name)
                        (bp:node* (:chunk :content name))
@@ -400,13 +417,13 @@
 (defrule miscref (environment)
     (bounds (start end)
       (seq "\\misc" (? "ref")
-           (skippable*) #\{ (<- name (element environment)) (skippable*) #\}))
+           (skippable* environment) #\{ (<- name (element environment)) (skippable* environment) #\}))
   (bp:node* (:miscref :bounds (cons start end))
     (1 (:name . 1) name)))
 
 (defrule reference (environment)
-  (or (chapref)
-      (secref)
+  (or (chapref environment)
+      (secref environment)
       (typeref environment)
       (declref environment)
       (specref environment)
@@ -474,10 +491,10 @@
                                    (element      '(element environment))
                                    (name?        t))
         (a:ensure-list name-and-options)
-      `(defrule ,name ( environment)
+      `(defrule ,name (environment)
            (bounds (start end)
              (seq ,start-string ,@(when name? '(#\{ (<- name (chunk environment)) #\}))
-                  (skippable*)
+                  (skippable* environment)
                   (* (<<- elements (and (not ,end-string)
                                         ,element)))
                   ,end-string
@@ -493,7 +510,7 @@
            #\{ (<- name (chunk environment)) #\}
            #\{ (<- name2 (chunk environment)) #\}
            #\{ (<- name3 (chunk environment)) #\}
-           (skippable*)
+           (skippable* environment)
            (* (<<- elements
                    (and (not (seq "\\" "end" (or #\c #\C) "hapter")) (element environment))))
            (seq "\\" "end" (or #\c #\C) "hapter")
@@ -563,12 +580,12 @@
               #+dpans-debug (:transform (seq) (format *trace-output* "~V@T[ item list~%" *depth*) (incf *depth*))
               (or (seq/ws
                    (* (and (not "\\endlist")
-                           (seq (skippable*)
+                           (seq (skippable* environment)
                                 (<<- elements (or (issue-annotation environment)
-                                                  (reviewer)
-                                                  (editor-note)
+                                                  (reviewer environment)
+                                                  (editor-note environment)
                                                   (list-item environment)))
-                                (skippable*))))
+                                (skippable* environment))))
                    (:transform "\\endlist" nil)
                    #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] item list~%" *depth*)))
                   #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX item list~%" *depth*) (:fail))
@@ -591,10 +608,10 @@
       (seq/ws "\\beginlist"
               #+dpans-debug (:transform (seq) (format *trace-output* "~V@T[ enum list~%" *depth*) (incf *depth*))
               (or (seq/ws (* (and (not "\\endlist")
-                               (seq (skippable*)
+                               (seq (skippable* environment)
                                     (<<- elements (or (issue-annotation environment)
                                                       (enumeration-item environment)))
-                                    (skippable*))))
+                                    (skippable* environment))))
                        (:transform  "\\endlist" nil)
                        #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] enum list~%" *depth*)))
                   #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX enum list~%" *depth*) (:fail))
@@ -621,11 +638,11 @@
       (seq/ws "\\beginlist"
               #+dpans-debug (:transform (seq) (format *trace-output* "~V@T[ definition list~%" *depth*) (incf *depth*))
               (or (seq/ws (* (and (not "\\endlist")
-                                  (seq (skippable*)
+                                  (seq (skippable* environment)
                                        (<<- elements
                                             (or (issue-annotation environment)
                                                 (definition-item environment)))
-                                       (skippable*))))
+                                       (skippable* environment))))
                           (:transform "\\endlist" nil)
                           #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] definition list ~D~%" *depth* (length elements))))
                   #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX definition list~%" *depth*) (:fail))
@@ -653,7 +670,7 @@
 ;;;
 
 (defrule catcode (environment)
-  (seq "\\catcode" (skippable*) "`\\" character
+  (seq "\\catcode" (skippable* environment) "`\\" character
        (? #\=) (or (name)
                    (* (guard digit-char-p) 1 3)))
   (bp:node* (:catcode)
@@ -693,11 +710,12 @@
   (bp:node* (:global)
     (1 (:modified . 1) modified)))
 
-(defrule argument ()
-    (bounds (start end)
-      (seq (+ (<<- level #\#))
-           (<- number (:transform (guard digit digit-char-p)
-                        (digit-char-p digit)))))
+(defrule argument (environment)
+    (and (has-syntax '#\# :argument environment)
+         (bounds (start end)
+           (seq (+ (<<- level #\#))
+                (<- number (:transform (guard digit digit-char-p)
+                                         (digit-char-p digit))))))
   (bp:node* (:argument :level  (length level)
                        :number number
                        :bounds (cons start end))))
@@ -811,7 +829,7 @@
                                          spec))
                                      (:transform (<- name (identifier-with-dot))
                                        (lookup-macro name environment t (cons start (1+ start))))))
-           (* (seq (skippable*)
+           (* (seq (skippable* environment)
                    (or (and (:transform (seq)
                               (when (or (null argument-spec)
                                         (not (eq (first argument-spec) 't)))
@@ -939,7 +957,7 @@
 (defrule newif (environment)
     (bounds (start end)
       (seq "\\newif"
-           (skippable*) (<- name1 (name))
+           (skippable* environment) (<- name1 (name))
            (? (seq (? (whitespace/in-line+)) (<- name2 (name))))))
   ;; Side effect: define "if", "true" and "false" macros.
   (with-name-string (name name1)
@@ -1005,10 +1023,10 @@
                               (:fail)))
 
                           (seq/ws (element environment) (element environment))))
-          (* (seq (skippable*)
+          (* (seq (skippable* environment)
                   (and (not (or "\\fi" "\\else"))
                        (<<- consequent (element environment)))))
-          (? (seq/ws "\\else" (* (seq (skippable*)
+          (? (seq/ws "\\else" (* (seq (skippable* environment)
                                       (and (not "\\fi")
                                            (<<- alternative (element environment)))))))
           "\\fi")
@@ -1309,34 +1327,35 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
     (1 (:dimension . 1) dimension)))
 
 (defrule hrule (environment)
-  (bounds (start end)
-   (seq "\\hrule" (* (seq (skippable*) (or (seq/ws "height"
-                                                (<- height (or (defined-variable environment)
-                                                               (:transform
-                                                                (bounds (start2 end2)
-                                                                  (+ (<<- characters (and (not (or (skippable) #\} #\\ "depth" "width")) :any))))
-                                                                (prog1
-                                                                    (bp:node* (:chunk :content (coerce (nreverse characters)'string)
-                                                                                      :bounds  (cons start2 end2)))
-                                                                  (setf characters '()))))))
-                                           (seq/ws "depth"
-                                                   (<- depth (or (defined-variable environment)
-                                                                  (:transform
-                                                                   (bounds (start2 end2)
-                                                                     (+ (<<- characters (and (not (or (skippable) #\} #\\ "height" "width")) :any))))
-                                                                   (prog1
-                                                                       (bp:node* (:chunk :content (coerce (nreverse characters) 'string)
-                                                                                         :bounds  (cons start2 end2)))
-                                                                     (setf characters '()))))))
-                                           (seq/ws "width"
-                                                   (<- width (or (defined-variable environment)
-                                                                 (:transform
-                                                                     (bounds (start2 end2)
-                                                                       (+ (<<- characters (and (not (or (skippable) #\} #\\ "height" "depth")) :any))))
-                                                                   (prog1
-                                                                       (bp:node* (:chunk :content (coerce (nreverse characters) 'string)
-                                                                                         :bounds  (cons start2 end2)))
-                                                                     (setf characters '())))))))))))
+    (bounds (start end)
+      (seq "\\hrule" (* (seq (skippable* environment)
+                             (or (seq/ws "height"
+                                         (<- height (or (defined-variable environment)
+                                                        (:transform
+                                                         (bounds (start2 end2)
+                                                           (+ (<<- characters (and (not (or (skippable environment) #\} #\\ "depth" "width")) :any))))
+                                                         (prog1
+                                                             (bp:node* (:chunk :content (coerce (nreverse characters)'string)
+                                                                               :bounds  (cons start2 end2)))
+                                                           (setf characters '()))))))
+                                 (seq/ws "depth"
+                                         (<- depth (or (defined-variable environment)
+                                                       (:transform
+                                                        (bounds (start2 end2)
+                                                          (+ (<<- characters (and (not (or (skippable environment) #\} #\\ "height" "width")) :any))))
+                                                        (prog1
+                                                            (bp:node* (:chunk :content (coerce (nreverse characters) 'string)
+                                                                              :bounds  (cons start2 end2)))
+                                                          (setf characters '()))))))
+                                 (seq/ws "width"
+                                         (<- width (or (defined-variable environment)
+                                                       (:transform
+                                                        (bounds (start2 end2)
+                                                          (+ (<<- characters (and (not (or (skippable environment) #\} #\\ "height" "depth")) :any))))
+                                                        (prog1
+                                                            (bp:node* (:chunk :content (coerce (nreverse characters) 'string)
+                                                                              :bounds  (cons start2 end2)))
+                                                          (setf characters '())))))))))))
   (bp:node* (:hrule :bounds (cons start end))
     (bp:? (:height . bp:?) height)
     (bp:? (:depth  . bp:?) depth)
@@ -1438,10 +1457,10 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
                               (seq "end" (* "sub") "section")
                               ))))
        (or ;; Lexical stuff
-           (comment)
+           (comment environment)
            (spacing-command)
            (verb)
-           (indexed-char)
+           (indexed-char environment)
 
            ;; TeX stuff
            (catcode environment) (chardef environment) (mathchardef environment)
@@ -1470,7 +1489,7 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
            ;; TeX table stuff
            (halign environment)
            (settabs environment)
-           (column-separator) ; TODO only in table or command definition
+           (column-separator environment) ; TODO only in table or command definition
            (span)
            (row-terminator)
 
@@ -1505,8 +1524,8 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
            (code)
 
            (issue-annotation environment)
-           (editor-note)
-           (reviewer)
+           (editor-note environment)
+           (reviewer environment)
 
            (component-label environment)
            (none environment)
@@ -1536,14 +1555,14 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
            (glossary-list environment) (gentry environment)
 
            (def environment)
-           (argument)                   ; TODO
+           (argument environment)                   ; TODO
            (let-macro environment)
            (global-modifier environment) ; TODO should not be needed
            (user-macro-application environment)
 
            (block* environment)
            (bracket-group environment)
-           (math-display environment)   ; must precede `math-group'
+           (math-display environment) ; must precede `math-group'
            (math-group environment)
 
            (tilde environment)
@@ -1551,7 +1570,7 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
            (paragraph-break)
            (chunk environment)
 
-           (skippable+))))
+           (skippable+ environment))))
 
 (defrule elements (environment)
     (* (<<- elements (element environment)))

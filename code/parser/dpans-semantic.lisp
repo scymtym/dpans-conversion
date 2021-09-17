@@ -24,7 +24,7 @@
     (+ (<<- name (and (not (or #\: #\})) :any)))
   (coerce (nreverse name) 'string))
 
-(defrule editor-note ()
+(defrule editor-note (environment)
     (bounds (start end)
       (seq/ws "\\editornote{" (<- editor (person)) #\:
               (<- content (balanced-content))
@@ -33,7 +33,7 @@
                           :content content
                           :bounds  (cons start end))))
 
-(defrule reviewer ()
+(defrule reviewer (environment)
     (bounds (start end)
       (seq/ws "\\reviewer{" (? (<- reviewer (:transform (seq/ws (<- temp (person)) #\:) temp))) ; HACK work around parser.packrat bug
               (<- content (balanced-content))
@@ -89,7 +89,7 @@
   (let ((name (coerce (nreverse characters) 'string)))
     (bp:node* (:symbol :name name :bounds (cons start end)))))
 
-(defrule entry ()
+(defrule entry (environment)
     (bounds (start end)
             (seq "\\entry{"
                  (or (seq/ws #\{ (<- name (component-name)) #\}) ; TODO optional block is a hack
@@ -98,8 +98,9 @@
   name)
 
 (defrule entry-list (environment)
-    (* (seq (or (<<- names (entry)) (user-macro-application environment))
-            (skippable*)))
+    (* (seq (or (<<- names (entry environment))
+                (user-macro-application environment))
+            (skippable* environment)))
   (nreverse names))
 
 ;;; Syntax
@@ -128,18 +129,18 @@
                 (or ,@(map 'list #'list rules))))))))
   (define))
 
-(defrule call-syntax-name ()
-    (must (or (seq/ws #\{ (<- name (or (argument) (component-name))) #\}) ; TODO handle this better
-              (<- name (or (argument) (component-name))))
+(defrule call-syntax-name (environment)
+    (must (or (seq/ws #\{ (<- name (or (argument environment) (component-name))) #\}) ; TODO handle this better
+              (<- name (or (argument environment) (component-name))))
           "must be a name, optionally within curly braces")
   name)
 
 (defrule call-syntax-special-operator (environment)
     (bounds (start end)
       (seq/ws (seq "\\Defspec" (? (or (seq "WithValues" (? "Newline")) "NoReturn")))
-              (<- name (call-syntax-name))
+              (<- name (call-syntax-name environment))
               #\{ (* (<<- arguments (element environment))) #\}
-              (? (seq/ws #\{ (* (seq (skippable*) (<<- return-values (element environment)))) #\}))))
+              (? (seq/ws #\{ (* (seq (skippable* environment) (<<- return-values (element environment)))) #\}))))
   (bp:node* (:call-syntax :which :special-operator :bounds (cons start end))
     (1 (:name         . 1) name)
     (* (:argument     . *) (nreverse arguments))
@@ -148,9 +149,9 @@
 (defrule call-syntax-defun (environment)
     (bounds (start end)
       (seq/ws (seq "\\Defun" (? (or (seq "WithValues" (? "Newline")) "NoReturn")))
-              (<- name (call-syntax-name))
+              (<- name (call-syntax-name environment))
               #\{ (* (<<- arguments (element environment))) #\}
-              (? (seq #\{ (* (seq (skippable*) (<<- return-values (element environment)))) #\}))))
+              (? (seq #\{ (* (seq (skippable* environment) (<<- return-values (element environment)))) #\}))))
   (bp:node* (:call-syntax :which :function :bounds (cons start end))
     (1 (:name         . *) name)
     (* (:argument     . *) (nreverse arguments))
@@ -279,7 +280,7 @@
 (defrule call-syntax-defgen (environment)
     (bounds (start end)
       (seq/ws (seq "\\Defgen" (? (seq "WithValues" (? "Newline"))))
-              (<- name (call-syntax-name))
+              (<- name (call-syntax-name environment))
               #\{ (* (<<- arguments     (element environment))) #\}
               #\{ (* (<<- return-values (element environment))) #\}))
   (bp:node* (:call-syntax :which :generic-function :bounds (cons start end))
@@ -303,7 +304,7 @@
 
 (defrule call-syntax-defmeth (environment)
     (bounds (start end)
-      (seq/ws "\\Defmeth" (<- name (call-syntax-name))
+      (seq/ws "\\Defmeth" (<- name (call-syntax-name environment))
               #\{ (* (<<- parameters (element environment))) #\}))
   (bp:node* (:call-syntax :which :method :bounds (cons start end))
     (1 (:name     . 1) name)
@@ -312,7 +313,7 @@
 (defrule call-syntax-defmacro (environment)
     (bounds (start end)
       (seq/ws (seq "\\Defmac" (? (or (seq "WithValues" (? "Newline")) "NoReturn")))
-              (<- name (call-syntax-name))
+              (<- name (call-syntax-name environment))
               #\{ (* (<<- arguments (element environment))) #\}
               (? (seq #\{ (* (<<- return-values (element environment))) #\}))))
   (bp:node* (:call-syntax :which :macro :bounds (cons start end))
@@ -322,7 +323,7 @@
 
 (defrule call-syntax-type (environment)
     (bounds (start end)
-      (seq/ws "\\Deftype" (<- name (call-syntax-name))
+      (seq/ws "\\Deftype" (<- name (call-syntax-name environment))
               #\{ (* (<<- elements (element environment))) #\}))
   (bp:node* (:call-syntax :which :type :bounds (cons start end))
     (1 (:name    . 1) name)
@@ -330,7 +331,7 @@
 
 (defrule call-syntax-setf (environment)
     (bounds (start end)
-      (seq/ws "\\Defsetf" (<- name (call-syntax-name))
+      (seq/ws "\\Defsetf" (<- name (call-syntax-name environment))
               #\{ (* (<<- arguments (element environment))) #\}
               #\{ (<- new-value (element environment)) #\}))
   (bp:node* (:call-syntax :which :setf :bounds (cons start end))
@@ -419,7 +420,7 @@
 (defrule component (environment)
     (bounds (start end)
       (seq "\\begincom{"
-           (must (+ (seq (<<- names (component-name)) (? (seq #\, (skippable*)))))
+           (must (+ (seq (<<- names (component-name)) (? (seq #\, (skippable* environment)))))
                  "must be a component name")
            #\}
            (* (<<- elements (and (not "\\endcom") (element environment))))
@@ -450,9 +451,9 @@
 (defrule glossary-section (environment)
     (bounds (start end)
       (seq (seq #\\ (? "first") "indextab") #\{ (<- name (chunk environment)) #\}
-           (* (or (skippable+)
+           (* (or (skippable+ environment)
                   (<<- entries (or (issue-annotation environment)
-                                   (editor-note)
+                                   (editor-note environment)
                                    (gentry environment)))))
            (:transform (seq) (format *trace-output* "Parsed glossary section ~A~%" name))))
   (bp:node* (:section :level  1

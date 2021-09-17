@@ -10,8 +10,9 @@
     (bounds (start end) "\\+" (:transform (seq) nil))
   (bp:node* (:row-start :bounds (cons start end))))
 
-(defrule column-separator () ; TODO this lexical level stuff
-    (bounds (start end) #\&)
+(defrule column-separator (environment) ; TODO this is lexical level stuff
+    (and (has-syntax? '#\& :column-separator environment)
+         (bounds (start end) #\&))
   (bp:node* (:column-separator :bounds (cons start end))))
 
 (defrule row-terminator () ; TODO these are also needed for TeX tables
@@ -32,11 +33,12 @@
 ;;; \+ … & … & … \cr
 
 (defrule settabs-cell (environment)
-  (bounds (start end)
-          (seq (* (seq (and (not (or (column-separator) (row-terminator)))
-                            (<<- elements (element environment)))
-                       (skippable*)))
-               (? (column-separator))))
+    (bounds (start end)
+      (seq (* (seq (and (not (or (column-separator environment)
+                                 (row-terminator)))
+                        (<<- elements (element environment)))
+                   (skippable* environment)))
+           (? (column-separator environment))))
   (bp:node* (:cell :bounds (cons start end))
     (* (:element . *) (nreverse elements))))
 
@@ -52,7 +54,7 @@
 (defrule settabs (environment)
     (bounds (start end)
       (seq/ws "\\settabs"
-              (* (seq (skippable*) (* (and (not "\\+") (element environment)))
+              (* (seq (skippable* environment) (* (and (not "\\+") (element environment)))
                       (<<- rows (settabs-row environment))))))
   (bp:node* (:table :kind :settabs)
     (* (:row . *) (nreverse rows))))
@@ -79,17 +81,18 @@
 ;;; The first line specifies a template in which # are placeholders.
 
 (defrule halign-cell (environment)
-  (bounds (start end)
-          (seq/ws (* (<<- elements (and (not (or (column-separator) (row-terminator) #\})) ; TODO } needed?
-                                        (or (placeholder) (element environment))))) ; TODO is placeholder an element?
-                  (or (column-separator)
-                      (and (or (row-terminator) #\}) (seq)))))
+    (bounds (start end)
+      (seq/ws (* (<<- elements (and (not (or (column-separator environment)
+                                             (row-terminator) #\})) ; TODO } needed?
+                                    (or (placeholder) (element environment))))) ; TODO is placeholder an element?
+              (or (column-separator environment)
+                  (and (or (row-terminator) #\}) (seq)))))
   (bp:node* (:cell :bounds (cons start end))
     (* (:element . *) (nreverse elements))))
 
 (defrule halign-row (environment)
     (bounds (start end)
-      (seq (* (seq (<<- cells (and (not (or (row-terminator) #\})) (halign-cell environment))) (skippable*)))
+      (seq (* (seq (<<- cells (and (not (or (row-terminator) #\})) (halign-cell environment))) (skippable* environment)))
            (or (row-terminator) (and #\} (seq))))) ; TODO is the terminator required?
   (bp:node* (:row :bounds (cons start end))
     (* (:cell . *) (nreverse cells))))
@@ -100,7 +103,7 @@
               (or (seq/ws "to"     (<- to (name)))
                   (seq/ws "spread" (<- spread (name)))
                   (seq))
-              (? (seq/ws #\{ (* (seq (<<- rows (and (not #\}) (halign-row environment))) (skippable*))) #\})))) ; TODO really optional?
+              (? (seq/ws #\{ (* (seq (<<- rows (and (not #\}) (halign-row environment))) (skippable* environment))) #\})))) ; TODO really optional?
   (bp:node* (:table :kind   :halign
                     :bounds (cons start end))
     (bp:? (:to     . 1) to)

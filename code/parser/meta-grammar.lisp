@@ -14,7 +14,7 @@
               `(seq ,@(loop :for expression :in (nreverse expressions)
                             :for first? = t :then nil
                             :unless first?
-                            :collect '(skippable*)
+                            :collect '(skippable* environment)
                             :collect expression)))
             (parser.packrat.grammar.base::expression context)))
 
