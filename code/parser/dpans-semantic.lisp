@@ -342,7 +342,7 @@
     (bounds (start end)
       (seq/ws "\\DefsetfMulti"
               #\{ (* (<<- arguments (element environment))) #\}
-              #\{ (<- new-value (element environment)) (skippable*) #\}
+              #\{ (<- new-value (element environment)) #\}
               #\{ (<- names (entry-list environment)) #\}))
   (bp:node* (:call-syntax :which :setf :bounds (cons start end))
     (* (:name      . *) names)

@@ -14,7 +14,8 @@
 
 (defmethod apply-transform ((transform t) (ast t))
   (let ((builder (builder transform)))
-    (labels ((visit (recurse relation relation-args node kind relations &rest initargs)
+    (labels ((visit (recurse relation relation-args node kind relations
+                     &rest initargs)
                (apply #'transform-node transform recurse
                       relation relation-args node kind relations
                       initargs)))

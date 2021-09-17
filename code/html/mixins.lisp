@@ -3,12 +3,10 @@
 ;;; `output-directory-mixin'
 
 (defclass output-directory-mixin ()
-  (
-   (%file-type         :initarg  :file-type ; TODO separate mixin
-                       :reader   file-type
-                       :initform "xhtml")
-
-   (%output-directory :type     (and directory
+  ((%file-type        :initarg  :file-type ; TODO separate mixin
+                      :reader   file-type
+                      :initform "xhtml")
+   (%output-directory :type     (and pathname
                                      (satisfies uiop:directory-pathname-p))
                       :reader   output-directory
                       :writer   (setf %output-directory)))

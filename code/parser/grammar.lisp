@@ -815,11 +815,13 @@
                                                                      mode name))))))
     (when spec
       (values (typecase spec
-                (integer (make-list spec :initial-element 't))
+                (integer
+                 (make-list spec :initial-element 't))
                 ((cons (eql :definition))
                  (let ((arity (length (bp:node-relation 'list '(:argument . *) spec)))) ; TODO use only one format
                    (make-list arity :initial-element 't)))
-                (list    (first spec)))
+                (list
+                 (first spec)))
               t))))
 
 (defrule user-macro-application (environment)

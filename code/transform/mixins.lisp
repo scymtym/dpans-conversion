@@ -103,10 +103,12 @@
   (length (file-stack transform)))
 
 (defmethod enter ((transform t) (kind (eql :file)) (which t))
-  (format t "~V@TEntering file ~S~%" (* 2 (include-depth transform)) which))
+  ; (format t "~V@TEntering file ~S~%" (* 2 (include-depth transform)) which)
+  )
 
 (defmethod leave ((transform t) (kind (eql :file)) (which t))
-  (format t "~V@TLeaving file ~S~%" (* 2 (include-depth transform)) which))
+  ; (format t "~V@TLeaving file ~S~%" (* 2 (include-depth transform)) which)
+  )
 
 (defmethod transform-node :around
     ((transform file-tracking-mixin) recurse
