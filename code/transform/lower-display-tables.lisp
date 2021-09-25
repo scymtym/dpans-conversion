@@ -67,29 +67,32 @@
     (:display
      (let* ((builder   (builder transform))
             (caption   (current-caption transform))
-            (namespace (cond ((search "declaration identifier" caption :test #'char-equal)
-                              '(:declaration))
-                             ((search "operator" caption :test #'char-equal)
-                              '(:function :macro :special-operator))
-                             ((and (search "function" caption :test #'char-equal)
-                                   (not (search "relat" caption :test #'char-equal)))
-                              :function)
-                             ((and (search "variable" caption :test #'char-equal)
-                                   (not (search "applicable to" caption :test #'char-equal))
-                                   (not (search "condition variable" caption :test #'char-equal)))
-                              :variable)
-                             ((and (search "type" caption :test #'char-equal)
-                                   (not (search "relating to" caption :test #'char-equal))
-                                   (not (search "method combination" caption :test #'char-equal))) ; TODO detect this as :method-combination
-                              :type)
-                             (t
-                              nil))))
+            (namespace (guess-display-table-namespace caption)))
        (call-with-environment
         (lambda ()
           (apply #'reconstitute builder recurse :table relations initargs))
         transform '((:display? . :traversal)) `((:table . ,namespace)))))
     ((nil :show :figure)
      (call-next-method))))
+
+(defun guess-display-table-namespace (caption)
+  (cond ((search "declaration identifier" caption :test #'char-equal)
+         '(:declaration))
+        ((search "operator" caption :test #'char-equal)
+         '(:function :macro :special-operator))
+        ((and (search "function" caption :test #'char-equal)
+              (not (search "relat" caption :test #'char-equal)))
+         :function)
+        ((and (search "variable" caption :test #'char-equal)
+              (not (search "applicable to" caption :test #'char-equal))
+              (not (search "condition variable" caption :test #'char-equal)))
+         :variable)
+        ((and (search "type" caption :test #'char-equal)
+              (not (search "relating to" caption :test #'char-equal))
+              (not (search "method combination" caption :test #'char-equal))) ; TODO detect this as :method-combination
+         :type)
+        (t
+         nil)))
 
 ;;; Attach captions to figures
 ;;;
