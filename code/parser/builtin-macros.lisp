@@ -33,9 +33,7 @@
     (register "bye" 0)
 
     ;; Registers
-
-                                        ; (register "newskip" 1)
-
+    ;; (register "newskip" 1)
     (register "dimen" 1) ; TODO wrong; should use assignment
     (register "maxdimen" 0)
 
@@ -50,7 +48,9 @@
     (register "leftskip" :variable)
     (register "rightskip" :variable)
     (register "topskip" 1)
-    (register "tabskip" :variable) (register "parskip" '((:variable))) (register "parfillskip" :variable)
+    (register "tabskip" :variable)
+    (register "parskip" :variable)
+    (register "parfillskip" :variable)
     (register "hskip" '((:variable))) (register "vskip" 1) (register "baselineskip" :variable)
     (register "offinterlineskip" 0) (register "nointerlineskip" 0)
     (register "hss" 0) (register "vss" 0)
@@ -100,7 +100,7 @@
     (register "null" 0)
 
     (register "afterassignment" 1)
-    (register "overfullrule" 1)
+    (register "overfullrule" :variable)
     (register "vadjust" 1)
 
     ;; Font
@@ -233,7 +233,11 @@
     (register "nullabel" 0)
     (register "bf" 0)
     (register "logissue" 1)
-    (register "deffigrefs" 1)
-    (register "defsecrefs" 1)
+    ;; (register "deffigrefs" 1)
+    (register "seefig" 1)
+    ;; (register "defsecrefs" 1)
     (register "indextabnote" 1)
-    (register "bcindex" 1)))
+    (register "bcindex" 1)
+
+    ;; Super hack Meth is actually a local macro
+    (register "Meth" 2)))

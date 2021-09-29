@@ -284,7 +284,9 @@
            (* (<<- content (and (not "\\endcode") :any)))
            "\\endcode"))
   (let ((content (coerce (nreverse content) 'string)))
-    (bp:node* (:code :content content :bounds (cons start end)))))
+    (bp:node* (:code :content       content
+                     :contains-tex? t
+                     :bounds        (cons start end)))))
 
 (defun include-file (name environment)
   (let* ((filename (when name
@@ -299,8 +301,9 @@
              (new-environment (env:augmented-environment
                                environment
                                '((:current-file  . :traversal)
-                                 (:include-depth . :traversal))
-                               (list filename new-include-depth))))
+                                 (:include-depth . :traversal)
+                                 (:in-group      . :traversal))
+                               (list filename new-include-depth nil))))
         (%parse-tex 'list input new-environment filename new-include-depth)))))
 
 (defrule input (environment)
@@ -448,7 +451,7 @@
       (macref environment)
       (varref environment)
       (conref environment)
-      (figref environment)
+      ; (figref environment)
       (miscref environment)))
 
 (defrule simple-index (environment)
@@ -755,48 +758,79 @@
                          :number    number
                          :delimiter delimiter))))
 
+(defun root-environment (environment)
+  (labels ((visit (environment)
+             (if (env:lookup :global? :traversal environment
+                             :scope             :direct
+                             :if-does-not-exist nil)
+                 (progn
+                   (let ((parent (env:parent environment)))
+                     (unless (eq parent **meta-environment**)
+                       (break "~A ~A" environment parent)))
+                   environment)
+                 (visit (env:parent environment)))))
+    (visit environment)))
+
 (defrule def (environment)
     (bounds (start end)
-      (seq (or (seq "\\global" (skippable*) "\\def" (<- global? (:transform (seq) t))) ; TODO global should be context
-               (seq "\\long" (skippable*) "\\def" (<- long (:transform (seq) t)))
+      (seq (or (seq "\\global" (skippable* environment) "\\def" (<- global? (:transform (seq) t))) ; TODO global should be context
+               (seq "\\long" (skippable* environment) "\\def" (<- long? (:transform (seq) t)))
                (seq "\\" (? (<- global? (or #\e #\g #\x))) "def"))
-           (or (seq #\\ (<- name (identifier-with-dot))) ; TODO do we really need with dot here? there is a macro named "etc.", so probably yes
-               (<- name (escaped-character)))
-           (* (seq (skippable*) (or (seq #\( (<<- arguments (parameter)) #\)) ; TODO the parens are probably just delimiters
-                                    (<<- arguments (parameter)))))
-           (skippable*)
+           (or (<- name (argument environment))
+               (seq #\\ (<- name (identifier-with-dot))) ; TODO do we really need with dot here? there is a macro named "etc.", so probably yes
+               (<- name (:transform (<- character (escaped-character)) (string character))))
+           (* (seq (skippable* environment)
+                   (or (seq #\( (<<- arguments (parameter)) #\)) ; TODO the parens are probably just delimiters
+                       (<<- arguments (parameter)))))
+           (skippable* environment)
            (<- new-environment (:transform (seq) (env:augmented-environment environment '((:definition . :traversal)) '(t))))
-           #\{ (* (<<- body (or (argument) (element new-environment)))) #\} ; TODO (argument) is basically wrong here
+           #\{ (* (<<- body (or (argument environment) (element new-environment)))) #\} ; TODO (argument) is basically wrong here
            (:transform (seq) nil) ; HACK work around bug
            ))
-  (let ((name      (string name))
-        (arguments (nreverse arguments)))
-    (setf (lookup name :macro environment) (list arguments)) ; TODO not for nested definitions
+    (let* ((arguments      (nreverse arguments))
+           (in-definition? (env:lookup :definition :traversal environment :if-does-not-exist nil))
+           (in-group?      (env:lookup :in-group :traversal environment :if-does-not-exist nil))
+           (global?        (or global? (not in-group?)))
+           (environment    (if global?
+                               (root-environment environment)
+                               environment)))
+    (progn ; unless in-definition?
+      #+no (unless (stringp name)
+        (error "Invalid macro name: ~S" name))
+      (when (stringp name)
+        (setf (env:lookup name :macro environment) (list arguments)))) ; TODO not for nested definitions
     (bp:node* (:definition :kind    :def
                            :name    name
                            :global? global?
+                           :long?   long?
                            :bounds  (cons start end))
       (* (:argument . *) arguments)
       (* (:body     . *) (nreverse body)))))
 
 (defrule let-macro (environment)
-  (bounds (start end)
-    (seq/ws (? (<- global? (:transform "\\global" t)))
-            "\\let" (<- name (or (name) :any)) (? #\=)
-            (or (<- node (hbox environment))
-                (<- rhs (name))
-                (seq #\{ (+ (<<- body (and (not (or (skippable) #\})) :any))) #\})
-                (+ (<<- body (or (escaped-character)
-                                 (and (not (or (skippable) #\} "\\fi")) :any))))))) ; TODO fi is a hack
+    (bounds (start end)
+      (seq/ws (? (<- global? (:transform "\\global" t)))
+              "\\let" (<- name (or (name) :any)) (? #\=)
+              (or (<- node (hbox environment))
+                  (<- rhs (name))
+                  (seq #\{ (+ (<<- body (and (not (or (skippable environment) #\})) :any))) #\})
+                  (+ (<<- body (or (escaped-character)
+                                   (and (not (or (skippable environment) #\} "\\fi")) :any))))))) ; TODO fi is a hack
 
-  (let ((name (if (characterp name)
-                  (string name)
-                  (with-name-string (name name) name))))
-    (setf (lookup name :macro environment) 0)
+  (let* ((in-group?   (env:lookup :in-group :traversal environment :if-does-not-exist nil))
+         (global?     (or global? (not in-group?)))
+         (environment (if global?
+                          (root-environment environment)
+                          environment))
+         (name        (if (characterp name)
+                          (string name)
+                          (with-name-string (name name) name))))
+    (when (equal name "i") (break))
+    (setf (env:lookup name :macro environment) 0)
 
     (bp:node* (:definition :kind    :let
                            :name    name
-                           :global? global?
+                           :global? (or global? (not in-group?))
                            :bounds  (cons start end))
       (1 (:body . *) (cond (node)
                            (body
@@ -826,11 +860,14 @@
                             (env:lookup name :math environment
                                         :if-does-not-exist nil))
                           (when error?
-                            (error 'parse-error :annotations (list (base:make-annotation (env:lookup :current-file :traversal environment)
-                                                                                         bounds
-                                                                                         "called here"))
-                                                :message     (format nil "~@(~A~) macro ~A is not defined"
-                                                                     mode name))))))
+                            (restart-case
+                                (error 'parse-error :annotations (list (base:make-annotation (env:lookup :current-file :traversal environment)
+                                                                                             bounds
+                                                                                             "called here"))
+                                                    :message     (format nil "~@(~A~) macro ~A is not defined"
+                                                                         mode name))
+                              (continue (&optional condition)
+                                0))))))
     (when spec
       (values (typecase spec
                 (integer
@@ -856,7 +893,9 @@
                               (when (or (null argument-spec)
                                         (not (eq (first argument-spec) 't)))
                                 (:fail)))
-                            (<<- arguments (element environment)))
+                            (<<- arguments (element environment))
+                            #+maybe-more-correct (or (seq #\{ (<<- arguments (element environment)) #\})
+                                (<<- arguments (argument environment)))) ; TODO only when in definition?
                        (and (:transform (seq)
                               (when (or (null argument-spec)
                                         (not (eq (first argument-spec) :variable)))
@@ -907,6 +946,12 @@
   (bp:node* (:other-command-application :name   name
                                         :bounds (cons start end))
     (* (:argument . *) (nreverse arguments))))
+
+(when nil
+  (let ((env (make-instance 'env:lexical-environment :parent **meta-environment**)))
+    (setf (env:lookup "b" :macro env) '(((:argument () :level 1 :number 1))))
+    (bp:with-builder ('list)
+      (parser.packrat:parse `(document ',"foo" '0 ',env) "\\b foo" :grammar 'dpans))))
 
 (when nil
   (let ((env (make-instance 'env:lexical-environment :parent **meta-environment**)))
