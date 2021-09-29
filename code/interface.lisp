@@ -250,13 +250,16 @@
   (make-instance 'env:lexical-environment
                  :parent transform::**meta-environment**))
 
+(defvar *cache2* nil)
+
 (defun to-clim (input-directory
                 &key (dpans-directory  (merge-pathnames "dpANS3/" input-directory))
                      (issues-directory (directory (merge-pathnames #P"*-issues/" input-directory))))
   (let* ((builder     'list)
          (environment (make-environment))
          ;; Parse
-         (tree        (parse-specification builder dpans-directory issues-directory))
+         (tree        (or nil ; *cache2*
+                          (setf *cache2* (parse-specification builder dpans-directory issues-directory))))
          ;; Transform
          (result      (transform::apply-transforms
                        (list
@@ -278,6 +281,7 @@
                         (make-instance 'transform::cleanup-issues :builder builder)
                         (make-instance 'transform::attach-labels :builder builder) ; must be after `lower-display-tables'
                         (make-instance 'transform::add-dictionary-sections :builder builder)
+                        (make-instance 'transform::note-parents :builder builder)
                         (make-instance 'transform::build-references :builder builder))
                        tree)))
     (inspect-tree result :intermediate-tree tree :environment environment)

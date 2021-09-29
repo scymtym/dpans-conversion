@@ -81,7 +81,8 @@
                              (:file       "add-dictionary-sections")
                              (:file       "split-into-files")
                              (:file       "note-output-file")
-                             (:file       "build-references")))
+                             (:file       "build-references")
+                             (:file       "note-parents")))
 
                (:module     "html"
                 :pathname   "code/html"
