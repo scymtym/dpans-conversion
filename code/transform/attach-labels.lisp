@@ -47,6 +47,7 @@
 (defmethod transform-node ((transform attach-labels) recurse
                            relation relation-args node (kind (eql :define-section)) relations
                            &key)
+  ;; Drop the node
   nil)
 
 (defmethod transform-node ((transform attach-labels) recurse
