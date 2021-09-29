@@ -78,6 +78,8 @@
         ((or (a:ends-with-subseq "ses" string) ; classes
              (a:ends-with-subseq "xes" string)) ; complexes
          (subseq string 0 (- (length string) 2)))
+        ((a:ends-with-subseq "ies" string) ; properties
+         (concatenate 'string (subseq string 0 (- (length string) 3)) "y"))
         ((a:ends-with-subseq "ding" string) ; upgrading
          (concatenate 'string
                       (subseq string 0 (- (length string) 3))
@@ -85,6 +87,7 @@
         ((or (a:ends-with-subseq "tes" string)  ; attributes
              (a:ends-with-subseq "pes" string)  ; types
              (a:ends-with-subseq "mes" string)  ; names
+             (a:ends-with-subseq "les" string)  ; variables
              (a:ends-with-subseq "ges" string)) ; packages
          (subseq string 0 (- (length string) 1)))
         ((a:ends-with-subseq "es" string)
