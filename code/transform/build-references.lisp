@@ -344,6 +344,7 @@
       (%link node name namespace transform
              (lambda (builder &rest extra-initargs)
                (apply #'reconstitute builder recurse kind relations
+                      :name name
                       (append extra-initargs
                               (a:remove-from-plist initargs :name :namespace)))))))
 
@@ -413,7 +414,7 @@
                       (make-registered-reference transform target)))
            (builder (builder transform)))
       (apply #'reconstitute builder recurse kind relations ; TODO back-links
-             :namespace :issue :target target initargs)))
+             :namespace :issue :target target initargs))) ; TODO why not kind :reference?
 
   (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :issue-annotation)) relations
