@@ -160,8 +160,10 @@
 ;;; Code
 
 (defrule code-symbol-ish ()
-    (+ (and (not (or #\( #\) #\" #\;
-                     ", "
+    (+ (and (not (or #\( #\) #\" #\; #\# #\Space
+                     ;; Disallow things that typically only appear in
+                     ;; prose.
+                     ", " "--"
                      (seq (and (not #\.) :any) ".)")))
             (<<- characters)))
   (when (and (some #'upper-case-p characters)
@@ -177,6 +179,20 @@
              (* (<<- content (or (balanced-code-content)
                                  (code-symbol-ish))))
              (<<- content #\)))
+        ;; Character literals
+        (seq (<<- content #\#)
+             (<<- content #\\)
+             (or (<<- content (code-symbol-ish))
+                 (seq (<<- content :any))))
+        ;; Function
+        (seq (<<- content #\#)
+             (<<- content (or #\' #\~)) ; ~ is for TEST-NOT-IF-NOT
+             (<<- content (or (balanced-code-content)
+                              (code-symbol-ish))))
+        ;; Quote
+        (seq (<<- content #\')
+             (<<- content (or (balanced-code-content)
+                              (code-symbol-ish))))
         ;; String literals
         (seq (<<- content #\")
              (* (or (seq (<<- content #\\) (<<- content #\"))
@@ -185,7 +201,9 @@
         ;; Comments
         (seq (<<- content #\;)
              (* (and (not #\Newline) (<<- content)))
-             (<<- content #\Newline)))
+             (<<- content #\Newline))
+        ;; Whitespace
+        (+ (<<- content (or #\Space #\Tab #\Newline))))
   (with-output-to-string (stream)
     (map nil (lambda (fragment)
                (etypecase fragment
