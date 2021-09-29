@@ -78,7 +78,16 @@
           (env:lookup "endgraf" :macro environment)
           (lambda (builder environment)
             (declare (ignore environment))
-            (list (bp:node (builder :paragraph-break)))))))
+            (list (bp:node (builder :paragraph-break))))
+
+          (env:lookup "figref" :macro environment)
+          (lambda (builder environment label)
+            (declare (ignore environment))
+            (unless (eq (bp:node-kind builder label) :other-command-application)
+              (break "~S" label))
+            (let ((label (getf (bp:node-initargs builder label) :name)))
+              (list (bp:node (builder :reference :name      label
+                                                 :namespace :figure))))))))
 
 ;; TODO parse \secref as other-command-application and define a macro diversion above?
 (defmethod transform-node ((transform expand-macros) recurse
@@ -119,7 +128,7 @@
      relation relation-args node (kind (eql :typewriter)) relations
      &key)
   (call-with-environment
-   #'call-next-method transform '((:tt . :traversal)) '(t)))
+   #'call-next-method transform '((:tt . :traversal)) '(t))) ; TODO what does this do?
 
 ;;; Conditionals
 
@@ -140,6 +149,18 @@
              (branch t))
             (t
              (branch nil))))))
+
+;;; Groups
+
+(defmethod transform-node ((transform expand-macros) recurse
+                           relation relation-args node (kind (eql :block)) relations
+                           &key)
+  (let* ((old-environment (environment transform))
+         (new-environment (env:augmented-environment old-environment '() '())))
+    (setf (environment transform) new-environment)
+    (unwind-protect
+         (call-next-method)
+      (setf (environment transform) old-environment))))
 
 ;;; Definition
 
