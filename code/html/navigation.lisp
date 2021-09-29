@@ -88,11 +88,15 @@
     (let* ((builder    (transform:builder transform))
            (name-nodes (bp:node-relation builder '(:name . *) node))
            (first-node (first name-nodes))
-           (url        (node-url transform (current-file transform) first-node))
-           (names      (map 'list (a:curry #'transform::evaluate-to-string builder) ; TODO what about setf?
-                            name-nodes))
-           (name       (format nil "~{~A~^, ~}" names)))
-      (a url name))))
+           (url        (node-url transform (current-file transform) first-node)))
+      (a url (lambda ()
+               (map nil (lambda (name next-name)
+                          (multiple-value-bind (name setf)
+                              (transform::evaluate-to-string builder name)
+                            (render-name name setf)
+                            (when next-name
+                              (cxml:text ", "))))
+                    name-nodes (append (rest name-nodes) '(nil))))))))
 
 (defmethod transform:transform-node ((transform navigation-sidebar)
                                      recurse relation relation-args node
