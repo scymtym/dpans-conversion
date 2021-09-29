@@ -6,7 +6,7 @@
 (defvar *context* t) ; TODO temporary
 
 (define-render (:line)
-  (funcall recurse)
+  (recurse)
   (case *context*
     (:code (br))
     (t     (cxml:text " "))))

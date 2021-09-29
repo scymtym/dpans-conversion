@@ -70,7 +70,13 @@
           &key ,@(map 'list #'process-keyword keyword-parameters)
           &allow-other-keys)
        (declare (ignorable initargs))
-       ,@body)))
+       (flet ((recurse (&rest relations)
+                (if relations
+                    (funcall recurse :relations relations)
+                    (funcall recurse))))
+         (declare (ignorable #'recurse)
+                  (inline recurse))
+         ,@body))))
 
 #+no (define-render (:collection)
   #+no (a:when-let ((sidebar-transform (sidebar-transform transform)))

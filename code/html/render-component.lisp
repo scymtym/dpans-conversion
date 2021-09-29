@@ -13,12 +13,12 @@
              (cxml:with-element "dl" ; TODO one dl for all parts?
                (cxml:with-element "dt"
                  (class-attribute "label")
-                 (funcall recurse :relations '((:name . 1))))
+                 (recurse '(:name . 1)))
                (cxml:with-element "dd"
-                 (funcall recurse :relations '((:element . *)))))))
+                 (recurse '(:element . *))))))
       (maybe-removable-text
        transform name #'do-it
-       :removable '("Note" "Example" "Pronunciation" "See Also")))))
+       :removable '("Note" "Example" "Pronunciation" "See Also"))))) ; TODO handle removable systematically
 
 (define-render (:component)
   (let* ((builder    (transform:builder transform))

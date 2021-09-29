@@ -37,7 +37,7 @@
          (name    (bp:node-relation builder '(:name . 1) node)))
     (dpans-conversion.transform::evaluate-to-string builder name)))
 
-(defun expand (builder body macro-level arguments)
+#+unused (defun expand (builder body macro-level arguments)
   (labels ((visit (recurse relation relation-args node kind relations
                    &rest initargs &key level number &allow-other-keys)
              (case kind
@@ -90,7 +90,7 @@
 (defun render-node-names (builder node)
   )
 
-(defun builtin-the (environment arguments)
+#+unused (defun builtin-the (environment arguments)
   (break "wtf")
   (assert (a:length= 1 arguments))
   (let* ((argument (first arguments))
@@ -111,13 +111,13 @@
                                                   transform
                                                   output-directory)
 
-  (setf (env:lookup "the" :macro environment) (lambda (&rest args) (apply 'builtin-the args)))
+  #+unused (setf (env:lookup "the" :macro environment) (lambda (&rest args) (apply 'builtin-the args)))
 
   (let ((builder           'list)
         (stack             '())
         (file-stack        '())
         (environment-stack (list environment)))
-    (labels ((push-file (filename)
+    (labels (#+unused (push-file (filename)
                (format t "~V@TEmitting for ~A~%"
                        (* 2 (length file-stack))
                        (pathname-name filename))
@@ -125,11 +125,11 @@
                (unless modify-environment
                  (push (env:augmented-environment (first environment-stack) '() '())
                        environment-stack)))
-             (pop-file ()
+             #+unused (pop-file ()
                (unless modify-environment
                  (pop environment-stack))
                (pop file-stack))
-             (peek (builder relation relation-args node)
+             #+unused ( peek (builder relation relation-args node)
                (cond ((not (eq (bp:node-kind builder node) :other-command-application))
                       t)
                      (t
@@ -219,14 +219,14 @@
              (visit
                  (context recurse relation relation-args node kind relations
                   &rest initargs
-                  &key source
+                  &key ;; source
                        name
                        global
-                       content
-                       filename
-                       include-depth
+                       ;; content
+                       ;; filename
+                       ;; include-depth
                        which
-                       editor reviewer
+                       ;; editor reviewer
                        anchor
                   &allow-other-keys)
                (unwind-protect
@@ -253,7 +253,7 @@
                                          (funcall recurse)))
                                 (pop-file)))
                         ;; Evaluation
-                        (:definition
+                        #+no (:definition
                          (break "should not happen")
                          (let* ((kind        (getf initargs :kind))
                                 (environment (if global ; TODO make local when result of macro expansion?
@@ -276,12 +276,11 @@
                                      (cxml:text "\\}"))
                                     (t
                                      (cxml:text content))))
-                        (:bold (span "explicit-bold" recurse))
-                        (:italic (span "explicit-italic" recurse))
-                        ((:f :typewriter) (span "explicit-mono" recurse))
-                        (:roman (span "explicit-roman" recurse))
-                        (:hrule
-                         (cxml:with-element "hr" (cxml:text " "))) ; HACK
+                        #+no (:bold (span "explicit-bold" recurse))
+                        #+no (:italic (span "explicit-italic" recurse))
+                        #+no ((:f :typewriter) (span "explicit-mono" recurse))
+                        #+no (:roman (span "explicit-roman" recurse))
+                         ; HACK
 
 
                         ;; Semantic Markup
@@ -292,14 +291,14 @@
                         (:newterm (span "newterm" recurse))
                         (:newtermidx (span "newterm" (a:curry recurse :relations '((:name . 1)))))
 
-                        (:secref
+                        #+no (:secref
                          (break "should not happen")
                          (let* ((name (node-name node))
                                 (url  (format nil "#section-~A" name)))
                            (a* url "section-reference" recurse)))
 
-                        (:keyref
-                         ;; TODO (break "should not happen")
+                        #+no (:keyref
+                         (break "should not happen")
                          (let* ((name (node-name node))
                                 (url  (format nil "#lambda-list-keyword-~A" name)))
                            (unless name (break "~A" node))
@@ -308,19 +307,11 @@
                                                                      (funcall recurse)))))
                         (:symbol
                          (render-name-node builder node))
-                        (:param (span "parameter" recurse))
                         (:keyword
                          (span "keyword" (lambda ()
                                            (cxml:text ":")
                                            (funcall recurse))))
-                        (:bnf-rule
-                         (cxml:with-element "tr"
-                           (cxml:with-element "td"
-                             (funcall recurse :relations '((:name . 1))))
-                           (cxml:with-element "td"
-                             (cxml:text "::="))
-                           (cxml:with-element "td"
-                             (funcall recurse :relations '((:element . *))))))
+
                         (:lambda-list-keyword ; TODO generate links
                          (span "lambda-list-keyword"
                                (lambda ()
@@ -333,120 +324,16 @@
                                    (cxml:text "(")
                                    (render-name-node builder name)
                                    (nbsp)
-                                   (funcall recurse :relations '((:spealizer . 1)) )
+                                   (funcall recurse :relations '((:specializer . 1)) )
                                    #+no (let* ((class (bp:node-relation builder '(:specializer . 1) node))
                                                (name  (dpans-conversion.transform::evaluate-to-string builder class)) ; TODO  repeated in TYPEREF
                                                (url   (format nil "#type-~A" name)))
                                           (unless name (break "~A" node))
                                           (a* url "type-reference" (a:curry recurse :relations '((:specializer . 1)))))
                                    (cxml:text ")")))))
-                        (:call-syntax
-                         (ecase which
-                           (:special-operator
-                            (span "special-operator-definition"
-                                  (lambda ()
-                                    (let ((name (bp:node-relation builder '(:name . 1) node)))
-                                      (render-name-node builder name)
-                                      (nbsp)
-                                      (span "lambda-list" (a:curry recurse :relations '((:argument . *))))
-                                      (nbsp)
-                                      (cxml:text "→")
-                                      (nbsp)
-                                      (if (member :return-value relations :key #'car)
-                                          (span "return-values" (a:curry recurse :relations '((:return-value . *))))
-                                          (cxml:text "|")))))
-                            (br))
-                           ((:function :accessor) ; TODO accessor should be a table with rows foo | (setf foo)
-                            (map nil (lambda (name)
-                                       (span "function-definition"
-                                             (lambda ()
-                                               (render-name-node builder name)
-                                               (nbsp)
-                                               (span "lambda-list" (a:curry recurse :relations '((:argument . *))))
-                                               (nbsp)
-                                               (cxml:text "→")
-                                               (nbsp)
-                                               (if (member :return-value relations :key #'car)
-                                                   (span "return-values" (a:curry recurse :relations '((:return-value . *))))
-                                                   (cxml:text "|"))))
-                                       (br))
-                                 (bp:node-relation builder '(:name . *) node))
-                            (when (eq which :accessor)
-                              (map nil (lambda (name)
-                                         (span "function-definition"
-                                               (lambda ()
-                                                 (cxml:text "(setf (")
-                                                 (render-name-node builder name)
-                                                 (nbsp)
-                                                 (span "lambda-list" (a:curry recurse :relations '((:argument . *))))
-                                                 (cxml:text ")")
-                                                 (nbsp)
-                                                 (span "new-value" (a:curry recurse :relations '((:new-value . 1))))))
-                                         (br))
-                                   (bp:node-relation builder '(:name . *) node))))
-                           (:generic-function
-                            (span "function-definition"
-                                  (lambda ()
-                                    (let ((name (bp:node-relation builder '(:name . 1) node)))
-                                      (render-name-node builder name)
-                                      (nbsp)
-                                      (span "lambda-list"   (a:curry recurse :relations '((:argument . *))))
-                                      (nbsp)
-                                      (cxml:text "→")
-                                      (nbsp)
-                                      (if (member :return-value relations :key #'car)
-                                          (span "return-values" (a:curry recurse :relations '((:return-value . *))))
-                                          (cxml:text "|")))))
-                            (br))
-                           (:method
-                               (span "method"
-                                (lambda ()
-                                  (let ((name (bp:node-relation builder '(:name . 1) node)))
-                                    (render-name-node builder name)
-                                    (nbsp)
-                                    (span "lambda-list" (a:curry recurse :relations '((:argument . *)))))))
-                             (br))
-                           (:macro
-                            (span "function-definition"
-                                  (lambda ()
-                                    (let ((name (bp:node-relation builder '(:name . 1) node)))
-                                      (render-name-node builder name)
-                                      (nbsp)
-                                      (span "lambda-list" (a:curry recurse :relations '((:argument . *))))
-                                      (nbsp)
-                                      (cxml:text "→")
-                                      (nbsp)
-                                      (if (member :return-value relations :key #'car)
-                                          (span "return-values" (a:curry recurse :relations '((:return-value . *))))
-                                          (cxml:text "|")))))
-                            (br))
-                           (:type
-                            (span "type-definition"
-                                  (lambda ()
-                                    (let ((name (bp:node-relation builder '(:name . 1) node)))
-                                      (cxml:text "(")
-                                      (render-name-node builder name)
-                                      (nbsp)
-                                      (span "lambda-list" (a:curry recurse :relations '((:element . *)))) ; TODO relation name
-                                      (cxml:text ")"))))
-                            (br))
-                           (:setf
-                            (map nil (lambda (name)
-                                       (span "setf-definition"
-                                             (lambda ()
-                                               (cxml:text "(setf (") ; TODO
-                                               (span "name" (lambda ()
-                                                              (cxml:text (dpans-conversion.transform::evaluate-to-string
-                                                                          builder name))))
-                                               (nbsp)
-                                               (span "lambda-list" (a:curry recurse :relations '((:argument . *))))
-                                               (cxml:text ") ")
-                                               (span "new-value" (a:curry recurse :relations '((:new-value . 1))))
-                                               (cxml:text ")")))
-                                       (br))
-                                 (bp:node-relation builder '(:name . *) node)))))
 
-                        ((:dash :subscript :superscript
+                        ((:call-syntax
+                          :dash :subscript :superscript
                                 :issue-annotation :editor-note :reviewer-note
                           :file :title :sub-title :chapter :section
                                 :collection :output-file :issue
@@ -462,7 +349,9 @@
                           :math :math-display :over
                           :other-command-application
                                 :splice :chunk :block
-                                :listing :syntax :index)
+                          :listing :syntax :index
+                                :bold :italic :typewriter :roman
+                                :param :bnf-rule :hrule :eql-specializer)
                          (apply #'transform:transform-node transform recurse relation relation-args node kind relations initargs))
                         ;; Glossary
                         (:gentry
@@ -476,10 +365,10 @@
                                    (funcall recurse :relations '(:body)))))))
                         ;; Should not happen
                         (:column-separator
-                                        ; TODO (break "should not happen")
+                         (break "should not happen")
                          (span "error" "&"))
                         ;;
-                        (:block
+                        #+no (:block
                             (break)
                             ;; TODO collect runs of bnf-rule
                             (cond (*math?*
@@ -502,7 +391,7 @@
                                (t
                                 (funcall recurse :relations '((:element . *))))))
 
-                        (:halign
+                        #+no (:halign
                          (break "should not happen")
                          (funcall recurse :relations '((:element . *))))
 
@@ -519,7 +408,7 @@
                          (span "error" (let ((*print-level* 2) (*print-circle* t))
                                          (format nil "if-case not implemented: ~S" node))))
                         ;; Ignored
-                        ((:comment :define-section :assignment :font :chardef :mathchardef
+                        #+no ((:comment :define-section :assignment :font :chardef :mathchardef
                           :newif :newskip :new :counter-definition :setbox :global :catcode
                                    :advance :register-read)
                          (break "should not happen"))))

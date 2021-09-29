@@ -40,19 +40,19 @@
         (transform:apply-transform sidebar-transform node))
       (div "content" (lambda ()
                        (if (eq kind :issue)
-                           (funcall recurse)
+                           (recurse)
                            (render-to-file root :file (transform::environment transform)
                                                 :transform        transform
                                                 :output-directory (output-directory transform))))))))
 
 (define-render (:file filename include-depth)
-  (funcall recurse))
+  (recurse))
 
 (define-render (:title)
-  (h* 1 "title" recurse))
+  (h* 1 "title" #'recurse))
 
 (define-render (:sub-title)
-  (h* 2 "subtitle" recurse))
+  (h* 2 "subtitle" #'recurse))
 
 (define-render (:chapter anchor)
   (let* ((builder           (transform:builder transform))
@@ -64,8 +64,8 @@
       (id-attribute anchor)
       (h* 1 "section-title" (lambda ()
                               (cxml:text (format nil "~A. " number))
-                              (funcall recurse :relations '((:name . 1)))))
-      (funcall recurse :relations '(:element)))))
+                              (recurse '(:name . 1))))
+      (recurse '(:element . *)))))
 
 (define-render (:section level anchor)
   (let* ((builder   (transform:builder transform))
@@ -76,7 +76,7 @@
                (id-attribute anchor)
                (h* (1+ level) "section-title"
                    (a:curry recurse :relations '((:name . 1))))
-               (funcall recurse :relations '((:element . *))))))
+               (recurse '(:element . *)))))
       (maybe-removable-text
        transform name #'do-it
        :removable '("Figures" "Contents" "Index" "Credits" "Appendix"

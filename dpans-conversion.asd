@@ -104,6 +104,7 @@
                              (:file       "render-issue")
                              (:file       "render-math")
                              (:file       "render-listings")
+                             (:file       "render-syntax")
                              (:file       "navigation")
 
                              (:file       "render")

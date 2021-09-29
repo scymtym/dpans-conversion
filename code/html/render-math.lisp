@@ -32,9 +32,9 @@
 
 (define-render (:hbox) ;  :vbox :vtop
   (cond (*math?*
-         (funcall recurse :relations '((:element . *))))
+         (recurse '(:element . *)))
         (t
-         (funcall recurse :relations '((:element . *))))))
+         (recurse '(:element . *)))))
 
 (defun math (style continuation)
   (cxml:with-element "math"
@@ -47,7 +47,7 @@
 (define-render (:math)
   (math :inline (lambda ()
                   (let ((*math?* t))
-                    (funcall recurse)))))
+                    (recurse)))))
 
 (define-render (:math-display)
   (let* ((builder  (transform:builder transform))
@@ -59,44 +59,35 @@
                        (let ((*math?* t))
                          (funcall recurse)))))))
 
-(defmethod transform:transform-node
-    ((transform transform) recurse relation relation-args node
-     (kind (eql :over)) relations
-     &key)
+(define-render (:over)
   (unless *math?* (error "Only valid in math mode"))
   (cxml:with-element "mover"
-    (funcall recurse :relations '((:left  . *)))
-    (funcall recurse :relations '((:right . *)))))
+    (recurse '(:left  . *))
+    (recurse '(:right . *))))
 
-(defmethod transform:transform-node
-    ((transform transform) recurse relation relation-args node
-     (kind (eql :subscript)) relations
-     &key)
+(define-render (:subscript)
   (cond (*math?*
          (cxml:with-element "msub"
            (cxml:with-element "mrow"
-             (funcall recurse :relations '((:left  . *))))
+             (recurse '(:left  . *)))
            (cxml:with-element "mo"
-             (funcall recurse :relations '((:right . *))))))
+             (recurse '(:right . *)))))
         (t
-         (funcall recurse :relations '((:left  . *)))
+         (recurse '(:left  . *))
          (cxml:with-element "sub"
-           (funcall recurse :relations '((:right . *)))))))
+           (recurse '(:right . *))))))
 
-(defmethod transform:transform-node
-    ((transform transform) recurse relation relation-args node
-     (kind (eql :superscript)) relations
-     &key)
+(define-render (:superscript)
   (cond (*math?*
          (cxml:with-element "msup"
            (cxml:with-element "mrow"
-             (funcall recurse :relations '((:left  . *))))
+             (recurse '(:left  . *)))
            (cxml:with-element "mo"
-             (funcall recurse :relations '((:right . *))))))
+             (recurse '(:right . *)))))
         (t
-         (funcall recurse :relations '((:left  . *)))
+         (recurse '(:left  . *))
          (cxml:with-element "sup"
-           (funcall recurse :relations '((:right . *)))))))
+           (recurse '(:right . *))))))
 
 (defmethod transform:transform-node :around
     ((transform transform) recurse relation relation-args node

@@ -4,27 +4,27 @@
 
 (define-render (:list-item)
   (cxml:with-element "li"
-    (funcall recurse :relations '((:body . *)))))
+    (recurse '(:body . *))))
 
 (define-render (:item-list)
-  (cxml:with-element "ul" (funcall recurse)))
+  (cxml:with-element "ul" (recurse)))
 
 ;;; Enumeration list
 
 (define-render (:enumeration-item)
   (cxml:with-element "li"
-    (funcall recurse :relations '((:body . *)))))
+    (recurse '(:body . *))))
 
 (define-render (:enumeration-list)
-  (cxml:with-element "ol" (funcall recurse)))
+  (cxml:with-element "ol" (recurse)))
 
 ;;; Definition list
 
 (define-render (:definition-item)
   (cxml:with-element "dt"
-    (funcall recurse :relations '(:key)))
+    (recurse '(:key . *)))
   (cxml:with-element "dd"
-    (funcall recurse :relations '((:body . *)))))
+    (recurse '(:body . *))))
 
 (define-render (:definition-list)
-  (cxml:with-element "dl" (funcall recurse)))
+  (cxml:with-element "dl" (recurse)))

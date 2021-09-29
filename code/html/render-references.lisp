@@ -13,7 +13,7 @@
          (target-initargs    (bp:node-initargs builder target-node))
          (target-file        (getf target-initargs :output-file))
          #+no (target-to-root     (nth-value 1 (filename-and-relative-path
-                                           target-file output-directory)))
+                                                target-file output-directory)))
          (filename           (unless (equal reference-file target-file)
                                (merge-pathnames target-file reference-to-root)))
          (anchor             (getf target-initargs :anchor)))
