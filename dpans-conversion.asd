@@ -63,6 +63,7 @@
                              (:file       "to-string")
 
                              (:file       "mixins")
+                             (:file       "reference")
 
                              (:file       "strip-comments")
                              (:file       "drop")

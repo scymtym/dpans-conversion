@@ -30,9 +30,11 @@
 
 (defclass build-references (builder-mixin
                             default-reconstitute-mixin
+                            reference-updating-mixin
                             environment-mixin)
   ((%stage :accessor stage
-           :initform :record))
+           :initform :record)
+   (%namespace :accessor namespace)) ; remember component namespace when descending into symbol. TODO remember in environment instead?
   (:default-initargs
    :environment (make-instance 'env:lexical-environment :parent **reference-meta-environment**)))
 
@@ -43,25 +45,41 @@
 ;;; Dispatch
 
 (defmethod apply-transform ((transform build-references) ast)
+  ;; Stage 1
   (let ((ast (call-next-method)))
+    (update-references transform)
+    ;; Reset
     (setf (stage transform) :link)
-    (call-next-method transform ast)))
+    (clrhash (references transform))
+    ;; Stage 2
+    (prog1
+        (call-next-method transform ast)
+      (update-references transform))))
 
 (defmethod transform-node ((transform build-references) recurse
                            relation relation-args node kind relations
-                           &rest initargs &key &allow-other-keys)
-  (case (stage transform)
-    (:record
-     (or (with-simple-restart (continue "Do not record ~A node" kind)
-           (apply #'record-node transform
-                  recurse relation relation-args
-                  node kind relations initargs))
-         (call-next-method)))
-    (:link
-     (or (apply #'link-node transform
-                recurse relation relation-args
-                node kind relations initargs)
-         (call-next-method)))))
+                           &rest initargs &key parent &allow-other-keys)
+  (flet ((new-node (new-node)
+           (note-new-node transform node new-node)
+           new-node))
+    (when parent
+      (check-type parent reference)
+      ; (check-type (target parent) (not null))
+      (unless (target parent)
+        (break "~A ~A" node parent))
+      (register-reference transform parent))
+    (case (stage transform)
+      (:record
+       (new-node (or (with-simple-restart (continue "Do not record ~A node" kind)
+                       (apply #'record-node transform
+                              recurse relation relation-args
+                              node kind relations initargs))
+                     (call-next-method))))
+      (:link
+       (new-node (or (apply #'link-node transform
+                            recurse relation relation-args
+                            node kind relations initargs)
+                     (call-next-method)))))))
 
 (defmethod record-node ((transform build-references) recurse
                         relation relation-args node kind relations
@@ -154,27 +172,49 @@
       (call-next-method))))
 
 (defmethod record-node ((transform build-references) recurse
+                        relation relation-args node (kind (eql :symbol)) relations
+                        &rest initargs &key)
+  (a:when-let* ((builder   (builder transform))
+                (namespace (namespace transform)))
+    (multiple-value-bind (name setf?) (evaluate-to-string builder node) ; TODO make a function
+      (let ((key (if setf?
+                     `(setf ,name)
+                     name)))
+        (record-and-reconstitute
+         transform (lambda (&rest args)
+                     (declare (ignore args))
+                     (break "should not happen"))
+         kind '() initargs key namespace)))))
+
+(defmethod record-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :component)) relations
                         &rest initargs &key ftype)
   (let* ((builder   (builder transform))
          (names     (bp:node-relation builder '(:name . *) node))
          (namespace (namespace<-ftype ftype))
-         (names     (map 'list (lambda (name-node)
-                                 (multiple-value-bind (name setf?)
-                                     (evaluate-to-string builder name-node) ; TODO make a function
-                                   (let ((key (if setf?
-                                                  `(setf ,name)
-                                                  name)))
-                                     (record-and-reconstitute
-                                      transform
-                                      (lambda (&rest args)
-                                        (declare (ignore args))
-                                        (break "should not happen"))
-                                      (bp:node-kind builder name-node)
-                                      '()
-                                      (bp:node-initargs builder name-node)
-                                      key namespace))))
-                         names)))
+         (names     (prog2
+                      (setf (namespace transform) namespace)
+                        (first (funcall recurse :relations '((:name . *))))
+                      (setf (namespace transform) nil)))
+         #+no (names     (map 'list (lambda (name-node)
+                                      (multiple-value-bind (name setf?)
+                                          (evaluate-to-string builder name-node) ; TODO make a function
+                                        (let ((key (if setf?
+                                                       `(setf ,name)
+                                                       name)))
+                                          ;; TODO explain why this not (funcall recurse :relations '((:name . *)))
+                                          (note-new-node
+                                           transform name-node
+                                           (record-and-reconstitute
+                                            transform
+                                            (lambda (&rest args)
+                                              (declare (ignore args))
+                                              (break "should not happen"))
+                                            (bp:node-kind builder name-node)
+                                            '()
+                                            (bp:node-initargs builder name-node)
+                                            key namespace)))))
+                              names)))
     (let* ((other-relations (remove '(:name . *) relations :test #'equal))
            (new-node        (apply #'%reconstitute builder recurse kind other-relations
                                    initargs))
@@ -281,7 +321,9 @@
                                             :anchor    anchor
                                             :name      name
                                             :namespace namespace
-                                            :target    target)))
+                                            :target    (when target
+                                                         (make-registered-reference
+                                                          transform target)))))
              ;; Add the reference to the `:references' of the
              ;; target. This cheats a little by mutating a node (the
              ;; target) after its initial creation.
@@ -367,6 +409,8 @@
                         (cons name proposal)
                         name))
            (target  (lookup key :issue transform))
+           (target  (when target
+                      (make-registered-reference transform target)))
            (builder (builder transform)))
       (apply #'reconstitute builder recurse kind relations ; TODO back-links
              :namespace :issue :target target initargs)))
@@ -378,6 +422,7 @@
                         (cons name proposal)
                         name))
            (target  (lookup key :issue transform))
+           (target  (when target (make-registered-reference transform target)))
            (builder (builder transform)))
       (apply #'reconstitute builder recurse kind relations
              :namespace :issue :target target initargs)))
@@ -409,7 +454,8 @@
                       (apply #'reconstitute builder recurse :reference relations
                                                             :name      name*
                                                             :namespace namespace
-                                                            :target    target
+                                                            :target    (make-registered-reference
+                                                                        transform target)
                                                             (a:remove-from-plist initargs :name :namespace))
                       #+no (apply #'bp:make+finish-node builder :reference
                                   :name      name*
