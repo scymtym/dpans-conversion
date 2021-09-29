@@ -136,16 +136,6 @@
 
 ;;; Markup
 
-(defmacro define-group (name kind open-delimiter close-delimiter)
-  `(defrule ,name (environment)
-       (bounds (start end)
-         (seq ,open-delimiter (skippable*)
-              (* (<<- elements (and (not ,close-delimiter) (element environment))))
-              (skippable*) ,close-delimiter)
-         (:transform (seq) nil)) ; HACK
-     (bp:node* (,kind :bounds (cons start end))
-       (* (:element . *) (nreverse elements)))))
-
 (defmacro define-command (name-and-options &body arguments)
   (destructuring-bind (name &key (kind         (a:make-keyword name))
                                  (command-name (string-downcase name)))
@@ -192,11 +182,12 @@
                ,@(map 'list #'make-argument-result arguments variables))))))))
 
 (defrule verb ()
-    (seq "\\verb" delimiter
-         (* (<<- content (and (not delimiter) :any)))
-         delimiter)
+    (bounds (start end)
+      (seq "\\verb" delimiter
+           (* (<<- content (and (not delimiter) :any)))
+           delimiter))
   (let ((content (coerce (nreverse content) 'string)))
-    (bp:node* (:verbatim :content content))))
+    (bp:node* (:verbatim :content content :bounds (cons start end)))))
 
 (defrule bf (environment)
     (bounds (start end)
@@ -216,23 +207,49 @@
   (bp:node* (:italic :bounds (cons start end))
     (* :element (nreverse elements))))
 
-(define-command f ; "fixed", that is monospace font
-  (1* :element (element environment)))
+(defrule f (environment) ; "fixed", that is monospace font
+    (bounds (start end)
+      (seq "\\f"
+           (seq (skippable* environment) #\{
+                (seq (<- new-environment (:transform (seq)
+                                          (env:augmented-environment
+                                           environment '((#\[ . :characters)) '(:normal))))
+                     (* (<<- element (element new-environment))))
+                (skippable* environment) #\})))
+  (bp:node* (:typewriter :bounds (cons start end))
+    (* (:element . *) (nreverse element))))
 
-(defrule tt (environment)
+(defrule tt (environment) ; TODO should treat & as having normal syntax?
     (bounds (start end)
       (seq "{\\tt" (* (<<- elements (and (not #\}) (element environment)))) #\}))
   (bp:node* (:typewriter :bounds (cons start end))
-    (* :element (nreverse elements))))
+    (* (:element . *) (nreverse elements))))
 
 (defrule rm (environment)
-  (bounds (start end)
-    (seq "{\\rm" (* (<<- elements (and (not #\}) (element environment)))) #\}))
+    (bounds (start end)
+      (seq "{\\rm" (* (<<- elements (and (not #\}) (element environment)))) #\}))
   (bp:node* (:roman :bounds (cons start end))
-    (* :element (nreverse elements))))
+    (* (:element . *) (nreverse elements))))
 
-(define-group block*        :block         #\{  #\})
-(define-group bracket-group :bracket-group #\[  #\])
+(defrule block* (environment)
+    (bounds (start end)
+      (seq/ws #\{
+              (seq (<- new-environment (:transform (seq)
+                                         (env:augmented-environment
+                                          environment '((:in-group . :traversal)) '(t))))
+                   (* (<<- elements (and (not #\}) (element new-environment)))))
+              #\}))
+  (bp:node* (:block :bounds (cons start end))
+    (* (:element . *) (nreverse elements))))
+
+(defrule bracket-group (environment)
+    (and (has-syntax? '#\[ ':bracket-group environment)
+         (bounds (start end)
+           (seq/ws #\[
+                   (* (<<- elements (and (not #\]) (element environment))))
+                   #\])))
+  (bp:node* (:bracket-group :bounds (cons start end))
+    (* (:element . *) (nreverse elements))))
 
 (defrule math-group (environment)
     (and (has-syntax? '#\$ :math-group environment)
@@ -648,7 +665,7 @@
                   #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX definition list~%" *depth*) (:fail))
                   #-dpans-debug (:transform (seq) (:fail)))))
   (bp:node* (:definition-list :bounds (cons start end))
-    (* :element (nreverse elements))))
+    (* (:element . *) (nreverse elements))))
 #+no (define-environment (definition-list :keyword "list"
                                      :name?   nil
                                      :element (:transform
@@ -676,7 +693,7 @@
   (bp:node* (:catcode)
     ))
 
-(defun (setf lookup) (new-value name namespace environment)
+#+unused (defun (setf lookup) (new-value name namespace environment)
   (labels ((find-global (environemnt)
              (cond ((env:lookup :global? :traversal environemnt
                                 :scope             :direct
@@ -719,6 +736,11 @@
   (bp:node* (:argument :level  (length level)
                        :number number
                        :bounds (cons start end))))
+
+#+no (let ((env (make-instance 'env:lexical-environment :parent **meta-environment**)))
+  (setf (env:lookup #\# :characters env) :normal)
+  (bp:with-builder ('list)
+    (parser.packrat:parse `(document ',"foo" '0 ',env) "#0" :grammar 'dpans)))
 
 (defrule parameter ()
     (bounds (start end)

@@ -4,13 +4,13 @@
 
 (macrolet ((define (rule-name operator-expression kind &optional left-optional?)
              `(defrule ,rule-name (environment)
-                (bounds (start end)
-                        (seq/ws ,(let ((left-expression '(<- left (element environment))))
-                                   (if left-optional?
-                                       `(? ,left-expression)
-                                       left-expression))
-                                ,operator-expression
-                                (<- right (element environment))))
+                  (bounds (start end)
+                    (seq/ws ,(let ((left-expression '(<- left (element environment))))
+                               (if left-optional?
+                                   `(? ,left-expression)
+                                   left-expression))
+                            ,operator-expression
+                            (<- right (element environment))))
                 (bp:node* (,kind :bounds (cons start end))
                   (1 (:left  . *) left)
                   (1 (:right . *) right)))))
