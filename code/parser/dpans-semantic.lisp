@@ -288,16 +288,24 @@
     (* (:argument     . *) (nreverse arguments))
     (* (:return-value . *) (nreverse return-values))))
 
-(defrule specializer ()
+(defrule specializer (environment)
     (bounds (start end)
-      (+ (<<- characters (and (not #\)) :any))))
-  (bp:node* (:typeref :bounds (cons start end))
-    (1 (:name . 1) (coerce (nreverse characters) 'string))))
+       (or (and (not (or #\\ #\{ #\} #\' #\( #\)))
+                (<- type (element environment)))
+          (seq/ws (? "\\f{") #\( "eql"
+                  (+ (<<- value (and (not #\))
+                                     (element environment))))
+                  #\) (? #\}))))
+  (if type
+      (bp:node* (:typeref :bounds (cons start end))
+        (1 (:name . 1) type))
+      (bp:node* (:eql-specializer :bounds (cons start end))
+        (* (:value . *) (nreverse value)))))
 
 (defrule specialized-parameter (environment)
     (bounds (start end)
       (seq/ws "\\specparam" #\{ (<- name (element environment)) #\}
-              #\{ (<- specializer (specializer)) #\}))
+              #\{ (<- specializer (specializer environment)) #\}))
   (bp:node* (:specialized-parameter :bounds (cons start end))
     (1 (:name        . 1) name)
     (1 (:specializer . 1) specializer)))
