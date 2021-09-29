@@ -146,18 +146,20 @@
 (defmethod transform-node ((transform expand-macros) recurse
                            relation relation-args node (kind (eql :definition)) relations
                            &key name global?)
-  (let ((environment (if t ; global?
-                         (root-environment transform)
-                         (environment transform))))
+  (let* ((environment (if global?
+                          (root-environment transform)
+                          (environment transform)))
+         (builder     (builder transform))
+         (arity       (length (bp:node-relation builder :argument node))))
     (cond ((functionp (env:lookup name :macro environment
                                   :if-does-not-exist nil))
            (when t ; (debug-definition? transform)
-             (format t "~V@TNot overwriting diverted~:[~; global~] macro ~S~%"
-                     (* 2 (depth transform)) global? name)))
+             (format t "~V@TNot overwriting diverted ~:[local~;global~] macro ~A/~D~%"
+                     (* 2 (depth transform)) global? name arity)))
           (t
            (when (debug-definition? transform)
-             (format t "~V@TDefining~:[~; global~] macro ~S~%"
-                     (* 2 (depth transform)) global? name))
+             (format t "~V@TDefining ~:[local~;global~] macro ~A/~D~%"
+                     (* 2 (depth transform)) global? name arity))
            (setf (env:lookup name :macro environment) node))))
   nil)
 
@@ -246,10 +248,18 @@
      (apply macro builder environment arguments))
     (t
      (let* ((body            (bp:node-relation builder '(:body . *) macro))
-            (first-parameter (first (bp:node-relation builder :argument macro)))
+            (parameters      (bp:node-relation builder '(:argument . *) macro))
+            (arity           (length parameters))
+            (first-parameter (first parameters))
             (level           (if first-parameter ; TODO store level when parsing
                                  (getf (bp:node-initargs builder first-parameter) :level)
                                  1)))
+       (unless (= arity (length arguments))
+         (error "~@<Macro ~A expects ~D argument~:P, but ~D argument~:P
+                 ~:*~[have~;has~:;have~] been supplied.~@:>"
+                (getf (bp:node-initargs builder macro) :name)
+                arity
+                (length arguments)))
        (map 'list (lambda (element)
                     (substitute-arguments builder element level arguments))
             body)))))
@@ -259,40 +269,44 @@
 
 (defmethod peek-node ((transform expand-macros) builder
                       relation relation-args node (kind (eql :other-command-application)))
-  (let* ((environment (environment transform))
-         (initargs    (bp:node-initargs builder node))
-         (name        (getf initargs :name))
-         (macro       (handler-bind
-                          ((error (lambda (c)
-                                    (declare (ignore c))
-                                    (let ((stream *standard-output*))
-                                      (text.source-location.print:print-annotations
-                                       stream (list (base:make-annotation
-                                                     (env:lookup :current-file :traversal environment)
-                                                     (node-bounds builder node) "invoked here" :kind :info)))))))
-                        (lookup-macro name environment))))
-    (cond ((typep macro '(or function (cons keyword)))
-           (let* ((arguments (bp:node-relation builder '(:argument . *) node))
-                  (expansion (expand builder environment macro arguments))
-                  (debug     (debug-expansion transform)))
-             (when (or (eq debug t)
-                       (member name '("realtypespec") #+no debug :test #'string-equal))
-               (let ((stream *standard-output*))
-                 (format stream "~V@T" (* 2 (depth transform)))
-                 (pprint-logical-block (stream (list node) :per-line-prefix "| ")
-                   (format stream "Expanded ~A ~:S -> ~S~@:_~@:_" name arguments expansion)
-                   (text.source-location.print:print-annotations
-                    stream (append (a:when-let ((definition-bounds (node-bounds builder macro)))
-                                     (list (base:make-annotation
-                                            (env:lookup :current-file :traversal environment)
-                                            definition-bounds "defined here" :kind :info)))
-                                   (a:when-let ((invocation-bounds (node-bounds builder node)))
-                                     (list (base:make-annotation
-                                            (env:lookup :current-file :traversal environment)
-                                            invocation-bounds "invoked here" :kind :info))))))
-                 (fresh-line stream)))
-             (let ((instead (bp:node (builder :splice :expansion-of node)
-                              (* (:element . *) expansion))))
-               (values instead :splice '() '((:element . *))))))
-          (t
-           t))))
+  (let ((environment (environment transform)))
+    (handler-bind
+        ((error (lambda (c)
+                  (declare (ignore c))
+                  (let ((stream *standard-output*))
+                    (text.source-location.print:print-annotations
+                     stream (list (base:make-annotation
+                                   (env:lookup :current-file :traversal environment)
+                                   (node-bounds builder node) "invoked here" :kind :info)))))))
+      (let* ((initargs (bp:node-initargs builder node))
+             (name     (getf initargs :name))
+             (macro    (lookup-macro name environment)))
+        (cond ((typep macro '(or function (cons keyword)))
+               (let* ((arguments (bp:node-relation builder '(:argument . *) node))
+                      (expansion (expand builder environment macro arguments))
+                      (debug     (debug-expansion transform)))
+                 (when (or (eq debug t)
+                           (member name '() #+no debug :test #'string-equal))
+                   (let ((arity  (if (functionp macro)
+                                     nil
+                                     (length (bp:node-relation builder '(:argument . *) macro))))
+                         (stream *standard-output*))
+                     (format stream "~V@T" (* 2 (depth transform)))
+                     (pprint-logical-block (stream (list node) :per-line-prefix "| ")
+                       (format stream "Expanded ~A/~D ~:S -> ~S~@:_~@:_"
+                               name arity arguments expansion)
+                       (text.source-location.print:print-annotations
+                        stream (append (a:when-let ((definition-bounds (node-bounds builder macro)))
+                                         (list (base:make-annotation
+                                                (env:lookup :current-file :traversal environment)
+                                                definition-bounds "defined here" :kind :info)))
+                                       (a:when-let ((invocation-bounds (node-bounds builder node)))
+                                         (list (base:make-annotation
+                                                (env:lookup :current-file :traversal environment)
+                                                invocation-bounds "invoked here" :kind :info))))))
+                     (fresh-line stream)))
+                 (let ((instead (bp:node (builder :splice :expansion-of node)
+                                  (* (:element . *) expansion))))
+                   (values instead :splice '() '((:element . *))))))
+              (t
+               t))))))
