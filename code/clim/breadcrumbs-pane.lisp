@@ -20,8 +20,9 @@
     (clim:redisplay-frame-pane (clim:pane-frame client) client :force-p t)))
 
 (defun display-breadcrumbs (frame pane)
-  (let* ((state     (state pane))
-         (node      (node state))
+  (let* ((model     (model pane))
+         (root      (root model))
+         (node      (node model))
          (ancestors '()))
     ;; Build ancestor path.
     (labels ((visit (ancestor)
@@ -34,11 +35,10 @@
                    (visit parent)))))
       (visit node))
     ;; Render the path.
-    (link (tree frame) pane "⌂")
-    (loop :for ((ancestor . title) next) :on ancestors
+    (with-output-as-link (pane root :current-node node)
+      (write-string "⌂" pane))
+    (loop :for (ancestor . title) :in ancestors
           :for first? = t :then nil
           :do (write-string " » " pane)
-          :do (if next
-                  (with-output-as-link (pane ancestor)
-                    (write-string title pane))
-                  (write-string title pane)))))
+          :do (with-output-as-link (pane ancestor :current-node node)
+                (write-string title pane)))))

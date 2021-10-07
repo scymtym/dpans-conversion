@@ -24,13 +24,15 @@
       (when node-changed?
         (clim:scroll-extent client 0 0)))))
 
-(defun display-tree (builder tree stream &key (annotations '())
-                                              (highlight   nil))
-  (let ((transform (make-instance 'display :builder     builder
-                                           :annotations annotations
-                                           :highlight   highlight
-                                           :stream      stream
-                                           :depth       2)))
+(defun display-tree (builder tree stream &key (annotations      '())
+                                              (highlight-node   nil)
+                                              (highlight-string nil))
+  (let ((transform (make-instance 'display :builder          builder
+                                           :annotations      annotations
+                                           :highlight-node   highlight-node
+                                           :highlight-string highlight-string
+                                           :stream           stream
+                                           :depth            2)))
     (bp:walk-nodes
      builder
      (lambda (recurse relation relation-args node kind relations
@@ -48,13 +50,15 @@
                                         :right '(:relative 40)) ; TODO why does (:relative 20) not work?
       (clim:with-bounding-rectangle* (x1 y1) (clime:stream-page-region pane)
         (setf (clim:stream-cursor-position pane) (values x1 y1))
-        (let ((state (state pane)))
-          (a:if-let ((tree (node state)))
-            (let ((builder     (builder state))
-                  (annotations (annotations state))
-                  (highlight   (highlight state)))
-              (display-tree builder tree pane :annotations annotations
-                                              :highlight   highlight))
+        (let ((model (model pane)))
+          (a:if-let ((tree (node model)))
+            (let ((builder          (builder model))
+                  (annotations      (annotations model))
+                  (highlight-node   (highlight-node model))
+                  (highlight-string (highlight-string model)))
+              (display-tree builder tree pane :annotations      annotations
+                                              :highlight-node   highlight-node
+                                              :highlight-string highlight-string))
             (clim:with-drawing-options (pane :text-face :italic :ink clim:+gray30+)
               (write-string "No content selected" pane))))))))
 
@@ -64,14 +68,17 @@
          (clim:with-bounding-rectangle* (:center-x x :y2 y) record
            (a:when-let* ((builder   'list)
                          (node      (clim:presentation-object record))
-                         (new-node  (find-ancestor-of-kind builder '(:component :section :gentry :reviewer-note :editor-note) node))) ; TODO why would this be null?
+                         (new-node  (find-ancestor-of-kind builder '(:chapter :section :component :gentry
+                                                                     :reviewer-note :editor-note)
+                                                           node))) ; TODO why would this be null?
              (labels ((render ()
                         (clime:with-temporary-margins (stream :left  '(:absolute 0)
                                                               :right `(:absolute ,(* .9 700)))
                           (display-tree 'list new-node stream
-                                        :highlight (if (eq node new-node) nil node))))
+                                        :highlight-node   (if (eq node new-node) nil node)
+                                        :highlight-string "write")))
                       (maybe-border ()
-                        (if (eq (bp:node-kind builder new-node) :component)
+                        (if (member (bp:node-kind builder new-node) '(:component :proposal))
                             (render)
                             (clim:surrounding-output-with-border
                                 (stream :background clim:+white+)
@@ -80,7 +87,7 @@
                                   (maybe-border))))
                  (clim:with-bounding-rectangle* (:width width) highlight
                    (setf (clim:output-record-position highlight)
-                         (values (max 20 (- x (/ width 2) ))
+                         (values (max 20 (- x (/ width 2)))
                                  (+ y 10)))
                    highlight)))))))
 
@@ -98,4 +105,6 @@
        (stream  content-pane)
        (state   (eql :unhighlight)))
     (a:when-let ((highlight (make-highlight record stream)))
-      (clim:repaint-sheet stream (clim:bounding-rectangle highlight)))))
+      (clim:with-bounding-rectangle* (x1 y1 x2 y2) highlight
+       (clim:repaint-sheet
+        stream (clim:make-rectangle* (1- x1) (1- y1) (1+ x2) (1+ y2)))))))

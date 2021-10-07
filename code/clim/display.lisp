@@ -1,27 +1,31 @@
 (cl:in-package #:dpans-conversion.clim)
 
 (defclass display (transform:builder-mixin)
-  ((%stream :initarg  :stream
-            :accessor stream)
+  ((%stream           :initarg  :stream
+                      :accessor stream)
    ;; Parameters
-   (%annotations :initarg  :annotations
-                 :type     list
-                 :reader   annotations
-                 :initform '())
-   (%highlight   :initarg  :highlight
-                 :type     (or null function)
-                 :reader   highlight
-                 :initform nil)
+   (%annotations      :initarg  :annotations
+                      :type     list
+                      :reader   annotations
+                      :initform '())
+   (%highlight-node   :initarg  :highlight-node
+                      :type     (or null function)
+                      :reader   highlight-node
+                      :initform nil)
+   (%highlight-string :initarg  :highlight-string
+                      :type     (or null string)
+                      :reader   highlight-string
+                      :initform nil)
    ;; State
-   (%context     :accessor context
-                 :initform nil)
-   (%depth       :initarg  :depth
-                 :accessor depth
-                 :initform 1))
+   (%context          :accessor context
+                      :initform nil)
+   (%depth            :initarg  :depth
+                      :accessor depth
+                      :initform 1))
   (:default-initargs
    :stream (a:required-argument :stream)))
 
-(defmethod transform:transform-node
+(defmethod transform:transform-node ; TODO remove later
     ((transform display) recurse relation relation-args
      node (kind t) relations &key)
   (break "~A" kind)
@@ -31,22 +35,26 @@
 (defmethod transform:transform-node :around
     ((transform display) recurse relation relation-args
      node (kind t) relations &rest initargs &key)
-  (a:if-let ((highlight (highlight transform)))
+  (a:if-let ((highlight-node (highlight-node transform)))
     (flet ((do-highlight ()
              (let ((stream (stream transform))
                    x y)
                (clim:surrounding-output-with-border
                    (stream :shape      :rounded
-                           :background clim:+dark-orange+
                            :padding    1
-                           :radius     2)
+                           :radius     2
+                           :ink        clim:+blue+
+                           :line-style (clim:make-line-style :thickness 1
+                                                             :dashes    '(4 4)))
                  (call-next-method)
                  (setf (values x y) (clim:stream-cursor-position stream)))
                (setf (clim:stream-cursor-position stream) (values (+ x 3) y)))))
-      (cond ((eq highlight node)
+      (cond ((eq highlight-node node)
              (do-highlight))
-            ((and (functionp highlight )
-                  (apply highlight relation relation-args node kind relations initargs))
+            ((and (functionp highlight-node)
+                  (apply highlight-node
+                         relation relation-args node kind relations
+                         initargs))
              (do-highlight))
             (t
              (call-next-method))))
@@ -59,15 +67,35 @@
         &rest initargs &key ,@key)
      (declare (ignorable transform recurse relation relation-args
                          node kind relations initargs))
-     (let ((builder (transform:builder transform))
-           (stream  (stream transform)))
+     (let ((builder          (transform:builder transform))
+           (stream           (stream transform))
+           (highlight-string (highlight-string transform)))
        (declare (ignorable builder stream))
        (flet ((recurse (&rest relations)
-                  (if (null relations)
-                      (funcall recurse)
-                      (funcall recurse :relations relations))))
-         (declare (ignorable #'recurse )
-                  (inline recurse))
+                (if (null relations)
+                    (funcall recurse)
+                    (funcall recurse :relations relations)))
+              (display-string (string)
+                (let (index)
+                  (cond ((not highlight-string)
+                         (write-string string stream))
+                        ((setf index (search highlight-string string
+                                             :test #'char-equal))
+                         (let* ((start index)
+                                (end   (+ start (length highlight-string))))
+                           (write-string string stream :end start)
+                           (climi::with-preserved-cursor-y (stream)
+                             (clim:surrounding-output-with-border (stream :padding    0
+                                                                          :ink        clim:+transparent-ink+
+                                                                          :background clim:+red+)
+                               #+no #+no clim:with-drawing-options (stream :ink       clim:+blue+
+                                                                           :text-face :bold)
+                               (write-string string stream :start start :end end)))
+                           (write-string string stream :start end)))
+                        (t
+                         (write-string string stream))))))
+         (declare (ignorable #'recurse #'display-string)
+                  (inline recurse display-string))
          ,@body))))
 
 (defun clean-whitespace (string)
@@ -91,8 +119,8 @@
                     (t        (clean-whitespace content))))) ; HACK the parser should do this
     (case context
       (:math (clim:with-drawing-options (stream :text-face :italic)
-               (write-string string stream)))
-      (t     (write-string string stream)))))
+               (display-string string)))
+      (t     (display-string string)))))
 
 (define-display (:title)
   (clim:with-drawing-options (stream :text-size :huge)
@@ -124,22 +152,40 @@
                     (recurse '(:element . *))))
              (incf (depth transform)))))))
 
+(defun default-text-size ()
+  (let ((size (clim:text-style-size climi::*default-text-style*)))
+    (if (realp size)
+        size
+        10)))
+
+(defun title-text-size (level)
+  (let* ((min (default-text-size))
+         (max (* 2 min)))
+    (a:lerp (/ level 5) max min)))
+
+(defun display-title (title-or-continuation level stream)
+  (clim:with-drawing-options (stream :text-face :bold
+                                     :text-size (title-text-size level))
+    (if (functionp title-or-continuation)
+        (funcall title-or-continuation stream)
+        (write-string title-or-continuation stream)))
+  (terpri stream))
+
 ;; TODO make with-section, use for this, chapter and proposal
-(define-display (:section name level) ; TODO either initarg or relation
-  (flet ((draw-it (stream)
-           (clim:with-drawing-options (stream :text-face :bold
-                                              :text-size (- 20 (* 2 (or level 1))))
-             (a:if-let ((relation (find :name relations :key #'car))) ; HACK
-               (climi::letf (((stream transform) stream))
-                 (recurse relation))
-               (write-string name stream)))))
+(define-display (:section name (level 1)) ; TODO either initarg or relation TODO level is nil for issue sections
+  (flet ((display (stream)
+           (display-title
+            (lambda (stream)
+              (a:if-let ((relation (find :name relations :key #'car))) ; HACK
+                (climi::letf (((stream transform) stream))
+                  (recurse relation))
+                (write-string name stream)))
+            level stream)))
     (cond ((eql (depth transform) 1)
            (clim:with-output-as-presentation (stream node 'link)
-             (draw-it stream))
-           (terpri stream))
+             (display stream)))
           (t
-           (draw-it stream)
-           (terpri stream)
+           (display stream)
            (decf (depth transform))
            (unwind-protect
                 (recurse '(:element . *))
@@ -188,7 +234,7 @@
              `(define-display (,kind)
                 (clim:with-drawing-options (stream ,@options)
                   (recurse)))))
-  (define :typewriter :text-family :fix) ; TODO rename to monospace
+  (define :typewriter :text-family :fix :ink clim:+dark-orchid+) ; TODO rename to monospace
   (define :roman      :text-face   :roman)
   (define :bold       :text-face   :bold)
   (define :italic     :text-face   :italic))
@@ -209,9 +255,18 @@
     (clim:with-drawing-options (stream :text-size :smaller)
       (recurse '(:right . *)))))
 
+(define-display (:newline)
+  (terpri stream))
+
 (define-display (:paragraph-break)
   (terpri stream)
   (terpri stream))
+
+(define-display (:hrule)
+  (multiple-value-bind (x y) (clim:stream-cursor-position stream)
+    (clim:with-bounding-rectangle* (:x2 x2) (clime:stream-page-region stream)
+      (clim:draw-line* stream x y x2 y :line-thickness 2)))
+  (clim:stream-increment-cursor-position stream 0 4))
 
 (define-display (:enumeration-item)
   (let ((context (context transform)))
@@ -249,16 +304,19 @@
 (define-display (:definition-item)
   (clim:formatting-cell (stream)
     (clim:with-drawing-options (stream :text-face :bold)
+      (write-string "|" stream)
       (recurse '(:key . *)))
     (terpri stream)
     (clim:indenting-output (stream '(2 :character))
       (climi::letf (((stream transform) stream))
-        (recurse '(:body . *))))))
+        (recurse '(:body . *))
+        (write-string "done" stream)))))
 
 (define-display (:definition-list)
   (fresh-line stream)
   (clim:formatting-item-list (stream :n-columns 1)
-    (recurse)))
+    (recurse))
+  (write-string "all done" stream))
 
 (defun color<-hex (hex)
   (let ((red   (ldb (byte 8 16) hex))
@@ -426,6 +484,7 @@
 
 (define-display (:keyword)
   (clim:with-drawing-options (stream :text-family :fix :ink clim:+firebrick+)
+    (write-char #\: stream)
     (recurse)))
 
 (define-display (:lambda-list-keyword which) ; TODO should this be a link?
@@ -556,18 +615,25 @@
 
 ;;; References
 
-(defun call-with-output-as-link (continuation stream target)
-  (a:if-let ((target (if (typep target 'transform::reference) ; TODO should be handled in transform module
-                         (transform::target target)
-                         target)))
-    (clim:with-output-as-presentation (stream target 'link)
-      (funcall continuation stream))
-    (clim:with-drawing-options (stream :ink clim:+red+)
-      (funcall continuation stream))))
+(defun call-with-output-as-link (continuation stream target &key current-node)
+  (let ((target (if (typep target 'transform::reference) ; TODO should be handled in transform module
+                    (transform::target target)
+                    target)))
+    (cond ((null target)
+           (clim:with-drawing-options (stream :ink clim:+red+)
+             (funcall continuation stream)))
+          ((eq target current-node)
+           (funcall continuation stream))
+          (t
+           (clim:with-output-as-presentation (stream target 'link)
+             (funcall continuation stream))))))
 
-(defmacro with-output-as-link ((stream target) &body body)
+(defmacro with-output-as-link ((stream target &key current-node) &body body)
   (check-type stream symbol)
-  `(call-with-output-as-link (lambda (,stream) ,@body) ,stream ,target))
+  `(call-with-output-as-link
+    (lambda (,stream) ,@body)
+    ,stream ,target ,@(when current-node
+                        `(:current-node ,current-node))))
 
 (defun ink<-namespace (namespace)
   (case namespace ; TODO will be ecase
@@ -638,17 +704,21 @@
   (recurse))
 
 (define-display (:newtermidx target)
-  (recurse))
+  (recurse '(:name . 1)))
 
 ;;; Annotations
 
-(define-display (:issue-annotation)
+(define-display (:issue-annotation target)
   (flet ((do-it ()
            (recurse)))
     (if (find kind (annotations transform))
-        (let ((ink (clim:make-contrasting-inks 8 (random 8))))
-          (clim:surrounding-output-with-border (stream :ink ink)
-            (do-it)))
+        (let ((ink (clim:make-contrasting-inks 8 (random 8))) ; TODO track depth for color
+              x y)
+          (with-output-as-link (stream target)
+            (clim:surrounding-output-with-border (stream :ink ink)
+              (do-it)
+              (setf (values x y) (clim:stream-cursor-position stream ))))
+          (setf (clim:stream-cursor-position stream ) (values x y)))
         (do-it))))
 
 (flet ((display-note (transform node kind person content stream)
@@ -670,9 +740,6 @@
 
 ;;; Issues
 
-(define-display (:issue-reference)
-  )
-
 (define-display (:forum)
   )
 
@@ -692,49 +759,58 @@
     (clim:surrounding-output-with-border (stream :shape      :rounded
                                                  :radius     2
                                                  :background (color<-status status))
-      (clim:with-drawing-options (stream :ink        (ink<-namespace :proposal)
-                                         :text-face :bold
-                                         :text-size :larger)
-        (format stream "Proposal ~A" name))
+      (display-title
+       (lambda (stream)
+         (clim:with-drawing-options (stream :ink (ink<-namespace :proposal))
+           (format stream "Proposal ~A" name)))
+       1 stream)
       (terpri stream)
-      (clim:indenting-output (stream '(2 :character))
-        (climi::letf (((stream transform) stream))
-          (recurse))))))
+      (recurse))))
 
 (define-display (:issue)
-  (cond ((zerop (depth transform)))
-        ((not (eq node (node (state (clim:find-pane-named clim:*application-frame* 'content))))) ; TODO
-         (link node stream (lambda (stream)
-                             (declare (ignore stream))
-                             (recurse '(:name . 1) ))))
-        (t
-         (recurse))))
+  (cond  ((= (depth transform) 2)
+          (display-title (lambda (stream)
+                           (write-string "Issue " stream)
+                           (recurse '(:name . 1)))
+                         0 stream)
+          (terpri stream)
+          (let ((skip '()))
+            (flet ((section (relation &key title)
+                     (when (bp:node-relation builder relation node)
+                       (push relation skip)
+                       (when title
+                         (display-title title 1 stream))
+                       (recurse relation)
+                       (terpri stream))))
+              (section '(:related-issue . *) :title "Related Issues"))
+            (apply #'recurse (set-difference
+                              relations (list* '(:name . 1) skip)
+                              :test #'equal))))
+         (t
+          (with-output-as-link (stream node)
+            (recurse '(:name . 1)))))
+  #+no (cond ((zerop (depth transform)))
+             ((not (eq node (node (state (clim:find-pane-named clim:*application-frame* 'content))))) ; TODO
+              (with-output-as-link (stream node)
+                (recurse '(:name . 1) )))
+             (t
+              (recurse))))
 
 ;;;
 
 (define-display (:collection)
-  (recurse))
-
-(define-display (:output-file)
-  (break "should not happen")
-  (recurse))
-
-(define-display (:input) ; TODO should not happen
-  (recurse))
-
-(define-display (:file)
-  (recurse))
+  (recurse '(:specification . 1) '(:element . *)))
 
 (define-display (:splice)
   (recurse))
 
-(define-display (:block) ; TODO should not happen
-  (if (some (lambda (element)
-               (eq (bp:node-kind builder element) :bnf-rule))
-             (bp:node-relation builder '(:element . *) node)) ; TODO hack
-      (clim:formatting-table (stream)
-        (recurse))
-      (recurse)))
+(define-display (:block)                ; TODO should not happen
+  (when (some (lambda (element)
+                (eq (bp:node-kind builder element) :bnf-rule))
+              (bp:node-relation builder '(:element . *) node)) ; TODO hack
+    ; (break)
+    )
+  (recurse))
 
 (define-display (:argument) ; TODO should not happen
   (clim:with-drawing-options (stream :ink clim:+red+)
@@ -751,6 +827,30 @@
     (format stream "hbox"))
   (recurse))
 
+(define-display (:vtop)
+  ; (break "should not happen")
+  (recurse))
+
+(define-display (:vbox)
+  ; (break "should not happen")
+  (recurse))
+
+(define-display (:column-separator) ; TODO
+  (break "should not happen")
+  (clim:with-drawing-options (stream :ink clim:+red+)
+    (write-string "\\&" stream)))
+
+(define-display (:bnf-grammar)
+  ;; TODO code with listing border
+  (clim:surrounding-output-with-border
+      (stream :shape      :rounded
+              :radius     3
+              :background clim:+light-goldenrod-yellow+
+              :ink        clim:+gray30+)
+    (clim:formatting-table (stream)
+      (recurse)))
+  (terpri stream))
+
 (define-display (:bnf-rule)
   (clim:formatting-row (stream)
     (clim:formatting-cell (stream :align-y :center)
@@ -759,13 +859,3 @@
       (write-string "::=" stream))
     (clim:formatting-cell (stream)
       (recurse '(:element . *))))) ; TODO
-
-(define-display (:vtop)
-  (recurse))
-
-(define-display (:vbox))
-
-(define-display (:column-separator) ; TODO
-  (break "should not happen")
-  (clim:with-drawing-options (stream :ink clim:+red+)
-    (write-string "\\&" stream)))

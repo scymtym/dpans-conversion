@@ -19,8 +19,15 @@
     (clim:redisplay-frame-pane (clim:pane-frame client) client :force-p t)))
 
 (defun display-history (frame pane)
-  (let ((state (state pane)))
+  (declare (ignore frame))
+  (let ((history (model pane)))
     ;; Render the path.
-    (write-string "◀" pane)
+    (clim:with-drawing-options (pane :ink (if (back-possible? history)
+                                              clim:+black+
+                                              clim:+gray60+))
+      (write-string "◀" pane))
     (write-char #\Space pane)
-    (write-string "▶" pane)))
+    (clim:with-drawing-options (pane :ink (if (forward-possible? history)
+                                              clim:+black+
+                                              clim:+gray60+))
+      (write-string "▶" pane))))
