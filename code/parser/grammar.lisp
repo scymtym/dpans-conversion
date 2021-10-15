@@ -20,9 +20,25 @@
 (defrule has-syntax? (character syntax environment)
     (seq)
   (unless (eq (env:lookup character :characters environment
-                              :if-does-not-exist syntax) ; TODO populate environment accordingly?
+                          :if-does-not-exist syntax) ; TODO populate environment accordingly?
               syntax)
     (:fail)))
+
+(defrule in-traversal (context environment)
+    (seq)
+  (unless (or (env:lookup context :traversal environment
+                                  :if-does-not-exist nil)
+              (env:lookup :definition :traversal environment
+                                      :if-does-not-exist nil))
+    (:fail)))
+
+(defrule traversing (context environment)
+    (seq)
+  (env:augmented-environment environment `((,context . :traversal)) '(t)))
+
+(defrule not-traversing (context environment)
+    (seq)
+  (env:augmented-environment environment `((,context . :traversal)) '(nil)))
 
 #+dpans-debug (defvar *depth* 0)
 
@@ -211,9 +227,10 @@
     (bounds (start end)
       (seq "\\f"
            (seq (skippable* environment) #\{
-                (seq (<- new-environment (:transform (seq)
-                                          (env:augmented-environment
-                                           environment '((#\[ . :characters)) '(:normal))))
+                (seq (<- new-environment
+                         (:transform (seq)
+                           (env:augmented-environment
+                            environment '((#\[ . :characters)) '(:normal))))
                      (* (<<- element (element new-environment))))
                 (skippable* environment) #\})))
   (bp:node* (:typewriter :bounds (cons start end))
@@ -234,9 +251,7 @@
 (defrule block* (environment)
     (bounds (start end)
       (seq/ws #\{
-              (seq (<- new-environment (:transform (seq)
-                                         (env:augmented-environment
-                                          environment '((:in-group . :traversal)) '(t))))
+              (seq (<- new-environment (traversing :in-group environment))
                    (* (<<- elements (and (not #\}) (element new-environment)))))
               #\}))
   (bp:node* (:block :bounds (cons start end))
@@ -587,10 +602,12 @@
   (seq "\\item" (? "item") #\{ (or "\\bull" "--" (seq)) #\})) ; TODO empty bullet is used as block quote
 
 (defrule list-item (environment)
-    (bounds (start end)
-      (seq/ws (item-keyword)
-              (* (<<- body (and (not (or (seq "\\item" (? "item") #\{)#+was(item-keyword) "\\endlist"))
-                                (element environment))))))
+    (and (in-traversal :list environment)
+         (bounds (start end)
+           (seq/ws (item-keyword)
+                   (and (<- new-environment (not-traversing :list environment))
+                        (* (<<- body (and (not (or (seq "\\item" (? "item") #\{)#+was(item-keyword) "\\endlist"))
+                                          (element new-environment))))))))
   (bp:node* (:list-item :bounds (cons start end))
     (* (:body . *) (nreverse body))))
 
@@ -599,13 +616,14 @@
       (seq/ws "\\beginlist"
               #+dpans-debug (:transform (seq) (format *trace-output* "~V@T[ item list~%" *depth*) (incf *depth*))
               (or (seq/ws
-                   (* (and (not "\\endlist")
-                           (seq (skippable* environment)
-                                (<<- elements (or (issue-annotation environment)
-                                                  (reviewer environment)
-                                                  (editor-note environment)
-                                                  (list-item environment)))
-                                (skippable* environment))))
+                   (and (<- new-environment (traversing :list environment))
+                        (* (and (not "\\endlist")
+                                (seq (skippable* new-environment)
+                                     (<<- elements (or (issue-annotation new-environment)
+                                                       (reviewer new-environment)
+                                                       (editor-note new-environment)
+                                                       (list-item new-environment)))
+                                     (skippable* new-environment)))))
                    (:transform "\\endlist" nil)
                    #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] item list~%" *depth*)))
                   #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX item list~%" *depth*) (:fail))
@@ -617,9 +635,12 @@
   (seq "\\item" (? "item") #\{ (+ (guard digit-char-p)) ".}"))
 
 (defrule enumeration-item (environment)
-    (bounds (start end)
-      (seq/ws (enumeration-item-keyword)
-              (* (<<- body (and (not (or (seq "\\item" (? "item") #\{)#+was (enumeration-item-keyword) "\\endlist")) (element environment))))))
+    (and (in-traversal :list environment)
+         (bounds (start end)
+           (seq/ws (enumeration-item-keyword)
+                   (and (<- new-environment (not-traversing :list environment))
+                        (* (<<- body (and (not (or (seq "\\item" (? "item") #\{)#+was (enumeration-item-keyword) "\\endlist"))
+                                          (element new-environment))))))))
   (bp:node* (:enumeration-item :bounds (cons start end))
     (* (:body . *) (nreverse body))))
 
@@ -627,13 +648,14 @@
     (bounds (start end)
       (seq/ws "\\beginlist"
               #+dpans-debug (:transform (seq) (format *trace-output* "~V@T[ enum list~%" *depth*) (incf *depth*))
-              (or (seq/ws (* (and (not "\\endlist")
-                               (seq (skippable* environment)
-                                    (<<- elements (or (issue-annotation environment)
-                                                      (enumeration-item environment)))
-                                    (skippable* environment))))
-                       (:transform  "\\endlist" nil)
-                       #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] enum list~%" *depth*)))
+              (or (and (<- new-environment (traversing :list environment))
+                       (seq/ws (* (and (not "\\endlist")
+                                       (seq (skippable* new-environment)
+                                            (<<- elements (or (issue-annotation new-environment)
+                                                              (enumeration-item new-environment)))
+                                            (skippable* new-environment))))
+                               (:transform  "\\endlist" nil)
+                               #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] enum list~%" *depth*))))
                   #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX enum list~%" *depth*) (:fail))
                   #-dpans-debug (:transform (seq) (:fail)))))
   (bp:node* (:enumeration-list :bounds (cons start end))
@@ -645,10 +667,12 @@
                                                 item)))
 
 (defrule definition-item (environment)
-    (bounds (start end)
-      (seq/ws (seq "\\item" (? "item")) #\{ (* (<<- keys (element environment))) #\}
-              (* (<<- body (and (not (or (seq "\\item" (? "item") #\{) "\\endlist"))
-                                (element environment))))))
+    (and (in-traversal :list environment)
+         (bounds (start end)
+           (seq/ws (seq "\\item" (? "item")) #\{ (* (<<- keys (element environment))) #\}
+                   (and (<- new-environment (not-traversing :list environment))
+                        (* (<<- body (and (not (or (seq "\\item" (? "item") #\{) "\\endlist"))
+                                          (element new-environment))))))))
   (bp:node* (:definition-item :bounds (cons start end))
     (* (:key  . *) (nreverse keys))
     (* (:body . *) (nreverse body))))
@@ -657,14 +681,15 @@
     (bounds (start end)
       (seq/ws "\\beginlist"
               #+dpans-debug (:transform (seq) (format *trace-output* "~V@T[ definition list~%" *depth*) (incf *depth*))
-              (or (seq/ws (* (and (not "\\endlist")
-                                  (seq (skippable* environment)
-                                       (<<- elements
-                                            (or (issue-annotation environment)
-                                                (definition-item environment)))
-                                       (skippable* environment))))
-                          (:transform "\\endlist" nil)
-                          #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] definition list ~D~%" *depth* (length elements))))
+              (or (and (<- new-environment (traversing :list environment))
+                       (seq/ws (* (and (not "\\endlist")
+                                       (seq (skippable* new-environment)
+                                            (<<- elements
+                                                 (or (issue-annotation new-environment)
+                                                     (definition-item new-environment)))
+                                            (skippable* new-environment))))
+                               (:transform "\\endlist" nil)
+                               #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] definition list ~D~%" *depth* (length elements)))))
                   #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX definition list~%" *depth*) (:fail))
                   #-dpans-debug (:transform (seq) (:fail)))))
   (bp:node* (:definition-list :bounds (cons start end))
@@ -731,7 +756,7 @@
     (1 (:modified . 1) modified)))
 
 (defrule argument (environment)
-    (and (has-syntax '#\# :argument environment)
+    (and (has-syntax? '#\# :argument environment)
          (bounds (start end)
            (seq (+ (<<- level #\#))
                 (<- number (:transform (guard digit digit-char-p)
