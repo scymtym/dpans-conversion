@@ -738,8 +738,10 @@
       (seq/ws "\\chardef" (<- name (name))
               #\= (or (seq #\` (escaped-character))
                       (* (guard digit-char-p) 1 3))))
+  ;; Side effect
   (with-name-string (name name)
-    (setf (lookup name :macro environment) 0))
+    (let ((environment (root-environment environment)))
+      (setf (env:lookup name :macro environment) 0)))
   (bp:node* (:chardef :bounds (cons start end))
     (1 (:name . 1) name)))
 
@@ -747,8 +749,10 @@
     (bounds (start end)
       (seq/ws "\\mathchardef" (<- name (name))
               (seq #\" (* (guard (digit-char-p 16)) 4 4)))) ; TODO code
+  ;; Side effect
   (with-name-string (name name)
-    (setf (lookup name :math environment) 0))
+    (let ((environment (root-environment environment)))
+      (setf (env:lookup name :math environment) 0)))
   (bp:node* (:mathchardef  :bounds (cons start end))
     (1 (:name . 1) name)))
 
@@ -1055,12 +1059,13 @@
            (? (seq (? (whitespace/in-line+)) (<- name2 (name))))))
   ;; Side effect: define "if", "true" and "false" macros.
   (with-name-string (name name1)
-    (let* ((stem  (subseq name 2))
-           (true  (concatenate 'string stem "true"))
-           (false (concatenate 'string stem "false")))
-      (setf (lookup stem  :if    environment) t
-            (lookup true  :macro environment) 0
-            (lookup false :macro environment) 0)))
+    (let* ((environment (root-environment environment))
+           (stem        (subseq name 2))
+           (true        (concatenate 'string stem "true"))
+           (false       (concatenate 'string stem "false")))
+      (setf (env:lookup stem  :if    environment) t
+            (env:lookup true  :macro environment) 0
+            (env:lookup false :macro environment) 0)))
   ;; Result
   (bp:node* (:newif :bounds (cons start end))
     (1    (:name  . 1) name1)
@@ -1189,7 +1194,8 @@
       (seq/ws (seq "\\new" (or "skip" "dimen")) (<- name (name))))
   ;; Side effect: define variable
   (with-name-string (name name)
-    (setf (lookup name :variable environment) t))
+    (let ((environment (root-environment environment)))
+      (setf (env:lookup name :variable environment) t)))
   ;; Result
   (bp:node* (:newskip :bounds (cons start end))
     (1 (:name . 1) name)))
@@ -1217,9 +1223,9 @@
                          #\= (+ (<<- number (guard digit-char-p))))
                  (seq/ws "newcount" (<- name (name)))))
   ;; Side effect: define variable
-  (let ((name (getf (bp:node-initargs* name) :content)))
-    (check-type name string)
-    (setf (lookup name :variable environment) t))  ; TODO to consume = token and value token
+  (with-name-string (name name)
+    (let ((environment (root-environment environment)))
+      (setf (env:lookup name :variable environment) t)))  ; TODO to consume = token and value token
   ;; Variable
   (bp:node* (:counter-definition)
     (1    (:name . 1)   name)
@@ -1247,8 +1253,9 @@
       (seq/ws (seq "\\new" (or "toks" "box" "write" "insert")) (<- name (name))))
   ;; Side effect: define variable and macro
   (with-name-string (name name)
-    (setf (lookup name :variable environment) t)
-    (setf (lookup name :macro environment) 0))
+    (let ((environment (root-environment environment)))
+      (setf (env:lookup name :variable environment) t
+            (env:lookup name :macro    environment) 0)))
   (bp:node* (:new :bounds (cons start end))
     (1 (:name . 1) name)))
 
@@ -1521,8 +1528,9 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
               (? (seq/ws "\\sc" (<- name2 (name))))))
   ;; Side effect: define macro
   (with-name-string (name name)
-    (let ((file (coerce (nreverse file) 'string)))
-      (setf (lookup name :macro environment) 0)))
+    (let ((file        (coerce (nreverse file) 'string))
+          (environment (root-environment environment)))
+      (setf (env:lookup name :macro environment) 0)))
   ;; Result
   (bp:node* (:font :bounds (cons start end))
     (1 (:name . 1) name)))
