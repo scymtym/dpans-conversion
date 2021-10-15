@@ -209,7 +209,7 @@
     (bounds (start end)
       (seq "{\\bf" (* (<<- elements (and (not (or #\} #\&)) (element environment)))) #\}))
   (bp:node* (:bold :bounds (cons start end))
-    (* :element (nreverse elements))))
+    (* (:element . *) (nreverse elements))))
 
 (define-command (bold :kind :bold)
   (1* :element (element environment)))
@@ -221,7 +221,7 @@
     (bounds (start end)
       (seq "{\\it" (* (<<- elements (and (not #\}) (element environment)))) #\}))
   (bp:node* (:italic :bounds (cons start end))
-    (* :element (nreverse elements))))
+    (* (:element . *) (nreverse elements))))
 
 (defrule f (environment) ; "fixed", that is monospace font
     (bounds (start end)
@@ -536,7 +536,7 @@
                   (:transform (seq) nil))) ; HACK
          (bp:node* (,kind :bounds (cons start end))
            ,@(when name? `((1 (:name . 1) name)))
-           (* :element (nreverse elements)))))))
+           (* (:element . *) (nreverse elements)))))))
 
 (defrule chapter (environment)
     (bounds (start end)
@@ -629,7 +629,7 @@
                   #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX item list~%" *depth*) (:fail))
                   #-dpans-debug (:transform (seq) (:fail)))))
   (bp:node* (:item-list :bounds (cons start end))
-    (* :element (nreverse elements))))
+    (* (:element . *) (nreverse elements))))
 
 (defrule enumeration-item-keyword ()
   (seq "\\item" (? "item") #\{ (+ (guard digit-char-p)) ".}"))
@@ -659,7 +659,7 @@
                   #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX enum list~%" *depth*) (:fail))
                   #-dpans-debug (:transform (seq) (:fail)))))
   (bp:node* (:enumeration-list :bounds (cons start end))
-    (* :element (nreverse elements))))
+    (* (:element . *) (nreverse elements))))
 #+no (define-environment (enumeration-list :keyword "list"
                                       :name?   nil
                                       :element (:transform
@@ -1673,4 +1673,4 @@ Figure $nn$--$mm$ (\\string##1)}#1##1}}}
   (bp:node* (:file :filename      filename
                    :include-depth (or include-depth 0)
                    :bounds        (cons start end))
-    (* :element (nreverse elements))))
+    (* (:element . *) (nreverse elements))))
