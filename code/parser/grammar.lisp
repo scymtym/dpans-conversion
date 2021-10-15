@@ -562,23 +562,25 @@
 (define-command (head1 :command-name "HeadI" :kind :sub-title)
   (1* :name (element environment)))
 
-(defrule subs ()
+(defrule sub*section ()
     (seq (<- count (:transform (seq) 0))
-         (* (seq (or #\s #\S) "ub" (:transform (seq) (incf count)))))
+         (* (seq (or #\s #\S) "ub" (:transform (seq) (incf count))))
+         (or #\s #\S) "ection")
   count)
 
 (defrule section (environment)
     (bounds (start end)
-      (seq/ws (seq "\\begin" (<- count (subs)) (or #\s #\S) "ection")
+      (seq/ws (seq "\\begin" (<- count (sub*section)))
               (or (seq/ws #\{ (* (<<- name (element environment))) #\}
                           #+dpans-debug (:transform (seq) (format *trace-output* "~V@T[ section ~A~%" *depth* name) (incf *depth*))
-                          (* (<<- elements (and (not (seq "\\end" (<- count (subs)) (or #\s #\S) "ection"))
+                          (* (<<- elements (and (not (seq "\\end" (<- count (sub*section))))
                                                 (element environment))))
-                          (seq "\\end" (<- count (subs)) (or #\s #\S) "ection")
+                          (seq "\\end" (<- count (sub*section)))
                           #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] section ~A~%" *depth* name))
                           (:transform (seq) nil))
                   #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX section ~A~%" *depth* name) (:fail))
-                  #-dpans-debug (:transform (seq) (:fail)))))
+                  #-dpans-debug (:transform (seq) (:fail)))
+              (skippable* environment))) ; eat whitespace after section
   (bp:node* (:section :level  (1+ count)
                       :bounds (cons start end))
     (1 (:name    . 1) (bp:node* (:splice) ; TODO splice is a hack
