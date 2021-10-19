@@ -529,26 +529,28 @@
                                           (apply #'transform:transform-node
                                                  transform args))))))
     (write-char #\Space stream)
-    ;; Function-like
-    (when (find '(:argument . *) relations :test #'equal) ; TODO should use which instead
-      (clim:with-drawing-options (stream :text-face :italic)
-        (recurse '(:argument . *)))
-      (when (eq which :setf)
-        (write-string ") " stream)
+    (clime:with-temporary-margins
+        (stream :left `(:absolute ,(clim:stream-cursor-position stream)))
+      ;; Function-like
+      (when (find '(:argument . *) relations :test #'equal) ; TODO should use which instead
         (clim:with-drawing-options (stream :text-face :italic)
-          (recurse '(:new-value . 1)))
-        (write-string ") " stream))
-      (cond ((find '(:return-value . *) relations :test #'equal)
-             (write-string " → " stream)
-             (clim:with-drawing-options (stream :text-face :italic)
-               (recurse '(:return-value . *))))
-            ((member which '(:method :setf)))
-            (t
-             (write-string " → |" stream))))
-    ;; Type specifier
-    (when (find '(:element . *) relations :test #'equal)
-      (clim:with-drawing-options (stream :text-face :italic)
-        (recurse '(:element . *))))))
+          (recurse '(:argument . *)))
+        (when (eq which :setf)
+          (write-string ") " stream)
+          (clim:with-drawing-options (stream :text-face :italic)
+            (recurse '(:new-value . 1)))
+          (write-string ") " stream))
+        (cond ((find '(:return-value . *) relations :test #'equal)
+               (write-string " → " stream)
+               (clim:with-drawing-options (stream :text-face :italic)
+                 (recurse '(:return-value . *))))
+              ((member which '(:method :setf)))
+              (t
+               (write-string " → |" stream))))
+      ;; Type specifier
+      (when (find '(:element . *) relations :test #'equal)
+        (clim:with-drawing-options (stream :text-face :italic)
+          (recurse '(:element . *)))))))
 
 ;;; Component
 
