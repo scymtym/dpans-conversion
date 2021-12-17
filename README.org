@@ -1,15 +1,121 @@
 * Introduction
 
-  This repository contains code for parsing
+  This repository contains code for processing the sources of the
+  draft Common Lisp specification and the X3J13 cleanup issues into
+  other formats such as HTML.
 
-* Sources
+  This project is designed to work with slightly modified versions of
+  the above artifacts which can be found in the ~online-lisp-meeting~
+  branch of https://github.com/s-expressionists/dpans.
 
+* Usage
 
-** dpANS TeX sources
+  This system is still in an experimental phase, so problems are,
+  unfortunately, to be expected. In particular, it is possible that I
+  forgot to push some changes either in this repository or in one of
+  the dependencies.
 
-   + https://github.com/xach/dpans
+** Dependencies
 
-   + http://www.cs.cmu.edu/afs/cs/Web/Groups/AI/lang/lisp/doc/standard/ansi/dpans/
+   A few dependencies (or particular versions of required systems) of
+   this system are not yet available in Quicklisp.
+
+   + Generalized Packrat Parser ::
+        ~future~ branch of https://github.com/scymtym/parser.packrat
+
+   + Parse Tree Constructing and Transformation ::
+        ~master~ branch of
+        https://github.com/scymtym/architecture.builder-protocol
+        (Quicklisp version is probably too old)
+
+   + Environment Handling ::
+        ~future~ branch of
+        https://github.com/scymtym/computation.environment
+
+   + Source Location Reporting ::
+        ~future~ branch of
+        https://github.com/scymtym/text.source-location
+
+   + Eclector Syntax Highlighting ::
+        ~online-lisp-meeting~ branch of
+        https://github.com/s-expressionists/Eclector
+
+   + McCLIM ::
+        ~master~ branch of https://github.com/mcclim/mcclim
+
+        This is only necessary due to an incompatibility between SBCL
+        and the McCLIM version that is distributed in Quicklisp.
+
+** Getting Started
+
+   This system operates on slightly modified dpANS and X3J13 sources
+   which are available in the ~online-lisp-meeting~ branch of
+   https://github.com/s-expressionists/dpans.
+
+   After making the dependencies available and loading the system with
+
+   #+BEGIN_SRC lisp
+     (ql:quickload :dpans-conversion) ; or (ql:quickload :dpans-conversion.clim)
+   #+END_SRC
+
+   a few high-level operations are available
+
+   + Conversion to HTML ::
+
+        #+BEGIN_SRC lisp
+          (handler-bind ((error (lambda (condition)
+                                  (princ condition)
+                                  (terpri)
+                                  (continue))))
+            (dpans-conversion::to-html #P"/path-to/dpans-repository/" #P"/output/directory/"))
+        #+END_SRC
+
+        where =/path-to/dpans-repository/= refers to the
+        https://github.com/s-expressionists/dpans repository mentioned
+        above.
+
+   + Prepare and View in CLIM-based Browser ::
+
+        To view the specification in the CLIM-based browser, the
+        specification must first be parsed and transformed:
+
+        #+BEGIN_SRC lisp
+          (handler-bind ((error (lambda (condition)
+                                  (princ condition)
+                                  (terpri)
+                                  (continue))))
+            (dpans-conversion::to-clim #P"/path-to/dpans-repository/"))
+        #+END_SRC
+
+        where =/path-to/dpans-repository/= refers to the
+        https://github.com/s-expressionists/dpans repository mentioned
+        above.
+
+        Then the browser can be started:
+
+        #+BEGIN_SRC lisp
+          (dpans-conversion.clim:browse)
+        #+END_SRC
+
+   + Conversion and Serialization to S-Expressions ::
+
+        TODO document
+
+   + Making a commandline utility ::
+
+        The conversion functionality of this system can also be turned
+        into a commandline utility:
+
+        #+BEGIN_SRC sh
+          $ sbcl --noinform --dynamic-space-size 4Gb                          \
+              --load PATH-TO-QUICKLISP/setup.lisp                             \
+              --eval '(ql:quickload :dpans-conversion/commandline-interface)' \
+              --eval '(asdf:make "dpans-conversion/commandline-interface")'
+          $ PATH-TO-DPANS-CONVERSION-REPOSITORY/dpans-converter PATH-TO-DPANS-SOURCES /tmp/output/ --format html
+        #+END_SRC
+
+        When invoked without arguments, the program prints supported
+        commandline options.
 
 * Other Efforts
 
@@ -34,7 +140,8 @@
        Is a conversion to HTML and also has a (dead) link to a
        converter.
 
-       Converter in wayback machine: https://web.archive.org/web/20150804121327/http://users-phys.au.dk/harder/dpans.html
+       Converter in wayback machine:
+       https://web.archive.org/web/20150804121327/http://users-phys.au.dk/harder/dpans.html
 
   + Texinfo conversion for GCL ::
 
@@ -48,14 +155,6 @@
   + LaTeX parser implemented in Haskell ::
 
        https://github.com/synsem/texhs
-
-** Document Processing
-
-   + CommonDoc
-
-   + That docutils port
-
-   + https://github.com/mbutterick/pollen
 
 * Material
 
@@ -84,10 +183,3 @@
 
   + TeX to Unicode (for HTML and CLIM renderes) ::
        https://golopot.github.io/tex-to-unicode/
-
-* Notes
-
-  #+BEGIN_EXAMPLE
-    <TMA> for the table of contents: replace ".tc" with ".toc" in chap-0.tex ; for
-        the index: run: sort -t: -k2 chap-*.idx > index.idx
-  #+END_EXAMPLE
