@@ -20,6 +20,14 @@
                                                &key)
   (write-string "<link>" stream))
 
+;;; `expression' and `listing'
+
+(clim:define-presentation-type expression ()
+  :inherit-from t)
+
+(clim:define-presentation-type listing ()
+  :inherit-from t)
+
 ;;; `search-result'
 
 (clim:define-presentation-type search-result ()

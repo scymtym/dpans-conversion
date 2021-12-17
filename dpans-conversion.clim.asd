@@ -8,8 +8,14 @@
                 :pathname   "code/clim"
                 :serial     t
                 :components ((:file "package")
-                             (:file "presentation")
                              (:file "state")
+
+                             (:file "presentations")
+                             (:file "commands")
+                             (:file "display")
+
+                             (:file "history-pane")
                              (:file "breadcrumbs-pane")
                              (:file "content-pane")
+
                              (:file "application")))))

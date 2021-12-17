@@ -1,8 +1,21 @@
 (cl:in-package #:dpans-conversion.transform)
 
+;;; `issue-index'
+;;;
+;;; Traverse all nodes to find issues
+
 (defclass issue-index (builder-mixin)
-  ((%issues :reader   issues ; TODO could reuse reference table of `build-references'
-            :initform (make-hash-table :test #'equal))))
+  (;; Parameters
+   (output-file? :initarg :output-file?
+                 :reader  output-file?
+                 :documentation
+                 "Controls whether the generated index is wrapped in a `:output-file'
+                  node.")
+   ;; State
+   (%issues      :reader   issues ; TODO could reuse reference table of `build-references'
+                 :initform (make-hash-table :test #'equal)))
+  (:default-initargs
+   :output-file? (a:required-argument :output-file?)))
 
 (defmethod transform-node ((transform issue-index)
                            recurse relation relation-args node kind relations &key)
@@ -57,13 +70,26 @@
              groups)
     ;;
     (let* ((elements     (bp:node-relation builder '(:element . *) node))
-           (issue-index  (bp:node (builder :output-file :filename "issue-index"
-                                                        :title    "Issue Index")
-                           (1 (:element . 1) (if (a:length= 1 sections)
-                                                 (first sections)
-                                                 (bp:node (builder :section :level 1)
-                                                   (1 (:name    . 1) (bp:node (builder :chunk :content "Issue Indices")))
-                                                   (* (:element . *) sections))))))
-           (new-elements (append elements (list issue-index))))
-      (bp:node (builder :collection) ; TODO use reconstitute
-        (* (:element . *) new-elements)))))
+           (issue-index  (if (a:length= 1 sections)
+                             (first sections)
+                             (bp:node (builder :section :level 1)
+                               (1 (:name    . 1) (bp:node (builder :chunk :content "Issue Indices")))
+                               (* (:element . *) sections))))
+           (wrapped      (if (output-file? transform)
+                             (bp:node (builder :output-file :filename "issue-index"
+                                                            :title    "Issue Index")
+                               (1 (:element . 1) issue-index))
+                             issue-index))
+           (new-elements (append elements (list wrapped)))
+           (new-node     (apply #'%reconstitute
+                                builder
+                                (lambda (&key relations)
+                                  (map 'list (lambda (relation)
+                                               (bp:node-relation
+                                                builder relation node))
+                                       relations))
+                                kind relations initargs)))
+      (bp:finish-node
+       builder kind (bp:add-relations
+                     builder new-node
+                     (list (list '* '(:element . *) new-elements)))))))

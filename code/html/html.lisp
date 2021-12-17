@@ -36,32 +36,17 @@
               (cxml:attribute "type" "text/css")
               (cxml:attribute "href" (namestring
                                       (merge-pathnames "style.css" relative))))
-            #+no (when use-mathjax
-                   (cxml:with-element "script"
-                     (cxml:attribute "src" "https://polyfill.io/v3/polyfill.min.js?features=es6")
-                     (cxml:text " "))
-                   (cxml:with-element "script"
-                     (cxml:attribute "id" "MathJax-script")
-                     (cxml:attribute "src" "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js")
-                     (cxml:text " "))
-                   (cxml:with-element "script"
-                     (cxml:attribute "type" "text/javascript")
-                     (cxml:text "MathJax = {
-  options: {
-    includeHtmlTags: {         //  HTML tags that can appear within math
-        span: '\n'
-    }
-  }
-}")))
             (cxml:with-element "script"
               (cxml:attribute "src" (namestring
                                      (merge-pathnames "permalink.js" relative)))
-              (cxml:text " "))
+              ; (cxml:text " ")
+              )
             (when use-sidebar
               (cxml:with-element "script"
                 (cxml:attribute "src" (namestring
                                        (merge-pathnames "navigation.js" relative)))
-                (cxml:text " ")))
+                ; (cxml:text " ")
+                ))
             (when title
               (cxml:with-element "title"
                 (cxml:text title))))

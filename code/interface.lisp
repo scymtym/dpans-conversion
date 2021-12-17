@@ -108,6 +108,12 @@
                                                                                         (intersection '(:font :layout :misc)
                                                                                                       (tex:tags primitive)))))))))
 
+(defun make-drop-3 (builder)
+  (make-instance 'transform::drop :builder   builder
+                                  :predicate (transform::kind?
+                                              (transform::one-of? :input :file))
+                                  :action    :replace-with-children))
+
 (defun to-html (input-directory output-directory
                 &key (dpans-directory  (merge-pathnames "dpANS3/" input-directory))
                      (issues-directory (directory (merge-pathnames #P"*-issues/" input-directory)))
@@ -144,9 +150,11 @@
                         (make-instance 'transform::attach-labels :builder builder) ; must be after `lower-display-tables'
                         (make-instance 'transform::add-dictionary-sections :builder builder)
                         (make-instance 'transform::split-into-files :builder builder)
+                        (make-drop-3 builder) ; must be after `add-dictionary-sections' and `split-into-files'
                         (make-instance 'transform::symbol-index :builder builder)
                         (make-instance 'transform::table-index :builder builder)
-                        (make-instance 'transform::issue-index :builder builder)
+                        (make-instance 'transform::issue-index :builder      builder
+                                                               :output-file? t)
                         (make-instance 'transform::note-indices :builder builder)
                         (make-instance 'transform::note-output-file :builder builder)
                         (make-instance 'transform::build-references :builder builder :environment reference-environment)
@@ -252,13 +260,15 @@
 
 (defvar *cache2* nil)
 
+(defvar *document-object-tree*)
+
 (defun to-clim (input-directory
                 &key (dpans-directory  (merge-pathnames "dpANS3/" input-directory))
                      (issues-directory (directory (merge-pathnames #P"*-issues/" input-directory))))
   (let* ((builder     'list)
          (environment (make-environment))
          ;; Parse
-         (tree        (or nil ; *cache2*
+         (tree        (or nil           ; *cache2*
                           (setf *cache2* (parse-specification builder dpans-directory issues-directory))))
          ;; Transform
          (result      (transform::apply-transforms
@@ -275,17 +285,27 @@
                                                                  :debug-definition? t
                                                                  :debug-expansion   '())
                         (make-drop-2 builder)
+                        (make-instance 'transform::simplify :builder builder)
                         (make-instance 'transform::lower-display-tables :builder builder)
                         (make-instance 'transform::cleanup-math :builder builder)
                         (make-instance 'transform::cleanup-components :builder builder)
                         (make-instance 'transform::cleanup-issues :builder builder)
+                        (make-instance 'transform::cleanup-bnf-rules :builder builder)
                         (make-instance 'transform::attach-labels :builder builder) ; must be after `lower-display-tables'
                         (make-instance 'transform::add-dictionary-sections :builder builder)
+                        (make-drop-3 builder) ; must be after `add-dictionary-sections'
+                                        ; (make-instance 'transform::symbol-index :builder builder)
+                                        ; (make-instance 'transform::table-index :builder builder)
+                        (make-instance 'transform::issue-index :builder      builder
+                                                               :output-file? nil)
+                                        ; (make-instance 'transform::note-indices :builder builder)
+                        (make-instance 'transform::drop-bounds :builder builder) ; must be before simplify
+                        (make-instance 'transform::simplify :builder builder)
                         (make-instance 'transform::note-parents :builder builder)
                         (make-instance 'transform::build-references :builder builder))
                        tree)))
     (inspect-tree result :intermediate-tree tree :environment environment)
-    ; (setf dpans-conversion.clim::*ast* result)
+    (setf *document-object-tree* result)
     nil))
 
 (defun do-it (&key (use-mathjax     t)

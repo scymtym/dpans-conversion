@@ -214,7 +214,9 @@
 (defrule code ()
     (bounds (start end)
       (and #\( (<- content (balanced-code-content))))
-  (bp:node* (:code :content content :bounds (cons start end))))
+  (bp:node* (:code :content  content
+                   :in-line? (null (position #\Newline content))
+                   :bounds   (cons start end))))
 
 (bp:with-builder ('list)
   (parser.packrat:parse '(code) "(This paragraph will be superseded by cleanup issue DECLARATION-SCOPE if it passes.)"))

@@ -9,7 +9,7 @@
                "architecture.builder-protocol.inspection" ; debugging
 
                "computation.environment"
-               "computation.environment.visualization" ; debugging
+               "computation.environment.inspection" ; debugging
 
                "eclector.examples.highlight" ; for listings
 
@@ -65,13 +65,15 @@
                              (:file       "mixins")
                              (:file       "reference")
 
-                             (:file       "strip-comments")
+                             (:file       "drop-bounds")
                              (:file       "drop")
                              (:file       "expand-macros")
+                             (:file       "simplify")
                              (:file       "lower-display-tables")
                              (:file       "cleanup-components")
                              (:file       "cleanup-issues")
                              (:file       "cleanup-math")
+                             (:file       "cleanup-bnf-rules")
                              (:file       "attach-labels")
                              (:file       "issue-index")
                              (:file       "symbol-index")
@@ -106,6 +108,7 @@
                              (:file       "render-math")
                              (:file       "render-listings")
                              (:file       "render-syntax")
+                             (:file       "render-glossary")
                              (:file       "navigation")
 
                              (:file       "render")

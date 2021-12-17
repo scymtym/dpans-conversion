@@ -1,30 +1,36 @@
 (cl:in-package #:dpans-conversion.transform)
 
+(declaim (optimize (speed 0) (safety 3) (debug 3)))
+
 ;;; `read-client'
 
 ;;; TODO
 ;;; + parse macro in (lambda lambda-list {\DeclsAndDoc} (block block-name {} *))
 ;;; + parse macros in comments
+;;; + parse macros in symbol names
 ;;; + Treat everything after out until end of line as none-code
 ;;; + delimiter matching
 ;;; + no warnings for double package markers
 ;;; + parse macro in unreadable objects (example in WITH-OPEN-FILE)
 
 (defclass read-client (eclector.examples.highlight::highlight-client)
-  ((%environment   :initarg :environment
-                   :reader  environment)
-   (%contains-tex? :initarg :contains-tex?
-                   :reader  contains-tex?))
+  ((%environment    :initarg :environment
+                    :reader  environment)
+   (%contains-tex?  :initarg :contains-tex?
+                    :reader  contains-tex?)
+   (%contains-math? :initarg :contains-math?
+                    :reader  contains-math?))
   (:default-initargs
-   :environment   (a:required-argument :environment)
-   :contains-tex? (a:required-argument :contains-tex?)))
+   :environment    (a:required-argument :environment)
+   :contains-tex?  (a:required-argument :contains-tex?)
+   :contains-math? (a:required-argument :contains-math?)))
 
 (defclass tex-macro (eclector.examples.highlight.cst::inner-node
                      ;; TODO should be eclector.examples.highlight.cst::leaf-node
                      )
   ((%name      :initarg  :name
                :reader   eclector.examples.highlight.cst:name)
-   (%arguments :initarg  :arguments
+   #+no (%arguments :initarg  :arguments
                :reader   arguments
                :initform '())))
 
@@ -35,21 +41,21 @@
              :reader  content)))
 
 (bp:with-builder ('list)
- (let ((environment (dpans-conversion.parser::augment-environment!
-                     (make-instance 'env::lexical-environment :parent dpans-conversion.parser::**meta-environment**
-                                    )
-                     nil)))
-   ;; Disable character syntax category "argument" for the
-   ;; #, & and % characters.
-   (setf (env:lookup :characters 'env::namespace environment)
-         (env:lookup :characters 'env::namespace dpans-conversion.parser::**meta-environment**))
-   (dolist (character '(#\# #\& #\% #\~ #\$))
-     (setf (env:lookup character :characters environment) :normal))
-   (parser.packrat:parse `(dpans-conversion.parser::elements ,environment)
-                         "SYS$DISK:[PUBLIC.GAMES]CHESS.DB"
-                         :grammar 'dpans-conversion.parser::dpans)))
+  (let ((environment (dpans-conversion.parser::augment-environment!
+                      (make-instance 'env::lexical-environment :parent dpans-conversion.parser::**meta-environment**
+                                     )
+                      nil)))
+    ;; Disable character syntax category "argument" for the
+    ;; #, & and % characters.
+    (setf (env:lookup :characters 'env::namespace environment)
+          (env:lookup :characters 'env::namespace dpans-conversion.parser::**meta-environment**))
+    (dolist (character '(#\# #\& #\% #\~ #\$))
+      (setf (env:lookup character :characters environment) :normal))
+    (parser.packrat:parse `(dpans-conversion.parser::elements ,environment)
+                          "SYS$DISK:[PUBLIC.GAMES]CHESS.DB"
+                          :grammar 'dpans-conversion.parser::dpans)))
 
-(defun parse-tex (string environment)
+(defun parse-tex (string environment &key contains-math?)
   (multiple-value-bind (success? position value)
       (bp:with-builder ('list)
         (handler-case
@@ -61,8 +67,11 @@
               ;; #, & and % characters.
               (setf (env:lookup :characters 'env::namespace environment)
                     (env:lookup :characters 'env::namespace dpans-conversion.parser::**meta-environment**))
-              (dolist (character '(#\# #\& #\% #\~ #\$))
+              (dolist (character '(#\# #\& #\% #\~ ; #\$
+                                   ))
                 (setf (env:lookup character :characters environment) :normal))
+              (unless contains-math?
+                (setf (env:lookup #\$ :characters environment) :normal))
               (parser.packrat:parse `(dpans-conversion.parser::elements ,environment)
                                     string
                                     :grammar 'dpans-conversion.parser::dpans))
@@ -75,14 +84,16 @@
           (break "~A ~A ~A" success? position (length string))
           (values nil)))))
 
-(defun read-maybe-tex (client stream* &key (prefix '()))
-  (loop :with stream = (make-concatenated-stream (make-string-input-stream (coerce prefix 'string))
-                                                 stream*)
+(defun read-maybe-tex (client stream* &key (prefix '()) contains-math?)
+  (loop :with stream = (make-concatenated-stream
+                        (make-string-input-stream (coerce prefix 'string))
+                        stream*)
         :with readtable   = eclector.reader:*readtable*
         :with token       = (make-array 1 :element-type 'character
                                           :adjustable   t
                                           :fill-pointer 0)
         :with brace-level = 0
+        :with dollar?     = nil
         :with escape?     = nil
         :for char = (read-char stream nil nil t)
         :for type = (eclector.readtable:syntax-type readtable char)
@@ -100,6 +111,8 @@
                         (setf escape? nil))
                        ((plusp brace-level)
                         (collect #+no t))
+                       (dollar?
+                        (collect ))
                        ((a:starts-with-subseq "\\OUT" token)
                         (collect #+no t)
                         (loop :for char = (read-char stream nil nil t)
@@ -128,20 +141,36 @@
                  (if escape?
                      (setf escape? nil)
                      (decf brace-level)))
+                (#\$
+                 (collect)
+                 (setf dollar? (not dollar?)))
                 (t
                  (if (and (eq type :terminating-macro)
-                          (zerop brace-level))
+                          (zerop brace-level)
+                          (not dollar?))
                      (done)
                      (collect))
                  (setf escape? nil))))
         :finally (return
                    (let ((string      (coerce token 'simple-string))
                          (environment (environment client)))
-                     (a:if-let ((parsed (parse-tex string environment)))
+                     (a:if-let ((parsed (parse-tex string environment
+                                                   :contains-math? contains-math?)))
                        (make-instance 'tex-macro :name (bp:node ('list :splice)
                                                          (* (:element . *) parsed)))
                        (eclector.reader:interpret-token
                         client stream string '()))))))
+
+(read-maybe-tex (make-instance 'read-client :environment **meta-environment** :contains-tex? t :contains-math? nil)
+                (make-string-input-stream "a\\}"))
+
+(read-maybe-tex (make-instance 'read-client :environment **meta-environment** :contains-tex? t  :contains-math? t)
+                (make-string-input-stream "$foo$")
+                :contains-math? t)
+
+(read-maybe-tex (make-instance 'read-client :environment **meta-environment** :contains-tex? t :contains-math? t)
+                (make-string-input-stream "A")
+                :contains-math? t)
 
 ;;; Customized reading and result construction
 ;;;
@@ -154,15 +183,15 @@
   (flet ((augment (&key (start-offset 0) (end-offset 0)
                         (children '()))
            (let* ((node   (call-next-method))
-                  (start  (eclector.examples.highlight.cst:start node))
-                  (end    (eclector.examples.highlight.cst:end node))
-                  (string (subseq (eclector.examples.highlight::input client)
-                                  (+ start start-offset) (- end end-offset)))
+                  (start  (+ (eclector.examples.highlight.cst:start node)
+                             start-offset))
+                  (end    (- (eclector.examples.highlight.cst:end node)
+                             end-offset))
+                  (string (subseq (eclector.examples.highlight::input client) start end))
                   (parsed (let ((nodes (parse-tex string (environment client)))) ; TODO make a function for this
                             (make-instance 'tex-macro :name (bp:node ('list :splice)
                                                               (* (:element . *) nodes)))))
-                  (source (eclector.base:make-source-range
-                           client (+ start start-offset) (- end end-offset)))
+                  (source (eclector.base:make-source-range client start end))
                   (result (eclector.parse-result:make-expression-result
                            client parsed '() source)))
              (reinitialize-instance node :children (list* result children)))))
@@ -175,9 +204,7 @@
       (augment))
      ((cons (member :sharpsign-minus :sharpsign-plus))
       (augment :children (list (cdr reason))))
-
-     (t
-      (break "~A" reason)
+     ((eql :reader-macro) ; #~zerop from an X3J13 issue triggers this
       (call-next-method)))))
 
 (when nil
@@ -227,13 +254,34 @@
     (eclector.reader:unquote-not-inside-backquote ()
       (make-instance 'verbatim-node :content ","))))
 
+(defun double-quote (stream char)
+  (let ((result (make-array 100 :element-type 'character
+                                :adjustable t
+                                :fill-pointer 0)))
+    (loop for char2 = (eclector.base::read-char-or-recoverable-error
+                       stream char 'eclector.reader::unterminated-string
+                       :delimiter char :report 'eclector.reader::use-partial-string)
+          until (eql char2 char)
+          when (eql char2 #\\)
+            do (setf char2 (eclector.base::read-char-or-recoverable-error
+                            stream nil 'eclector.reader::unterminated-single-escape-in-string
+                            :escape-char char2 :report 'eclector.reader::use-partial-string))
+               (if (eql char2 #\\)
+                   (setf char2 (eclector.base::read-char-or-recoverable-error
+                                stream nil 'eclector.reader::unterminated-single-escape-in-string
+                                :escape-char char2 :report 'eclector.reader::use-partial-string))
+                   (vector-push-extend #\\ result))
+          when char2
+            do (vector-push-extend char2 result)
+          finally (return (copy-seq result)))))
+
 (defun read-string (stream char)
   ;; For a string "CONTENT" parse CONTENT as TeX and push a parse
   ;; result with a source range corresponding to CONTENT (that is
   ;; after the opening " and before the closing ").
   (let* ((client     eclector.base:*client*)
          (start      (eclector.base:source-position client stream))
-         (result     (eclector.reader::double-quote stream char))
+         (result     (double-quote stream char)) ; TODO wrong; must look for \\" instead of \"
          (end        (eclector.base:source-position client stream))
          (string     (subseq (eclector.examples.highlight::input client) start (1- end)))
          (parsed     (let ((nodes (parse-tex string (environment client)))) ; TODO make a function
@@ -245,23 +293,6 @@
                       client parsed '() source)))
     (push tex-result (first eclector.parse-result::*stack*))
     result))
-
-(when nil
-  (clouseau:inspect
-   (architecture.builder-protocol.inspection:as-tree
-    (format-code 'list '(:listing ()) **meta-environment** "\" \" baz" :contains-tex? t)
-    'list)))
-
-(when nil
-  (clouseau:inspect
-   (architecture.builder-protocol.inspection:as-tree
-    (format-code
-     'list '(:listing ()) **meta-environment**
-     "\"IN
-% baz\""
-     :contains-tex? t)
-    'list)))
-
 
 ;;; This is a copy of Eclector's `sharpsign-backslash' which does not
 ;;; upcase the character name.
@@ -302,7 +333,12 @@
                         ;; thus be "#\a".
                         (let* ((end     (eclector.base:source-position client stream))
                                (source2 (eclector.base:make-source-range client (- start 2) (- end 1)))
-                               (macro   (eclector.reader:find-character client "\\\\")))
+                               (macro   (eclector.reader:find-character client "\\\\")
+                                        #+maybe (let ((old (contains-tex? client)))
+                                          (reinitialize-instance client :contains-tex? nil)
+                                          (unwind-protect
+                                               (eclector.reader:find-character client "\\")
+                                            (reinitialize-instance client :contains-tex? old)))))
                           (push (eclector.parse-result:make-expression-result client macro '() source2)
                                 (first eclector.parse-result::*stack*))
                           char1))
@@ -340,21 +376,31 @@
 ;;; specially:
 ;;; * \  -> Parse as possible TeX macro call instead of a symbol
 ;;; * {  -> Parse as possible TeX group instead of a symbol
+;;; * $  -> TODO
 ;;; * ,  -> Is this sill needed? Maybe this only happens in the context \EV A, B, C
 ;;; * #\ -> Turn "#\\a" into "#\a" and "#\\\alpha" into "#\α"
-(defvar *extended-readtable*
+(defun make-extended-readtable (&key contains-math?)
   (let ((readtable (eclector.readtable:copy-readtable eclector.reader:*readtable*)))
     ;; TODO Describe
     (eclector.readtable:set-macro-character
      readtable #\\ (lambda (stream char)
                      (unread-char char stream)
-                     (read-maybe-tex eclector.base:*client* stream)) ; TODO if parsed as a tex macro, this does not make a suitable cst node around the tex macro
+                     (read-maybe-tex eclector.base:*client* stream
+                                     :contains-math? contains-math?)) ; TODO if parsed as a tex macro, this does not make a suitable cst node around the tex macro
      t)
     (eclector.readtable:set-macro-character
      readtable #\{ (lambda (stream char)
                      (unread-char char stream)
-                     (read-maybe-tex eclector.base:*client* stream))
+                     (read-maybe-tex eclector.base:*client* stream
+                                     :contains-math? contains-math?))
      t)
+    (when contains-math?
+      (eclector.readtable:set-macro-character
+       readtable #\$ (lambda (stream char)
+                       (unread-char char stream)
+                       (read-maybe-tex eclector.base:*client* stream
+                                       :contains-math? t))
+       t))
     (eclector.readtable:set-macro-character
      readtable #\, 'read-comma)
     ;;
@@ -375,9 +421,16 @@
                                ;; Not a character literal, for example #\{.
                                (read-maybe-tex
                                 eclector.base:*client* stream
-                                :prefix (list #\# sub-char sub-sub-char))))))
+                                :prefix         (list #\# sub-char sub-sub-char)
+                                :contains-math? contains-math?)))))
 
     readtable))
+
+(defvar *extended-readtable*
+  (make-extended-readtable))
+
+(defvar *extended-readtable-with-math*
+  (make-extended-readtable :contains-math? t))
 
 (defmethod eclector.reader:call-as-top-level-read
     ((client                read-client)
@@ -386,9 +439,12 @@
      (eof-error-p           t)
      (eof-value             t)
      (preserve-whitespace-p t))
-  (let ((eclector.reader:*readtable* (if (contains-tex? client)
-                                         *extended-readtable*
-                                         *minimal-readtable*)))
+  (let ((eclector.reader:*readtable* (cond ((not (contains-tex? client))
+                                            *minimal-readtable*)
+                                           ((not (contains-math? client))
+                                            *extended-readtable*)
+                                           (t
+                                            *extended-readtable-with-math*))))
     (call-next-method)))
 
 (defmethod eclector.reader:find-character ((client read-client) (name string))
@@ -422,38 +478,7 @@
     ((client read-client) (feature-expression t))
   t)
 
-;; TODO read-time-evaluation
-
-#+test (let ((eclector.base:*client* (make-instance 'read-client :current-package (find-package '#:cl-user)
-                                                          :environment     dpans-conversion.parser::**meta-environment**
-                                                          :contains-tex?   t)))
-         (eclector.reader:read-from-string "(#\\\\\\alfa #\\\\b 'c #\\{1 2 3\\})"))
-
-(when nil
- (let ((eclector.base:*client* (make-instance 'read-client :current-package (find-package '#:cl-user)
-                                                           :environment     dpans-conversion.parser::**meta-environment**
-                                                           :contains-tex?   t)))
-   (eclector.parse-result:read-from-string eclector.base:*client* "(#\\\\b #\\\\\alpha)")))
-
-(when nil
- (clouseau:inspect
-  (architecture.builder-protocol.inspection:as-tree
-   (format-code 'list '(:listing ()) **meta-environment** "(#\\\\a)" :contains-tex? t)
-   'list)))
-
-(when nil
- (clouseau:inspect
-  (architecture.builder-protocol.inspection:as-tree
-   (format-code 'list '(:listing ()) **meta-environment** "\"{foo}\"" :contains-tex? t)
-   'list)))
-
-#+no (clouseau:inspect
- (architecture.builder-protocol.inspection:as-tree
-  (format-code 'list '(:listing ()) **meta-environment** " (append \\lbracket\\ x1\\rbracket \\lbracket\\ x2\\rbracket \\lbracket\\ x3\\rbracket ... \\lbracket\\ xn\\rbracket (quote atom))
-" :contains-tex? t)
-  'list))
-
-;;;
+;;; "Render" the syntax tree for the listing.
 
 (defclass highlight-client ()
   ((%stack :accessor stack)))
@@ -527,7 +552,7 @@
                        (bp:relate builder '(:title . 1) node
                                   (bp:node (builder :chunk :content title)))
                        node)))
-        (push (cons node content) (stack client)))))
+        (push (cons node content) (stack client))))) ; TODO finish-node?
   (call-next-method))
 
 (defmethod eclector.examples.highlight.render:leave-node
@@ -576,7 +601,8 @@
                                       (subseq result (1+ index))))
         :finally (return result)))
 
-(defun format-code (builder root environment code &key contains-tex?)
+(defun format-code (builder root environment code &key contains-tex?
+                                                       contains-math?)
   (let* ((code          code ; (remove-tex-escapes code)
                         )
          (package       "COMMON-LISP-USER" ; (find-package '#:cl-user)
@@ -584,7 +610,8 @@
          (read-client   (make-instance 'read-client :input           code
                                                     :current-package package
                                                     :environment     environment
-                                                    :contains-tex?   contains-tex?))
+                                                    :contains-tex?   contains-tex?
+                                                    :contains-math?  contains-math?))
          (render-client (make-instance 'highlight-client :root root)))
     (eclector.examples.highlight:highlight
      code                          ; :package (find-package #:common-)
@@ -601,17 +628,52 @@
 
 (defmethod transform-node ((transform parse-listings) recurse
                            relation relation-args node (kind (eql :code)) relations
-                           &rest initargs &key content contains-tex?)
+                           &rest initargs &key content contains-tex? contains-math?)
   (tagbody
    :start
      (restart-case
          (let* ((builder     (builder transform))
                 (environment (environment transform))
                 (node        (apply #'bp:make-node builder :listing
-                                    (a:remove-from-plist initargs :content))))
-           (format-code builder node environment content
-                        :contains-tex? contains-tex?)
+                                    (a:remove-from-plist initargs :content)))
+                (stripped    (strip-leading-space content)))
+           (format-code builder node environment stripped
+                        :contains-tex?  contains-tex?
+                        :contains-math? contains-math?)
            (return-from transform-node (bp:finish-node builder :listing node)))
        (retry ()
          "Try parsing the listing again"
          (go :start)))))
+
+;;; Utility
+
+(defun strip-leading-space (string)
+  (flet ((map-lines (function)
+           (loop :with length = (length string)
+                 :for start = 0 :then (1+ end)
+                 :for end = (position #\Newline string :start start)
+                 :while end
+                 :do (funcall function start end)
+                 :finally (unless (= start length)
+                            (funcall function start length)))))
+    (let ((prefix-length most-positive-fixnum))
+      (map-lines
+       (lambda (start end)
+         (a:minf prefix-length
+                 (a:if-let ((index (position #\Space string :test  #'char/=
+                                                            :start start
+                                                            :end   end)))
+                   (- index start)
+                   0))))
+      (with-output-to-string (stream)
+        (map-lines (lambda (start end)
+                     (write-string string stream
+                                   :start  (+ start prefix-length)
+                                   :end    end)
+                     (write-char #\Newline stream)))))))
+(strip-leading-space " (char-name #\\\\a)
+\\EV NIL
+\\OV \"LOWERCASE-a\"
+\\OV \"Small-A\"
+\\OV \"LA01\"
+")

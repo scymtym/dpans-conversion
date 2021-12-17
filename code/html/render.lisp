@@ -2,7 +2,7 @@
 
 ;;;
 
-(defun find-child-of-kind (builder kind node)
+#+unused (defun find-child-of-kind (builder kind node)
   (let ((children (bp:node-relation builder :element node)))
     (find-if (lambda (child)
                (eq (bp:node-kind builder child) kind))
@@ -115,8 +115,9 @@
 
   (let ((builder           'list)
         (stack             '())
-        (file-stack        '())
-        (environment-stack (list environment)))
+        ;; (file-stack        '())
+        ;; (environment-stack (list environment))
+        )
     (labels (#+unused (push-file (filename)
                (format t "~V@TEmitting for ~A~%"
                        (* 2 (length file-stack))
@@ -343,18 +344,18 @@
                                 :definition-list :definition-item
                                 :table :header :row :cell
                                 :figure
-                                :issue-reference
                           :component :part :none :ftype
-                          :paragraph-break :non-breaking-space
+                          :paragraph-break :newline :non-breaking-space
                           :math :math-display :over
                           :other-command-application
                                 :splice :chunk :block
                           :listing :syntax :index
                                 :bold :italic :typewriter :roman
-                                :param :bnf-rule :hrule :eql-specializer)
+                          :param :bnf-rule :hrule :eql-specializer
+                          :gentry)
                          (apply #'transform:transform-node transform recurse relation relation-args node kind relations initargs))
                         ;; Glossary
-                        (:gentry
+                        #+no (:gentry
                          (let ((term (node-name node)))
                            (format t "~V@TProcessing glossary entry ~A~%"
                                    (* 2 (length file-stack)) term)
@@ -402,9 +403,11 @@
                          (funcall recurse :relations '((:file . bp:?))))
 
                         (:if
+                         (break "should not happen")
                          (funcall recurse :relations '((:consequent . *))))
 
                         (:if-case
+                         (break "should not happen")
                          (span "error" (let ((*print-level* 2) (*print-circle* t))
                                          (format nil "if-case not implemented: ~S" node))))
                         ;; Ignored

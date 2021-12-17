@@ -2,18 +2,41 @@
 
 (defclass drop (default-reconstitute-mixin
                 builder-mixin)
-  ((%predicate :initarg :predicate
-               :reader  predicate))
+  ((%predicate :initarg  :predicate
+               :reader   predicate)
+   (%action    :initarg  :action
+               :type     (member :drop :replace-with-children)
+               :reader   action
+               :initform :drop))
   (:default-initargs
    :predicate (error "Missing required initarg ~S" :predicate)))
 
 (defmethod transform-node ((transform drop) recurse
                            relation relation-args node (kind t) relations
                            &rest initargs)
-  (if (apply (predicate transform) relation relation-args node kind relations
-             initargs)
-      nil
-      (call-next-method)))
+  (let ((builder   (builder transform))
+        (predicate (predicate transform))
+        (action    (action transform)))
+    (cond ((not (apply predicate relation relation-args node kind relations
+                       initargs))
+           (call-next-method))
+          ((eq action :drop)
+           nil)
+          ((eq action :replace-with-children)
+           (cond ((null relations)
+                  nil)
+                 ((typep relations '(cons (cons t (member 1 bp:?)) null))
+                  (first (funcall recurse)))
+                 ((typep relations '(cons (cons (eql :element) (eql *)) null))
+                  (let ((elements (first (funcall recurse))))
+                    (if (a:length= 1 elements)
+                        (first elements)
+                        (bp:node (builder :splice)
+                          (* (:element . *) elements)))))
+                 (t
+                  (break "Cannot handle action ~S for ~S " action node)))))))
+
+;;; Query
 
 (defun one-of? (&rest values)
   (lambda (value)

@@ -1,6 +1,6 @@
 (cl:in-package #:dpans-conversion.transform)
 
-(defun find-ancestor-of-kind (builder kind node)
+(defun find-ancestor-of-kind (builder kind node) ; TODO rename to descendant
   (bp:walk-nodes
    builder (lambda (recurse relation relation-args node kind* relations
                     &rest initargs &key &allow-other-keys)
@@ -11,7 +11,7 @@
    node)
   nil)
 
-(defun find-child-of-kind (builder kind node)
+#+unused? (defun find-child-of-kind (builder kind node)
   (map nil (lambda (relation)
              (multiple-value-bind (relation* cardinality)
                  (bp:normalize-relation relation)

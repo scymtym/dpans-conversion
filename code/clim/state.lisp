@@ -67,6 +67,13 @@
                       :writer   (setf %node)
                       :initform nil)
    ;; Display parameters
+   (%text-style       :initarg  :text-style
+                      :reader   text-style
+                      :writer   (setf %text-style)
+                      :initform (clim:make-text-style :serif nil :large))
+   (%annotations      :reader   annotations
+                      :writer   (setf %annotations)
+                      :initform '())
    (%highlight-node   :initarg  :highlight-node
                       :type     (or null function)
                       :reader   highlight-node
@@ -76,9 +83,6 @@
                       :type    (or null string)
                       :reader  highlight-string
                       :initform nil)
-   (%annotations      :reader   annotations
-                      :writer   (setf %annotations)
-                      :initform '())
    ;; Change hook
    (%change-hook      :initarg  :change-hook
                       :type     list    ; of function
@@ -94,12 +98,12 @@
     (when (and run-change-hook (not (eq new-value old-value)))
       (run-change-hook object :node-changed new-value))))
 
-(defmethod (setf highlight-node) ((new-value t) (object content-state)
-                                  &key (run-change-hook t))
-  (let ((old-value (highlight-node object)))
-    (setf (%highlight-node object) new-value)
-    (when (and run-change-hook (not (eq new-value old-value)))
-      (run-change-hook object :highlight-changed new-value))))
+(defmethod (setf text-style) ((new-value t) (object content-state)
+                               &key (run-change-hook t))
+  (let ((old-value (text-style object)))
+    (setf (%text-style object) new-value)
+    (when (and run-change-hook (not (climi::text-style-equalp new-value old-value)))
+      (run-change-hook object :text-style-changed new-value))))
 
 (defmethod (setf annotations) ((new-value t) (object content-state)
                                &key (run-change-hook t))
@@ -107,6 +111,13 @@
     (setf (%annotations object) new-value)
     (when (and run-change-hook (not (equal new-value old-value)))
       (run-change-hook object :annotations-changed new-value))))
+
+(defmethod (setf highlight-node) ((new-value t) (object content-state)
+                                  &key (run-change-hook t))
+  (let ((old-value (highlight-node object)))
+    (setf (%highlight-node object) new-value)
+    (when (and run-change-hook (not (eq new-value old-value)))
+      (run-change-hook object :highlight-changed new-value))))
 
 ;;; `observer-mixin'
 
@@ -147,3 +158,15 @@
 (defclass state-change-event (climi::standard-event)
   ((%arguments :initarg :arguments
                :reader  arguments)))
+
+;;; `observer-pane'
+
+(defclass observer-pane (observer-mixin) ())
+
+(defmethod clim:note-sheet-adopted :after ((sheet observer-pane))
+  (a:when-let ((model (model sheet)))
+    (push (hook-function sheet) (change-hook model))))
+
+(defmethod clim:note-sheet-disowned :before ((sheet observer-pane))
+  (a:when-let ((model (model sheet)))
+    (a:removef (change-hook model) (hook-function sheet))))

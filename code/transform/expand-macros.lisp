@@ -36,10 +36,15 @@
 
           (env:lookup "raise" :macro environment)
           (lambda (builder environment amount box)
-            (declare (ignore environment))
+            (declare (ignore environment amount))
             (list (bp:node (builder :superscript)
                     (1 (:left  . *) (bp:node (builder :chunk :content "")))
                     (* (:right . *) (bp:node-relation builder '(:element . *) box)))))
+
+          (env:lookup "strut" :macro environment)
+          (lambda (builder environment)
+            (declare (ignore builder environment))
+            nil)
 
           (env:lookup "lower" :macro environment)
           (lambda (builder environment amount box)
@@ -71,7 +76,7 @@
 
           (env:lookup "vadjust" :macro environment)
           (lambda (builder environment content)
-            (declare (ignore environment))
+            (declare (ignore builder environment))
             (break "~A" content)
             (list content))
 
@@ -307,7 +312,7 @@
                       (expansion (expand builder environment macro arguments))
                       (debug     (debug-expansion transform)))
                  (when (or (eq debug t)
-                           (member name '() #+no debug :test #'string-equal))
+                           (member name '("Adverb") #+no debug :test #'string-equal))
                    (let ((arity  (if (functionp macro)
                                      nil
                                      (length (bp:node-relation builder '(:argument . *) macro))))

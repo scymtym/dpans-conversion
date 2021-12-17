@@ -9,7 +9,8 @@
 ;;; for counting {} pairs.
 
 (defrule balanced-content ()
-    (* (or (seq (<<- content #\{)
+    (* (or (seq (<<- content #\\) (<<- content (or #\\ #\{ #\})))
+           (seq (<<- content #\{)
                 (<<- content (balanced-content))
                 (<<- content #\}))
            (<<- content (and (not #\}) :any))))
@@ -58,8 +59,8 @@
     (bounds (start end)
       (seq "\\issue" #\{ (<- (name proposal) (issue-name)) #\} (? #\Newline)
            (or (seq #+dpans-debug (:transform (seq) (format *trace-output* "~V@T[ issue ~A~%" *depth* name) (incf *depth*))
-                    (* (<<- elements (and (not "\\endissue") (element environment))))
-                    "\\endissue" #\{ (<- (name proposal) (issue-name)) #\} (? #\Newline)
+                    (* (<<- elements (and (not (seq (? #\Newline) "\\endissue")) (element environment))))
+                    (? #\Newline) "\\endissue" #\{ (<- (name proposal) (issue-name)) #\} (? #\Newline)
                     #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] issue ~A~%" *depth* name)))
                #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX issue ~A~%" *depth* name) (:fail))
                #-dpans-debug (:transform (seq) (:fail)))))
@@ -376,10 +377,10 @@
     (1 :name (element environment)))
 
 (defrule row-terminator* (environment) ; TODO disallow in other contexts?
-    (and (:transform (seq) (env:lookup :bnf-rule :traversal environment
-                                                 :if-does-not-exist nil))
-         "\\CR")
-  nil)
+    (and (in-traversal :bnf-rule environment)
+         (bounds (start end)
+           (seq (or "\\CR" "\\cr") (:transform (seq) nil))))
+  (bp:node* (:newline :bounds (cons start end))))
 
 (defrule bnf-rule (environment)
     (bounds (start end)

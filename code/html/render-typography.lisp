@@ -31,3 +31,6 @@
 
 (define-render (:paragraph-break)
   (br))
+
+(define-render (:newline)
+  (br))

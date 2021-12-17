@@ -31,7 +31,7 @@
 (defrule header (environment)
     (bounds (start end) (* (<<- elements (element environment))))
   (bp:node* (:header :bounds (cons start end))
-    (* :element (nreverse elements))))
+    (* (:element . *) (nreverse elements))))
 
 ;;; Table macros
 

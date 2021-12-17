@@ -10,7 +10,10 @@
                      (:ftype     t)
                      (t          nil)))
                  (content ()
-                   (issue-link transform node target :explicit? t)
+                   (link transform node target :issue
+                         (lambda ()
+                           (issue-reference-title
+                            builder node target :explicit? t)))
                    (funcall recurse :relations '((:element . *)))))
           (if (every #'in-line? (bp:node-relation builder '(:element . *) node))
               (span "issue-annotation" #'content)

@@ -11,40 +11,25 @@
     (:code (br))
     (t     (cxml:text " "))))
 
-(defun issue-link (transform reference target &key explicit?)
-  (let ((target (if (typep target 'transform::reference) ; TODO temp
-                    (transform::target target)
-                    target)))
-   (let* ((builder            (transform:builder transform))
-          (target-initargs    (bp:node-initargs builder target))
-          (process            (getf target-initargs :process))
-          (reference-initargs (bp:node-initargs builder reference)))
-     (destructuring-bind (&key name proposal (explicit? explicit?)
-                          &allow-other-keys)
-         reference-initargs
-       (labels ((format-issue ()
-                  (when explicit?
-                    (when process
-                      (cxml:text process)
-                      (cxml:text " "))
-                    (cxml:text "Issue ")) ; TODO use proposal when linking to proposal?
-                  (cxml:text name)
-                  (when proposal
-                    (cxml:text ":")
-                    (cxml:text proposal))))
-         (let ((class "issue-reference"))
-           (if target
-               (let ((url (node-url transform reference target)))
-                 (a* url class #'format-issue))
-               (span (list class "error") #'format-issue))))))))
-
-(define-render (:issue-reference (target nil)) ; TODO should be a :reference
-  (case relation
-    ((:related-issue :required-issue)
-     (cxml:with-element "li"          ; TODO should not assume list
-       (issue-link transform node target)))
-    (t
-     (issue-link transform node target))))
+(defun issue-reference-title (builder reference-node target-node
+                              &key explicit?)
+  (let* ((target-initargs    (when target-node
+                               (bp:node-initargs builder target-node)))
+         (process            (when target-initargs
+                               (getf target-initargs :process)))
+         (reference-initargs (bp:node-initargs builder reference-node)))
+    (destructuring-bind (&key name proposal (explicit? explicit?)
+                         &allow-other-keys)
+        reference-initargs
+      (when explicit?
+        (when process
+          (cxml:text process)
+          (cxml:text " "))
+        (cxml:text "Issue ")) ; TODO use proposal when linking to proposal?
+      (cxml:text name)
+      (when proposal
+        (cxml:text ":")
+        (cxml:text proposal)))))
 
 (define-render (:proposal name anchor status)
   (cxml:with-element "section"

@@ -1,5 +1,7 @@
 (cl:in-package #:dpans-conversion.transform)
 
+;;; TODO this transformation is not used
+
 (defclass include-files (builder-mixin
                          environment-mixin
                          file-tracking-mixin

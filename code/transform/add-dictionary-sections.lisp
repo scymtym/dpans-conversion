@@ -1,5 +1,11 @@
 (cl:in-package #:dpans-conversion.transform)
 
+;;; `add-dictionary-sections'
+;;;
+;;; For each chapter, heuristically identify the `:input' child that
+;;; looks like a dictionary section (if any) and wrap that child in a
+;;; `:section' node.
+
 (defclass add-dictionary-sections (default-reconstitute-mixin
                                    builder-mixin)
   ())

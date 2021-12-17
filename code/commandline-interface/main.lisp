@@ -27,7 +27,7 @@
                   :while argument
                   :do (let* ((name (subseq argument 2))
                              (raw  (or (pop arguments)
-                                       (error "~@<Missing argument to option ~A.~@>"
+                                       (error "~@<Missing argument to option ~A.~:>"
                                               argument))))
                         (set-value name raw))))
         (error (condition)

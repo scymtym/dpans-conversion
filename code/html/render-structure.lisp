@@ -4,7 +4,7 @@
   (a:when-let ((sidebar-transform (sidebar-transform transform)))
     (transform:apply-transform sidebar-transform node))
 
-  (funcall recurse)
+  (recurse)
   #+no (if (zerop include-depth)
            (let* ((builder           (transform:builder transform))
                   (title-node        (find-child-of-kind builder :title node))
@@ -27,9 +27,9 @@
          (filename (make-pathname :type     (file-type transform)
                                   :defaults filename)
                    #+no (format nil "~@[~A~]~A.html"
-                           (when (eq kind :issue)
-                             "issues/")
-                           filename))
+                                (when (eq kind :issue)
+                                  "issues/")
+                                filename))
          (title    (format nil "~@[~A~]~A" (title-prefix transform) title))
          (sidebar-transform (sidebar-transform transform)))
     (with-html-document (stream filename (output-directory transform)

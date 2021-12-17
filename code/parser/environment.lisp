@@ -1,3 +1,9 @@
+;;;; environment.lisp --- Parser environment functions.
+;;;;
+;;;; Copyright (C) 2021 Jan Moringen
+;;;;
+;;;; Author: Jan Moringen <jmoringe@techfak.uni-bielefeld.de>
+
 (cl:in-package #:dpans-conversion.parser)
 
 (defvar **meta-environment**

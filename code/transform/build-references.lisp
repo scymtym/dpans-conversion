@@ -297,7 +297,7 @@
                      :report (lambda (stream)
                                (format stream "Record a broken link"))
                      nil)))))
-         (%link (node name namespace transform make-new-node)
+         (%link (name namespace transform make-new-node)
            (let* ((builder         (builder transform))
                   (target          (lookup name namespace transform))
                   (target-initargs (when target
@@ -331,7 +331,7 @@
                (vector-push-extend new-node references))
              new-node))
          (link (node name namespace transform)
-           (%link node name namespace transform
+           (%link name namespace transform
                   (lambda (builder &rest extra-initargs)
                     (let ((initargs (bp:node-initargs builder node)))
                       (apply #'bp:make+finish-node builder :reference
@@ -341,7 +341,7 @@
                         relation relation-args node (kind (eql :reference)) relations
                         &rest initargs &key name namespace)
     (let ((name (or name (node-name node)))) ; TODO either initarg or relation
-      (%link node name namespace transform
+      (%link name namespace transform
              (lambda (builder &rest extra-initargs)
                (apply #'reconstitute builder recurse kind relations
                       :name name
@@ -413,7 +413,7 @@
            (target  (when target
                       (make-registered-reference transform target)))
            (builder (builder transform)))
-      (apply #'reconstitute builder recurse kind relations ; TODO back-links
+      (apply #'reconstitute builder recurse :reference relations ; TODO back-links
              :namespace :issue :target target initargs))) ; TODO why not kind :reference?
 
   (defmethod link-node ((transform build-references) recurse

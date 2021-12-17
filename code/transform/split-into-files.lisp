@@ -1,5 +1,7 @@
 (cl:in-package #:dpans-conversion.transform)
 
+;;; `split-into-files'
+
 (defclass split-into-files (default-reconstitute-mixin
                             builder-mixin)
   ((%root :accessor root)))
@@ -12,7 +14,7 @@
     (bp:finish-node builder :collection root)))
 
 (defmethod push-output-file ((file t) (transform split-into-files))
-  (bp:relate (builder transform) :element (root transform) file))
+  (bp:relate (builder transform) '(:element . *) (root transform) file))
 
 (defmethod transform-node ((transform split-into-files) recurse
                            relation relation-args node (kind (eql :file)) relations

@@ -223,7 +223,7 @@
   (bp:node* (:italic :bounds (cons start end))
     (* (:element . *) (nreverse elements))))
 
-(defrule f (environment) ; "fixed", that is monospace font
+#+old (defrule f (environment) ; "fixed", that is monospace font
     (bounds (start end)
       (seq "\\f"
            (seq (skippable* environment) #\{
@@ -236,15 +236,32 @@
   (bp:node* (:typewriter :bounds (cons start end))
     (* (:element . *) (nreverse element))))
 
+(defrule f (environment) ; "fixed", that is monospace font
+    (bounds (start end)
+      (seq/ws "\\f" #\{ (<- content (balanced-content)) #\}))
+  (bp:node* (:code :content        content
+                   :contains-tex?  t
+                   :contains-math? t
+                   :in-line?       t
+                   :bounds         (cons start end))))
+
+;; TODO should not contain the block
 (defrule tt (environment) ; TODO should treat & as having normal syntax?
     (bounds (start end)
-      (seq "{\\tt" (* (<<- elements (and (not #\}) (element environment)))) #\}))
-  (bp:node* (:typewriter :bounds (cons start end))
+      (seq/ws (seq #\{ (and "\\tt"
+                            (:transform (<- name (name))
+                              (let ((name (getf (bp:node-initargs* name) :content)))
+                                (when (and (> (length name) 2)
+                                           (nth-value
+                                            1 (lookup-macro name environment nil nil)))
+                                  (:fail))))))
+              (* (<<- elements (and (not #\}) (element environment)))) #\}))
+  (bp:node* (:typewriter :bounds (cons start end)) ; TODO should be monospace
     (* (:element . *) (nreverse elements))))
 
 (defrule rm (environment)
-    (bounds (start end)
-      (seq "{\\rm" (* (<<- elements (and (not #\}) (element environment)))) #\}))
+  (bounds (start end)
+          (seq/ws "{\\rm" (* (<<- elements (and (not #\}) (element environment)))) #\}))
   (bp:node* (:roman :bounds (cons start end))
     (* (:element . *) (nreverse elements))))
 
@@ -662,11 +679,6 @@
                   #-dpans-debug (:transform (seq) (:fail)))))
   (bp:node* (:enumeration-list :bounds (cons start end))
     (* (:element . *) (nreverse elements))))
-#+no (define-environment (enumeration-list :keyword "list"
-                                      :name?   nil
-                                      :element (:transform
-                                                (seq (skippable*) (<- item (or (issue-annotation environment) (enumeration-item environment))) (skippable*))
-                                                item)))
 
 (defrule definition-item (environment)
     (and (in-traversal :list environment)
@@ -733,7 +745,7 @@
                     (find-global (env:parent environemnt))))))
     (setf (env:lookup name namespace (find-global environment)) new-value)))
 
-(defrule chardef (environment)
+(defrule chardef (environment) ; unused?
     (bounds (start end)
       (seq/ws "\\chardef" (<- name (name))
               #\= (or (seq #\` (escaped-character))
@@ -745,7 +757,7 @@
   (bp:node* (:chardef :bounds (cons start end))
     (1 (:name . 1) name)))
 
-(defrule mathchardef (environment)
+(defrule mathchardef (environment) ; unused?
     (bounds (start end)
       (seq/ws "\\mathchardef" (<- name (name))
               (seq #\" (* (guard (digit-char-p 16)) 4 4)))) ; TODO code
@@ -974,6 +986,10 @@
                      (supplied-count (length arguments)))
                  (:fatal (format nil "Too few arguments to ~(~A~) macro ~A. ~D required, but only ~D supplied."
                                  mode name (+ supplied-count (length argument-spec)) supplied-count)))))))
+  (when (or (equal name "item")
+            (equal name "itemitem")
+            (equal name "issue"))
+    (:fail))
   (bp:node* (:other-command-application :name   name
                                         :bounds (cons start end))
     (* (:argument . *) (nreverse arguments))))

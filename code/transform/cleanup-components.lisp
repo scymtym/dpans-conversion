@@ -1,5 +1,9 @@
 (cl:in-package #:dpans-conversion.transform)
 
+;;; `cleanup-components'
+;;;
+;;; TODO
+
 (defclass cleanup-components (default-reconstitute-mixin
                               builder-mixin)
   ())
