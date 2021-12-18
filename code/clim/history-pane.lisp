@@ -9,8 +9,11 @@
    :display-function   'display-history
    :end-of-line-action :allow
    :end-of-page-action :allow
-   :text-style         (clim:make-text-style nil :bold nil)
-   :background         clim:+gray84+))
+   :text-style         (clim:make-text-style nil :bold nil)))
+
+(defmethod clim:note-sheet-adopted :after ((sheet history-pane))
+  (setf (clim:pane-background sheet)
+        (clim:pane-background (clim:sheet-parent sheet))))
 
 (defmethod clim:handle-event ((client history-pane)
                               (event  state-change-event))

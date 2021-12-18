@@ -10,8 +10,11 @@
    :end-of-line-action :wrap*
    :end-of-page-action :allow
    :text-style         (clim:make-text-style nil :bold nil)
-   :foreground         clim:+dark-blue+
-   :background         clim:+gray84+))
+   :foreground         clim:+dark-blue+))
+
+(defmethod clim:note-sheet-adopted :after ((sheet breadcrumbs-pane))
+  (setf (clim:pane-background sheet)
+        (clim:pane-background (clim:sheet-parent sheet))))
 
 (defmethod clim:handle-event ((client breadcrumbs-pane)
                               (event  state-change-event))

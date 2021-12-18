@@ -101,10 +101,6 @@
                       (let ((frame (clim:gadget-client gadget)))
                         (perform-search value frame)))))
 
-   (reviewer-note (make-annotation-button "Reviewer Notes" :reviewer-note))
-   (editor-note   (make-annotation-button "Editor Notes"   :editor-note))
-   (issue         (make-annotation-button "Issues"         :issue-annotation))
-   (removable     (make-annotation-button "Removable Text" :removable-Text))
    (content       content-pane   :model (model clim:*application-frame*))
    (interactor    :interactor    :borders nil)
 
@@ -119,16 +115,17 @@
                            (make-text-size-option-pane))))
                       (clim:labelling (:label "Annotations")
                         (clim:vertically (:spacing 8)
-                          reviewer-note
-                          editor-note
-                          issue
-                          removable))
+                          (make-annotation-button "Reviewer Notes" :reviewer-note)
+                          (make-annotation-button "Editor Notes"   :editor-note)
+                          (make-annotation-button "Issues"         :issue-annotation)
+                          (make-annotation-button "Removable Text" :removable-Text)))
                       clim:+fill+))
    (toggle-settings :push-button :label     "C"
                                  :y-spacing 0
                                  :activate-callback
                     (lambda (gadget)
                       (let* ((frame     (clim:gadget-client gadget))
+                             (settings  (clim:find-pane-named frame 'settings))
                              (container (clim:find-pane-named frame 'container)))
                         (if (member settings (clim:sheet-children container))
                             (clim:sheet-disown-child container settings)
@@ -153,8 +150,7 @@
         interactor))))
   (:menu-bar nil)
   (:pointer-documentation t)
-  (:command-table (viewer))
-  (:update-instances-on-redefinition t))
+  (:command-table (viewer)))
 
 (defmethod shared-initialize :around ((instance viewer) (slot-names t)
                                       &rest args

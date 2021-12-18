@@ -1,5 +1,23 @@
 (cl:in-package #:dpans-conversion.clim)
 
+(defmacro with-preserved-cursor-x ((stream) &body body)
+  (a:with-unique-names (old-x)
+    (a:once-only (stream)
+      `(let ((,old-x (clim:stream-cursor-position ,stream)))
+         (unwind-protect
+              (progn ,@body)
+           (setf (clim:stream-cursor-position ,stream)
+                 (values ,old-x (nth-value 1 (clim:stream-cursor-position ,stream)))))))))
+
+(defmacro with-preserved-cursor-y ((stream) &body body)
+  (a:with-unique-names (old-y)
+    (a:once-only (stream)
+      `(let ((,old-y (nth-value 1 (clim:stream-cursor-position ,stream))))
+         (unwind-protect
+              (progn ,@body)
+           (setf (clim:stream-cursor-position ,stream)
+                 (values (clim:stream-cursor-position ,stream) ,old-y)))))))
+
 (defclass display (transform:builder-mixin)
   ((%stream           :initarg  :stream
                       :accessor stream)
@@ -86,7 +104,7 @@
                          (let* ((start index)
                                 (end   (+ start (length highlight-string))))
                            (write-string string stream :end start)
-                           (climi::with-preserved-cursor-y (stream)
+                           (with-preserved-cursor-y (stream)
                              (clim:surrounding-output-with-border (stream :padding    0
                                                                           :ink        clim:+transparent-ink+
                                                                           :background clim:+red+)
@@ -207,7 +225,7 @@
 
 (define-display (:figure)
   (fresh-line stream)
-  (climi::with-preserved-cursor-x (stream)
+  (with-preserved-cursor-x (stream)
     (clim:surrounding-output-with-border (stream :shape  :rounded
                                                  :radius 3)
       (clim:formatting-table (stream)
@@ -413,7 +431,7 @@
 ;;; Math
 
 (define-display (:over)
-  (climi::with-preserved-cursor-y (stream)
+  (with-preserved-cursor-y (stream)
     (let* ((stream (stream transform))
            (style  (clim:make-text-style nil nil :smaller))
            (height (nth-value 1 (clim:text-size stream "M" :text-style style))))
@@ -445,7 +463,7 @@
                       (write-string "√" stream)
                       (funcall recurse))
                      ((string= name "underline")
-                      (climi::with-preserved-cursor-y (stream)
+                      (with-preserved-cursor-y (stream)
                         (clim:surrounding-output-with-border (stream :shape :underline)
                           (climi::letf (((stream transform) stream))
                             (funcall recurse)))))
@@ -803,7 +821,7 @@
     (t       clim:+beige+)))
 
 (define-display (:proposal name status)
-  (climi::with-preserved-cursor-x (stream)
+  (with-preserved-cursor-x (stream)
     (clim:surrounding-output-with-border (stream :shape      :rounded
                                                  :radius     2
                                                  :background (color<-status status))
@@ -878,7 +896,7 @@
   (recurse))
 
 (define-display (:vtop)
-  (climi::with-preserved-cursor-x (stream)
+  (with-preserved-cursor-x (stream)
     (clim:formatting-table (stream)
       (clim:formatting-column (stream)
         (funcall
