@@ -2,7 +2,10 @@
   :author     "Jan Moringen <jmoringe@techfak.uni-bielefeld.de>"
   :license    "GPLv3"
 
-  :depends-on ("dpans-conversion")
+  :depends-on ("dpans-conversion"
+
+               "mcclim"
+               "clim-debugger")
 
   :components ((:module     "clim"
                 :pathname   "code/clim"
