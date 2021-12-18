@@ -29,7 +29,8 @@
                 :serial     t
                 :components ((:file       "package")
                              (:file       "protocol")
-                             (:file       "macros")))
+                             (:file       "registry")
+                             (:file       "definitions")))
 
                (:module     "parser"
                 :pathname   "code/parser"
