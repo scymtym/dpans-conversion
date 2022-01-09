@@ -232,7 +232,13 @@
                         (make-instance 'transform::attach-labels :builder builder) ; must be after `lower-display-tables'
                         (make-instance 'transform::add-dictionary-sections :builder builder)
                         (make-instance 'transform::simplify :builder builder)
-                        (make-instance 'transform::build-references :builder builder))
+                        ;; TODO `build-references' currently would
+                        ;; lead to (not readably printable)
+                        ;; `transform::reference' instances in the
+                        ;; RESULT. We can add this back once backward
+                        ;; edges are handled properly.
+                        ;; (make-instance 'transform::build-references :builder builder)
+                        )
                        tree)))
 
     (a:with-output-to-file (stream output-file :if-exists :supersede)
