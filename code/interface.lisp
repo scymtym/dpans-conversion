@@ -239,18 +239,8 @@
       (with-standard-io-syntax
         (write result :stream stream :circle t)))
 
-    (:inspect (vector environment
-                      :tree
-                      (architecture.builder-protocol.inspection:as-tree
-                       tree 'list)
-                      (architecture.builder-protocol.inspection:as-query
-                       tree 'list :editor-note)
-                      :transformed
-                      (architecture.builder-protocol.inspection:as-tree
-                       result 'list)
-                      (architecture.builder-protocol.inspection:as-query
-                       result 'list :component))
-     :new-inspector? t)
+    (inspect-tree result :environment       environment
+                         :intermediate-tree tree)
 
     nil))
 
