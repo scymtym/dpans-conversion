@@ -231,7 +231,7 @@
                         (make-instance 'transform::cleanup-issues :builder builder)
                         (make-instance 'transform::attach-labels :builder builder) ; must be after `lower-display-tables'
                         (make-instance 'transform::add-dictionary-sections :builder builder)
-                        (make-instance 'transform::minimize :builder builder)
+                        (make-instance 'transform::simplify :builder builder)
                         (make-instance 'transform::build-references :builder builder))
                        tree)))
 
