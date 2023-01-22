@@ -338,7 +338,7 @@
                                 :issue-annotation :editor-note :reviewer-note
                           :file :title :sub-title :chapter :section
                                 :collection :output-file :issue
-                          :reference
+                          :reference :unresolved-reference
                                 :item-list :list-item
                                 :enumeration-list :enumeration-item
                                 :definition-list :definition-item

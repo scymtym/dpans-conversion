@@ -111,10 +111,10 @@
            (<- (name proposal) (issue-name-and-proposal-name must-include-proposal?))))
   (when (and must-be-explicit? (not explicit?))
     (:fail))
-  (bp:node* (:issue-reference :name      name
-                              :proposal  proposal
+  (bp:node* (:issue-reference :proposal  proposal
                               :explicit? explicit?
-                              :bounds    (cons start end))))
+                              :bounds    (cons start end))
+    (1 (:target . 1) (bp:node* (:chunk :content name)))))
 
 (defrule possible-reference ()
     (bounds (start end)
@@ -150,12 +150,12 @@
                  (to-string name))
                 (t
                  (to-string (list* initial name))))
-        (bp:node* (:possible-reference :name      name
-                                       :namespace (case initial
+        (bp:node* (:possible-reference :namespace (case initial
                                                     (#\& :lambda-list-keyword))
                                        :bounds    (cons start end))
-          (bp:? (:title . 1) (when title
-                               (bp:node* (:chunk :content title)))))))))
+          (1    (:target . 1) (bp:node* (:chunk :content name)))
+          (bp:? (:title  . 1) (when title
+                                (bp:node* (:chunk :content title)))))))))
 
 ;;; Code
 
@@ -442,7 +442,7 @@
          (? #\:) (and (seq (whitespace*) #\Newline) (seq)))
   (list issue proposal))
 
-(defrule proposal ()
+(defrule proposal (process)
     (bounds (start end)
       (seq (<- (issue-name proposal-name) (proposal-label))
            (whitespace*) #\Newline (whitespace*) #\Newline
@@ -455,6 +455,7 @@
                            (<<- elements (line 't))))
                   #\Newline))))
   (bp:node* (:proposal :name       proposal-name
+                       :process    process
                        :issue-name issue-name
                        :bounds     (cons start end))
     (* (:element . *) (nreverse elements))))
@@ -464,8 +465,8 @@
 (defrule section-label ()
   (or (proposal-label) (long-label) (short-label)))
 
-(defrule section ()
-  (or (proposal) (long-section 0) (short-section 0)))
+(defrule section (process)
+  (or (proposal process) (long-section 0) (short-section 0)))
 
 (defrule issue (filename process)
     (bounds (start end)
@@ -475,7 +476,7 @@
                   (<-  required-issues (section-required-issues))
                   (<-  forum           (section-forum))
                   (<-  category        (section-category))
-                  (<<- sections        (section))
+                  (<<- sections        (section process))
                   (seq (whitespace*) #\Newline)))))
   (unless (find :proposal sections :key #'bp:node-kind*)
     (cerror "Use the issue anyway" "No Proposal"))

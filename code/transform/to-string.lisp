@@ -47,12 +47,5 @@
 
 (defmethod transform-node ((transform to-string) recurse ; TODO define macro
                            relation relation-args node (kind (eql :possible-reference)) relations
-                           &key name)
-  (write-string name (result transform)))
-
-(defmethod transform-node ((transform to-string) recurse ; TODO define macro
-                           relation relation-args node (kind (eql :reference)) relations
-                           &key name namespace)
-  (if (eq namespace :lambda-list-keyword)
-      (funcall recurse :relations '((:element . *)))
-      (write-string name (result transform))))
+                           &key)
+  (funcall recurse :relations '((:target . 1))))

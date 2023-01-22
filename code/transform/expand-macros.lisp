@@ -91,22 +91,24 @@
             (unless (eq (bp:node-kind builder label) :other-command-application)
               (break "~S" label))
             (let ((label (getf (bp:node-initargs builder label) :name)))
-              (list (bp:node (builder :reference :name      label
-                                                 :namespace :figure))))))))
+              (list (bp:node (builder :unresolved-reference :namespace :figure)
+                      (1 (:target . 1) (bp:node (builder :chunk :content label))))))))))
 
 ;; TODO parse \secref as other-command-application and define a macro diversion above?
 (defmethod transform-node ((transform expand-macros) recurse
-                           relation relation-args node (kind (eql :secref)) relations
-                           &key test)
-  (let* ((builder (builder transform))
-         (name*   (bp:node-relation builder '(:name . 1) node))
-         (name    (case (bp:node-kind builder name*)
-                    (:other-command-application
-                     (getf (bp:node-initargs builder name*) :name))
-                    (t
-                     (to-string builder name*)))))
-    (bp:node (builder :secref)
-      (1 (:name . 1) (bp:node (builder :name :content name))))))
+                           relation relation-args node (kind (eql :unresolved-reference)) relations
+                           &key namespace)
+  (if (eq namespace :section)
+      (let* ((builder (builder transform))
+             (name*   (bp:node-relation builder '(:target . 1) node))
+             (name    (case (bp:node-kind builder name*)
+                        (:other-command-application
+                         (getf (bp:node-initargs builder name*) :name))
+                        (t
+                         (to-string builder name*)))))
+        (bp:node (builder :unresolved-reference :namespace :section)
+          (1 (:target . 1) (bp:node (builder :chunk :content name)))))
+      (call-next-method)))
 
 (defmethod root-environment ((transform expand-macros))
   (labels ((root (environment)

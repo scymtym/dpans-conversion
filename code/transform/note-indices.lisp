@@ -48,9 +48,9 @@
     (maphash
      (lambda (namespace-and-key title)
        (destructuring-bind (namespace . key) namespace-and-key
-         (let ((reference (bp:node (builder :reference :namespace namespace
-                                                       :name      key)
-                            (1 (:title . 1) (bp:node (builder :chunk :content title))))))
+         (let ((reference (bp:node (builder :unresolved-reference :namespace namespace)
+                            (1 (:target . 1) (bp:node (builder :chunk :content key)))
+                            (1 (:title  . 1) (bp:node (builder :chunk :content title))))))
            (push (bp:node (builder :list-item)
                    (1 (:body . *) reference))
                  items))))

@@ -49,7 +49,7 @@
     (labels ((visit (recurse relation relation-args node kind relations
                      &rest initargs &key name anchor &allow-other-keys)
                (ecase kind
-                 ((:dash :reference :issue-reference :proposal :enumeration-list :enumeration-item :line :chunk :paragraph-break :listing :syntax :splice :block)
+                 ((:dash :reference :unresolved-reference :issue-reference :proposal :enumeration-list :enumeration-item :line :chunk :paragraph-break :listing :syntax :splice :block)
                   (apply #'transform:transform-node transform recurse relation relation-args node kind relations initargs))
                  (:section
                   (unwind-protect

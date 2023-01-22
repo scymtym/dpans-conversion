@@ -336,7 +336,7 @@
                                  (:include-depth . :traversal)
                                  (:in-group      . :traversal))
                                (list filename new-include-depth nil))))
-        (%parse-tex 'list input new-environment filename new-include-depth)))))
+        (%parse-tex bp:*builder* input new-environment filename new-include-depth)))))
 
 (defrule input (environment)
     (bounds (start end)
@@ -386,9 +386,6 @@
              (1 (:name    . 1) (bp:node* (:chunk :content "Dictionary" :bounds (cons start end))))
              (1 (:element . *) ))))))
 
-(define-command term
-  (1* :name (element environment)))
-
 (define-command newterm
   (1 :name (chunk environment)))
 
@@ -403,88 +400,51 @@
     (bounds (start end)
       (seq "\\secref" (or (seq #\\ (<- name (identifier)))
                           (<- name (argument environment)))))
-  (bp:node* (:secref :bounds (cons start end))
-    (1 (:name . 1) (if (stringp name)
-                       (bp:node* (:chunk :content name)) ; TODO chunk is a hack
-                       name))))
+  (bp:node* (:unresolved-reference :namespace :section
+                                   :bounds    (cons start end))
+    (1 (:target . 1) (if (stringp name)
+                         (bp:node* (:chunk :content name)) ; TODO chunk is a hack
+                         name))))
 
 (defrule chapref (environment)
     (bounds (start end)
       (seq "\\chapref" (or (seq #\\ (<- name (identifier)))
                            (<- name (argument environment)))))
-  (bp:node* (:secref :bounds (cons start end))
-    (1 (:name . 1) (if (stringp name)
-                       (bp:node* (:chunk :content name))
-                       name))))
+  (bp:node* (:unresolved-reference :namespace :section
+                                   :bounds    (cons start end))
+    (1 (:target . 1) (if (stringp name)
+                         (bp:node* (:chunk :content name))
+                         name))))
 
-#+no (define-command keyref ; lambda list keyword reference
-  (1 :name (element environment)))
+(defrule term (environment)
+    (bounds (start end)
+      (seq/ws "\\term" #\{ (* (<<- target (element environment))) #\}))
+  (bp:node* (:term :bounds (cons start end))
+    (1 (:target . 1) (bp:node* (:splice)
+                       (* (:element . *) target)))))
 
 (defrule simple-reference (environment)
     (bounds (start end)
-      (seq/ws (seq "\\" (<- namespace (or ; (:transform "type" :typef)
-                                          ; (:transform "decl" :declaration)
-                                          ; (:transform "spec" :special-operator)
-                                          ; (:transform "fun"  :function)
-                                          ; (:transform "mac"  :macro)
-                                          ; (:transform "var"  :variable)
-                                          ; (:transform "con"  :constant)
-                                          (:transform "key"  :lambda-list-keyword)
-                                          (:transform "pack" :package)))
-                   "ref")
-              #\{ (<- name (element environment)) #\}))
-  (bp:node* (:reference :namespace namespace
-                        :bounds    (cons start end))
-    (1 (:name . 1) name)))
-
-(define-command typeref
-  (1 :name (element environment)))
-
-(define-command declref
-  (1 :name (element environment)))
-
-(define-command specref
-  (1 :name (element environment)))
-
-(define-command funref
-  (1 :name (element environment)))
-
-(define-command macref
-  (1 :name (element environment)))
-
-(define-command varref
-  (1 :name (element environment)))
-
-(define-command conref ; constant
-  (1 :name (element environment)))
-
-(defrule figref (environment)
-    (bounds (start end)
-      (seq/ws (seq "\\" (or #\f #\F) "igref")
-              (<- name (or (name)
-                           (element environment)))))
-  (bp:node* (:figref :bounds (cons start end))
-    (1 (:name . 1) name)))
-
-(defrule miscref (environment)
-    (bounds (start end)
-      (seq "\\misc" (? "ref")
-           (skippable* environment) #\{ (<- name (element environment)) (skippable* environment) #\}))
-  (bp:node* (:miscref :bounds (cons start end))
-    (1 (:name . 1) name)))
+      (seq/ws (seq "\\" (or (seq (<- namespace (or (:transform "type" :type)
+                                                   (:transform "decl" :declaration)
+                                                   (:transform "spec" :special-operator)
+                                                   (:transform "fun"  :function)
+                                                   (:transform "mac"  :macro)
+                                                   (:transform "var"  :variable)
+                                                   (:transform "con"  :constant)
+                                                   (:transform "key"  :lambda-list-keyword)
+                                                   (:transform "pack" :package)))
+                                 "ref")
+                            (seq (<- namespace (:transform "misc" :symbol))
+                                 (? "ref"))))
+              #\{ (<- target (element environment)) #\}))
+      (bp:node* (:unresolved-reference :namespace namespace
+                                       :bounds    (cons start end))
+        (1 (:target . 1) target)))
 
 (defrule reference (environment)
   (or (chapref environment)
-      (secref environment)
-      (typeref environment)
-      (declref environment)
-      (specref environment)
-      (funref environment)
-      (macref environment)
-      (varref environment)
-      (conref environment)
-      ; (figref environment)
-      (miscref environment)))
+      (secref environment)))
 
 (defrule simple-index (environment)
     (bounds (start end)
@@ -500,30 +460,6 @@
   (bp:node* (:index :namespace namespace
                     :bounds    (cons start end))
     (1 (:name . 1) name)))
-
-#+no (macrolet
-    ((define ()
-       (let ((rules '()))
-         (flet ((one-index (keyword
-                            &key (rule-name (a:symbolicate '#:index- keyword))
-                                 (command   (string-downcase keyword)))
-                  (let ((string (concatenate 'string "\\idx" command))
-                        (which  (a:make-keyword keyword)))
-                    (push rule-name rules)
-                    `(defrule ,rule-name (environment)
-                       (bounds (start end)
-                         (seq ,string
-                              (skippable*) #\{ (<- name (element environment)) (skippable*) #\}))
-                       (bp:node* (:index :which ,which :bounds (cons start end))
-                         (1 (:name . 1) name))))))
-           `(progn
-              ,@(map 'list #'one-index '(#:ref #:keyref #:code #:kwd
-                                         #:text #:term #:example #:packref))
-              (defrule index (environment)
-                (or ,@(map 'list (lambda (name)
-                                   `(,name environment))
-                           rules))))))))
-  (define))
 
 ;;;
 

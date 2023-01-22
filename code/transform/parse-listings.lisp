@@ -481,7 +481,9 @@
 ;;; "Render" the syntax tree for the listing.
 
 (defclass highlight-client ()
-  ((%stack :accessor stack)))
+  ((%input :initarg  :input
+           :reader   input)
+   (%stack :accessor stack)))
 
 (defmethod shared-initialize :after ((instance   highlight-client)
                                      (slot-names t)
@@ -534,20 +536,21 @@
      (node   eclector.examples.highlight.cst:standard-symbol-node))
   (finish-chunk client)
   (let* ((builder 'list)
-         (which   (a:make-keyword (class-name (class-of node))))
          (content (make-array 0 :element-type 'character :adjustable t :fill-pointer 0))
          (name    (eclector.examples.highlight.cst:name node)))
-    (multiple-value-bind (name namespace title)
+    (multiple-value-bind (name namespace)
         (if (a:starts-with #\& name)
-            (values (subseq name 1) :lambda-list-keyword name)
-            (values name            nil                  nil))
-      (let* ((node (apply #'bp:make-node builder :possible-reference
-                          :name          name
-                          :must-resolve? t
-                          (append (when namespace
-                                    (list :namespace namespace))
-                                  (when title
-                                    (list :title title)))))
+            (values (subseq name 1) :lambda-list-keyword)
+            (values name            nil))
+      (let* ((title (let ((start (eclector.examples.highlight.cst:start node))
+                          (end   (eclector.examples.highlight.cst:end node)))
+                      (subseq (input client) start end)))
+             (node  (apply #'bp:make-node builder :possible-reference
+                           :must-resolve? t
+                           (when namespace
+                             (list :namespace namespace))))
+             (node (bp:relate builder '(:target . 1) node
+                              (bp:node (builder :chunk :content name))))
              (node (if title
                        (bp:relate builder '(:title . 1) node
                                   (bp:node (builder :chunk :content title)))
@@ -612,7 +615,8 @@
                                                     :environment     environment
                                                     :contains-tex?   contains-tex?
                                                     :contains-math?  contains-math?))
-         (render-client (make-instance 'highlight-client :root root)))
+         (render-client (make-instance 'highlight-client :input code
+                                                         :root  root)))
     (eclector.examples.highlight:highlight
      code                          ; :package (find-package #:common-)
      :read-client read-client
@@ -642,7 +646,7 @@
                         :contains-math? contains-math?)
            (return-from transform-node (bp:finish-node builder :listing node)))
        (retry ()
-         "Try parsing the listing again"
+         :report "Try parsing the listing again"
          (go :start)))))
 
 ;;; Utility

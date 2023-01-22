@@ -45,12 +45,12 @@
           :for namespace :in namespaces
           :for node = (getf nodes namespace)
           :when (and node (not first?))
-          :collect (bp:node (builder :chunk :content ", "))
+            :collect (bp:node (builder :chunk :content ", "))
           :when node
             :collect (bp:node (builder :chunk :content (string-downcase namespace)))
             :and :collect (bp:node (builder :chunk :content " "))
-            :and :collect (bp:node (builder :reference :name      name
-                                                       :namespace namespace))
+            :and :collect (bp:node (builder :unresolved-reference :namespace namespace)
+                            (1 (:target . 1) (bp:node (builder :chunk :content name))))
             :and :do (setf first? nil))))
 
 (defun symbol-list (builder symbols)

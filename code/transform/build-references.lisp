@@ -272,6 +272,57 @@
 
 ;;; Link stage
 
+(defun reference-target-name (builder node)
+  (let ((target-node (bp:node-relation builder '(:target . 1) node)))
+    (to-string builder target-node)))
+
+(defun compute-title (transform namespace target-node reference-node)
+  (let* ((builder         (builder transform))
+         (target-kind     (bp:node-kind builder target-node))
+         (target-initargs (bp:node-initargs builder target-node)))
+    (apply #'compute-title-using-kind
+           transform namespace target-node target-kind reference-node
+           target-initargs)))
+
+(defgeneric compute-title-using-kind (transform namespace target-node target-kind reference-node
+                                      &key &allow-other-keys))
+
+(defmethod compute-title-using-kind ((transform build-references)
+                                     namespace target-node target-kind reference-node
+                                     &key)
+  (let* ((builder (builder transform))
+         (title   (reference-target-name builder reference-node)))
+    (bp:node (builder :chunk :content title))))
+
+(defmethod compute-title-using-kind ((transform build-references)
+                                     namespace target-node (target-kind (eql :section)) reference-node
+                                     &key)
+  (let ((builder (builder transform)))
+    (bp:node-relation builder '(:name . 1) target-node)))
+
+(defmethod compute-title-using-kind ((transform build-references)
+                                     namespace target-node (target-kind (eql :chapter)) reference-node
+                                     &key)
+  (let ((builder (builder transform)))
+    (bp:node-relation builder '(:name . 1) target-node)))
+
+(defmethod compute-title-using-kind ((transform build-references)
+                                     namespace target-node (target-kind (eql :gentry)) reference-node
+                                     &key)
+  (let ((builder (builder transform)))
+    (bp:node-relation builder '(:name . 1) target-node)))
+
+(defmethod compute-title-using-kind ((transform build-references)
+                                     (namespace (eql :issue)) target-node target-kind reference-node
+                                     &key process)
+  (let* ((builder    (builder transform))
+         (issue-name (reference-target-name builder reference-node)))
+    (destructuring-bind (&key proposal explicit? &allow-other-keys)
+        (bp:node-initargs builder reference-node)
+      (let ((title (format nil "~:[~*~;~@[~A ~]Issue ~]~A~@[:~A~]"
+                           explicit? process issue-name proposal)))
+        (bp:node (builder :chunk :content title))))))
+
 (labels ((normalize (name)
            (typecase name
              (string (string-downcase name))
@@ -298,141 +349,123 @@
                                (format stream "Record a broken link"))
                      nil)))))
          (%link (name namespace transform make-new-node)
-           (let* ((builder         (builder transform))
-                  (target          (lookup name namespace transform))
-                  (target-initargs (when target
-                                     (bp:node-initargs builder target)))
+           (let* ((builder           (builder transform))
+                  (target            (lookup name namespace transform))
+                  (registered-target (when target
+                                       (make-registered-reference
+                                        transform target)))
+                  (target-initargs   (when target
+                                       (bp:node-initargs builder target)))
                   ;; Generate an anchor for the reference so that the
                   ;; target can produce a list of links to its
                   ;; references if desired.
-                  (target-anchor   (when target
-                                     (getf target-initargs :anchor)))
-                  (references      (when target
-                                     (getf target-initargs :references)))
-                  (anchor          (when target
-                                     (format nil "~A-back-~D"
-                                             target-anchor (length references))))
+                  (target-anchor     (when target
+                                       (getf target-initargs :anchor)))
+                  (references        (when target
+                                       (getf target-initargs :references)))
+                  (anchor            (when target
+                                       (format nil "~A-back-~D"
+                                               target-anchor (length references))))
                   ;; Store the target reference in an initarg so that
                   ;; it is never traversed (which could lead to
                   ;; non-termination and could insert the target into
                   ;; the output which is generated for the reference
                   ;; node).
-                  (new-node        (funcall make-new-node builder
-                                            :anchor    anchor
-                                            :name      name
-                                            :namespace namespace
-                                            :target    (when target
-                                                         (make-registered-reference
-                                                          transform target)))))
+                  (new-node          (funcall make-new-node builder target registered-target anchor)))
              ;; Add the reference to the `:references' of the
              ;; target. This cheats a little by mutating a node (the
              ;; target) after its initial creation.
              (when target
                (vector-push-extend new-node references))
              new-node))
-         (link (node name namespace transform)
+         (link (transform recurse node relations initargs name
+                &key (namespace (getf initargs :namespace))
+                     title)
            (%link name namespace transform
-                  (lambda (builder &rest extra-initargs)
-                    (let ((initargs (bp:node-initargs builder node)))
-                      (apply #'bp:make+finish-node builder :reference
-                             (append extra-initargs initargs)))))))
+                  (lambda (builder target-node registered-target anchor)
+                    (let ((new-initargs (a:remove-from-plist
+                                         initargs :namespace)))
+                      (if target-node
+                          (let ((new-relations (remove :target relations
+                                                       :key #'bp:normalize-relation))
+                                (title-node    (or title
+                                                   (compute-title transform namespace target-node node))))
+                            (apply #'reconstitute builder recurse :reference
+                                   (list* (list 1 '(:title . 1) title-node) new-relations) ; TODO back-links
+                                   :anchor    anchor
+                                   :namespace namespace
+                                   :target    registered-target
+                                   new-initargs))
+                          (apply #'reconstitute builder recurse :unresolved-reference
+                                 relations :namespace namespace new-initargs)))))))
 
   (defmethod link-node ((transform build-references) recurse
-                        relation relation-args node (kind (eql :reference)) relations
-                        &rest initargs &key name namespace)
-    (let ((name (or name (node-name node)))) ; TODO either initarg or relation
-      (%link name namespace transform
-             (lambda (builder &rest extra-initargs)
-               (apply #'reconstitute builder recurse kind relations
-                      :name name
-                      (append extra-initargs
-                              (a:remove-from-plist initargs :name :namespace)))))))
-
-  (defmethod link-node ((transform build-references) recurse
-                        relation relation-args node (kind (eql :secref)) relations
-                        &key)
-    (link node (node-name node) :section transform))
-
-  (defmethod link-node ((transform build-references) recurse
-                        relation relation-args node (kind (eql :figref)) relations
-                        &key)
-    (link node (node-name node) :figure transform))
-
-  (defmethod link-node ((transform build-references) recurse
-                        relation relation-args node (kind (eql :typeref)) relations
-                        &key)
-    (link node (node-name node) :type transform))
-
-  (defmethod link-node ((transform build-references) recurse
-                        relation relation-args node (kind (eql :declref)) relations
-                        &key)
-    (link node (node-name node) :declaration transform))
-
-  (defmethod link-node ((transform build-references) recurse
-                        relation relation-args node (kind (eql :specref)) relations
-                        &key)
-    (link node (node-name node) :special-operator transform))
-
-  (defmethod link-node ((transform build-references) recurse
-                        relation relation-args node (kind (eql :funref)) relations
-                        &key)
-    (link node (node-name node) :function transform))
-
-  (defmethod link-node ((transform build-references) recurse
-                        relation relation-args node (kind (eql :macref)) relations
-                        &key)
-    (link node (node-name node) :macro transform))
-
-  (defmethod link-node ((transform build-references) recurse
-                        relation relation-args node (kind (eql :varref)) relations
-                        &key)
-    (link node (node-name node) :variable transform))
-
-  (defmethod link-node ((transform build-references) recurse
-                        relation relation-args node (kind (eql :conref)) relations
-                        &key)
-    (link node (node-name node) :constant transform))
-
-  (defmethod link-node ((transform build-references) recurse
-                        relation relation-args node (kind (eql :miscref)) relations
-                        &key)
-    (link node (node-name node) :symbol transform))
+                        relation relation-args node (kind (eql :unresolved-reference)) relations
+                        &rest initargs)
+    (let ((name (reference-target-name (builder transform) node)))
+      (link transform recurse node relations initargs name)))
 
   (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :term)) relations
-                        &key)
-    (link node (node-name* node) :glossary transform))
+                        &rest initargs)
+    (let* ((builder (builder transform))
+           (name    (reference-target-name builder node)))
+      (link transform recurse node relations initargs name
+            :namespace :glossary
+            :title     (bp:node (builder :chunk :content name)))))
 
   (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :issue-reference)) relations
-                        &rest initargs &key name proposal)
-    (let* ((key     (if proposal
-                        (cons name proposal)
-                        name))
-           (target  (lookup key :issue transform))
-           (target  (when target
-                      (make-registered-reference transform target)))
-           (builder (builder transform)))
-      (apply #'reconstitute builder recurse :reference relations ; TODO back-links
-             :namespace :issue :target target initargs))) ; TODO why not kind :reference?
+                        &rest initargs &key proposal)
+    (let* ((builder           (builder transform))
+           (namespace         :issue)
+           (name              (reference-target-name builder node))
+           (key               (if proposal
+                                  (cons name proposal)
+                                  name))
+           (target            (lookup key namespace transform))
+           (registered-target (when target
+                                (make-registered-reference transform target)))
+           (title-node        (when target
+                                (compute-title transform namespace target node))))
+      (if target
+          (apply #'reconstitute builder recurse :reference
+                 (list* (list 1 '(:title . 1) title-node)
+                        (remove :target relations :key #'bp:normalize-relation)) ; TODO back-links
+                 :namespace namespace
+                 :target    registered-target
+                 initargs)
+          (apply #'reconstitute builder recurse :unresolved-reference
+                 relations :namespace namespace initargs))))
 
   (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :issue-annotation)) relations
-                        &rest initargs &key name proposal)
-    (let* ((key     (if proposal
-                        (cons name proposal)
-                        name))
-           (target  (lookup key :issue transform))
-           (target  (when target (make-registered-reference transform target)))
-           (builder (builder transform)))
-      (apply #'reconstitute builder recurse kind relations
-             :namespace :issue :target target initargs)))
+                        &rest initargs &key proposal)
+    (let* ((builder            (builder transform))
+           (namespace          :issue)
+           (target-name        (reference-target-name builder node))
+           (key                (if proposal
+                                   (cons target-name proposal)
+                                   target-name))
+           (target             (lookup key namespace transform))
+           (registered-target  (when target
+                                 (make-registered-reference transform target)))
+           (title-node        (when target
+                                (compute-title transform namespace target node))))
+      (if target
+          (apply #'reconstitute builder recurse kind
+                 (list* (list 1 '(:title . 1) title-node)
+                        (remove :target relations :key #'bp:normalize-relation))
+                 :namespace namespace :target registered-target initargs)
+          (apply #'reconstitute builder recurse kind relations
+                 :namespace namespace :target nil initargs))))
 
   (defmethod link-node ((transform build-references) recurse
                         relation relation-args node (kind (eql :possible-reference)) relations
-                        &rest initargs &key name namespace must-resolve?)
-    (let ((environment (environment transform))
-          (builder     (builder transform)))
+                        &rest initargs &key namespace must-resolve?)
+    (let* ((environment (environment transform))
+           (builder     (builder transform))
+           (name        (reference-target-name builder node)))
       (multiple-value-bind (namespaces name*)
           (cond (namespace
                  (values (a:ensure-list namespace) (normalize name)))
@@ -451,27 +484,20 @@
                                (cons namespace target)))
                            namespaces)))
           (cond (match
-                    (destructuring-bind (namespace . target) match
-                      (apply #'reconstitute builder recurse :reference relations
-                                                            :name      name*
-                                                            :namespace namespace
-                                                            :target    (make-registered-reference
-                                                                        transform target)
-                                                            (a:remove-from-plist initargs :name :namespace))
-                      #+no (apply #'bp:make+finish-node builder :reference
-                                  :name      name*
-                                  :namespace namespace
-                                  :target    target
-                                  (a:remove-from-plist initargs :name :namespace))))
+                 (destructuring-bind (namespace . target) match
+                   (let ((title-node (or (bp:node-relation builder :title node)
+                                         (compute-title transform namespace target node))))
+                     (bp:make+finish-node+relations
+                      builder :reference (list* :namespace namespace :target target
+                                                (bp:node-initargs builder node))
+                      (list (list 1 '(:title . 1) title-node))))))
                 (must-resolve?
                  (let ((namespace (typecase namespace
                                     (null "?")
                                     (cons (first namespace))
                                     (t    namespace))))
-                   (apply #'reconstitute builder recurse :reference relations
-                                                         :namespace namespace
-                                                         :target    nil
-                                                         (a:remove-from-plist initargs :nanespace))))
+                   (apply #'reconstitute builder recurse :unresolved-reference
+                          relations :namespace namespace initargs)))
                 (t
                  (bp:node (builder :chunk :content name))))))))
 

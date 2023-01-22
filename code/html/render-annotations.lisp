@@ -5,16 +5,16 @@
       (let ((builder (transform:builder transform)))
         (labels ((in-line? (node)
                    (case (bp:node-kind builder node)
-                     (:chunk     t)
-                     (:reference t)
-                     (:ftype     t)
+                     (:chunk                             t)
+                     ((:reference :unresolved-reference) t)
+                     (:ftype                             t)
                      (t          nil)))
                  (content ()
-                   (link transform node target :issue
-                         (lambda ()
-                           (issue-reference-title
-                            builder node target :explicit? t)))
-                   (funcall recurse :relations '((:element . *)))))
+                   (if target
+                       (link transform node target :issue
+                             (a:curry #'recurse '(:title . 1)))
+                       (broken-link #'recurse :issue))
+                   (recurse '(:element . *))))
           (if (every #'in-line? (bp:node-relation builder '(:element . *) node))
               (span "issue-annotation" #'content)
               (div "issue-annotation" #'content))))

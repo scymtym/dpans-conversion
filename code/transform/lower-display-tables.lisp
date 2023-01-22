@@ -52,9 +52,9 @@
                (namespace (cdr context)))
           (bp:node (builder :cell) ; TODO reconstitute builder recurse kind
             (bp:? (:element . *) (unless (a:emptyp name)
-                                   (bp:node (builder :possible-reference :name          name
-                                                                         :namespace     namespace
-                                                                         :must-resolve? t))))))
+                                   (bp:node (builder :possible-reference :namespace     namespace
+                                                                         :must-resolve? t)
+                                     (1 (:target . 1) (bp:node (builder :chunk :content name))))))))
         #+no (call-with-environment
          #'call-next-method
          transform '((:display? . :traversal)) `((:cell . ,(cdr context))))

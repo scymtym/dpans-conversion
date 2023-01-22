@@ -33,8 +33,10 @@
 
 (defun issue-list (builder issues)
   (let ((sorted (sort (copy-seq issues) #'string-lessp
-                      :key (lambda (issue)
-                             (getf (bp:node-initargs builder issue) :name)))))
+                      :key (lambda (issue-reference)
+                             (let ((target (bp:node-relation
+                                            builder '(:target . 1) issue-reference)))
+                               (to-string builder target))))))
     (bp:node (builder :item-list)
       (* (:element . *) (map 'list (lambda (issue)
                                      (bp:node (builder :list-item)
@@ -60,7 +62,8 @@
     ;;
     (maphash (lambda (name issue)
                (let ((process (getf (bp:node-initargs builder issue) :process)))
-                 (push (bp:node (builder :issue-reference :name name))
+                 (push (bp:node (builder :issue-reference)
+                         (1 (:target . 1) (bp:node (builder :chunk :content name))))
                        (gethash process groups))))
              (issues transform))
     ;;

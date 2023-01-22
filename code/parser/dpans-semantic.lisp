@@ -64,9 +64,10 @@
                     #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@T] issue ~A~%" *depth* name)))
                #+dpans-debug (:transform (seq) (decf *depth*) (format *trace-output* "~V@TX issue ~A~%" *depth* name) (:fail))
                #-dpans-debug (:transform (seq) (:fail)))))
-  (bp:node* (:issue-annotation :name     name
-                               :proposal proposal
-                               :bounds   (cons start end))
+  (bp:node* (:issue-annotation :proposal  proposal
+                               :explicit? t
+                               :bounds    (cons start end))
+    (1 (:target  . 1) (bp:node* (:chunk :content name)))
     (* (:element . *) (nreverse elements))))
 
 ;;; Name
@@ -298,8 +299,9 @@
                                      (element environment))))
                   #\) (? #\}))))
   (if type
-      (bp:node* (:typeref :bounds (cons start end))
-        (1 (:name . 1) type))
+      (bp:node* (:unresolved-reference :namespace :type
+                            :bounds    (cons start end))
+        (1 (:target . 1) type))
       (bp:node* (:eql-specializer :bounds (cons start end))
         (* (:value . *) (nreverse value)))))
 

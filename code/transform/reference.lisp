@@ -15,7 +15,6 @@
 ;;;; must build a map from all input nodes to all output nodes and use
 ;;;; that map to update the target of each reference at the end of the
 ;;;; transformation.
-;;;; 
 
 (cl:in-package #:dpans-conversion.transform)
 

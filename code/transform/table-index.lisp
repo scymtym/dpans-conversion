@@ -27,9 +27,10 @@
   (let ((items '()))
     (maphash
      (lambda (key title)
-       (let ((reference (bp:node (builder :reference :namespace :figure ; TODO better use the table objects
-                                                     :name      key)
-                          (1 (:title . 1) title))))
+       (let ((reference (bp:node (builder :unresolved-reference :namespace :figure ; TODO better use the table objects
+                                                     )
+                          (1 (:target . 1) (bp:node (builder :chunk :content key)))
+                          (1 (:title  . 1) title))))
          (push (bp:node (builder :list-item)
                  (1 (:body . *) reference))
                items)))
