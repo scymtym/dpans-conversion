@@ -35,12 +35,16 @@
           (uiop:quit 1))))
     (describe configuration)
     (terpri)
-    (let ((format           (opt:value "format"           :configuration configuration))
-          (input-directory  (opt:value "input-directory"  :configuration configuration))
-          (output-directory (opt:value "output-directory" :configuration configuration))
-          (title-prefix     (opt:value "title-prefix"     :configuration configuration))
-          (sidebar?         (opt:value "with-sidebar"     :configuration configuration))
-          (inspect?         (opt:value "inspect"          :configuration configuration)))
+    (let ((format                 (opt:value "format"                :configuration configuration))
+          (input-directory        (opt:value "input-directory"       :configuration configuration))
+          (output-directory       (opt:value "output-directory"      :configuration configuration))
+          (title-prefix           (opt:value "title-prefix"          :configuration configuration))
+          (issue-annotations?     (opt:value "issue-annotations"     :configuration configuration))
+          (reviewer-annotations?  (opt:value "reviewer-annotations"  :configuration configuration))
+          (editor-annotations?    (opt:value "editor-annotations"    :configuration configuration))
+          (removable-annotations? (opt:value "removable-annotations" :configuration configuration))
+          (sidebar?               (opt:value "with-sidebar"          :configuration configuration))
+          (inspect?               (opt:value "inspect"               :configuration configuration)))
       (handler-bind ((error (lambda (condition)
                               (princ condition)
                               (terpri)
@@ -48,6 +52,14 @@
         (ecase format
           (:html (dpans-conversion::to-html input-directory output-directory
                                             :title-prefix title-prefix
+                                            :annotations  (append (when issue-annotations?
+                                                                    '(:issue))
+                                                                  (when reviewer-annotations?
+                                                                    '(:reviewer-note))
+                                                                  (when editor-annotations?
+                                                                    '(:editor-note))
+                                                                  (when removable-annotations?
+                                                                    '(:removable-text)))
                                             :use-sidebar  sidebar?
                                             :inspect?     inspect?))
           (:sexp (dpans-conversion::to-sexp input-directory output-directory)))))))
