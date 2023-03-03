@@ -46,9 +46,6 @@
 (defun collect-static-files (files pathname-defaults)
   (flet ((file (name)
            (let* ((pathname (pathname name))
-                  (merged   (merge-pathnames
-                             pathname pathname-defaults)))
-             (cons pathname (if nil
-                                (a:read-file-into-string merged)
-                                merged)))))
+                  (merged   (merge-pathnames pathname pathname-defaults)))
+             (cons pathname (a:read-file-into-string merged)))))
     (map 'list #'file files)))
