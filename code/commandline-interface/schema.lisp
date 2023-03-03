@@ -42,7 +42,7 @@
    #.(format nil "Controls whether to generate annotations for removable text."))
   ;; Debugging
   ("inspect"               :type    'boolean
-                           :default t
+                           :default nil
    :documentation
    #.(format nil "Controls whether a graphical inspector for exploring the document ~
     object graph should be displayed.")))
