@@ -58,6 +58,8 @@ main {
     width: 60em;
     max-width: 80vw;
     margin-left: 5vw;
+    text-align: justify;
+    hyphens: auto;
 }
 
 footer {
