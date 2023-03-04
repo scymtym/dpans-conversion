@@ -96,7 +96,7 @@
 
 ;;; Attach captions to figures
 ;;;
-;;; Most applies to figures of the form
+;;; Mostly applies to figures of the form
 ;;;
 ;;;   \boxfig
 ;;;   …
