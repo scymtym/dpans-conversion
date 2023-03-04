@@ -17,23 +17,22 @@
                                               (nreverse content-fragments))))
                           (setf content-fragments '())
                           (list (bp:make-node builder :chunk :content content))))))
-               (let ((result (a:mappend
-                       (lambda (node)
-                         (case (bp:node-kind builder node)
-                           (:chunk
-                            (let ((initargs (bp:node-initargs builder node)))
-                              (cond ((typep initargs '(cons (eql :content)
-                                                            (cons string null)))
-                                     (push (second initargs) content-fragments)
-                                     (if (eq node last)
-                                         (flush-chunk)
-                                         '()))
-                                    (t
-                                     (append (flush-chunk) (list node))))))
-                           (t
-                            (append (flush-chunk) (list node)))))
-                       nodes)))
-                 result))))
+               (a:mappend
+                (lambda (node)
+                  (case (bp:node-kind builder node)
+                    (:chunk
+                     (let ((initargs (bp:node-initargs builder node)))
+                       (cond ((typep initargs '(cons (eql :content)
+                                                (cons string null)))
+                              (push (second initargs) content-fragments)
+                              (if (eq node last)
+                                  (flush-chunk)
+                                  '()))
+                             (t
+                              (append (flush-chunk) (list node))))))
+                    (t
+                     (append (flush-chunk) (list node)))))
+                nodes))))
          (simplify-elements (builder recurse normal-thunk)
            (let* ((maybe-elements (first (funcall recurse :relations '((:element . *)))))
                   (elements       (maybe-merge-chunks
