@@ -183,3 +183,5 @@
 
   + TeX to Unicode (for HTML and CLIM renderes) ::
        https://golopot.github.io/tex-to-unicode/
+
+  + HTML Annotations :: https://github.com/molly/annotate
