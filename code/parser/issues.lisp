@@ -89,6 +89,7 @@
                           (seq :any (and (not (whitespace-including-newline)) :any))
                           (or #\- #\. #\&))))
        2)
+  (when (every #'digit-char-p name) (:fail))
   (coerce (nreverse name) 'string))
 
 (defrule proposal-name ()
