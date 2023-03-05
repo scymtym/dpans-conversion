@@ -81,10 +81,16 @@
                   (when (bp:node-relation builder '(:related-issue . *) node)
                     (h 2 "Related issues")
                     (cxml:with-element "ul"
-                      (funcall recurse :relations '(:related-issue))))
+                      (funcall recurse :relations '(:related-issue)
+                                       :function  (lambda (recurse &rest args)
+                                                    (cxml:with-element "li"
+                                                      (apply #'visit (a:curry recurse :function #'visit) args))))))
                   (when (bp:node-relation builder '(:required-issue . *) node)
                     (h 2 "Required issues")
                     (cxml:with-element "ul"
-                      (funcall recurse :relations '(:required-issue))))
+                      (funcall recurse :relations '(:required-issue)
+                                       :function  (lambda (recurse &rest args)
+                                                    (cxml:with-element "li"
+                                                      (apply #'visit (a:curry recurse :function #'visit) args))))))
                   (funcall recurse :relations '(:section))))))
       (bp:walk-nodes builder #'visit node))))
