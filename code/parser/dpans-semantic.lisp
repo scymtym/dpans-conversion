@@ -413,7 +413,7 @@
 (defrule component-label (environment)
     (bounds (start end)
       (seq/ws "\\label" (<- name (label-name))
-              (* (<<- elements (and (not (or "\\label" "\\endcom" "\\endissue"))
+              (* (<<- elements (and (not (or "\\label" "\\endcom" "\\endissue" "\\realtypespec"))
                                     (element environment))))))
   (bp:node* (:part :bounds (cons start end))
     (1 (:name    . 1) name)
