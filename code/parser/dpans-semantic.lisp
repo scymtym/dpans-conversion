@@ -83,6 +83,8 @@
   (let ((name (coerce (nreverse characters) 'string)))
     (bp:node* (:symbol :name name :setf? setf? :bounds (cons start end)))))
 
+;;; Syntax
+
 #+old (defrule entry () ; TODO integrate with `name' and/or `symbol'?
     (bounds (start end)
       (seq "\\entry{" (or (seq/ws #\{ (+ (or #\$ (<<- characters (and (not #\}) :any)))) #\}) ; TODO optional block is a hack
@@ -93,10 +95,10 @@
 
 (defrule entry (environment)
     (bounds (start end)
-            (seq "\\entry{"
-                 (or (seq/ws #\{ (<- name (component-name)) #\}) ; TODO optional block is a hack
-                     (<- name (component-name)))
-                 #\}))
+      (seq "\\entry{"
+           (or (seq/ws #\{ (<- name (component-name)) #\}) ; TODO optional block is a hack
+               (<- name (component-name)))
+           #\}))
   name)
 
 (defrule entry-list (environment)
@@ -104,8 +106,6 @@
                 (user-macro-application environment))
             (skippable* environment)))
   (nreverse names))
-
-;;; Syntax
 
 (macrolet
     ((define ()
