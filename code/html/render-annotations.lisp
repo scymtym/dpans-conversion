@@ -4,11 +4,8 @@
   (if (render-annotation? transform :issue)
       (let ((builder (transform:builder transform)))
         (labels ((in-line? (node)
-                   (case (bp:node-kind builder node)
-                     (:chunk                             t)
-                     ((:reference :unresolved-reference) t)
-                     (:ftype                             t)
-                     (t          nil)))
+                   (member (bp:node-kind builder node)
+                           '(:chunk :reference :unresolved-reference :ftype)))
                  (content ()
                    (if target
                        (link transform node target :issue
