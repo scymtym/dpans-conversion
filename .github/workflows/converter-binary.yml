@@ -1,0 +1,66 @@
+name: Converter Binary
+
+on: [push]
+
+jobs:
+  binary:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: install-platform-dependencies
+        run: |
+          DEBIAN_FRONTEND=noninteractive sudo apt-get update -y         \
+           && DEBIAN_FRONTEND=noninteractive sudo apt-get install -y    \
+                git ca-certificates curl sbcl gcc make time libzstd-dev
+
+      - name: sbcl
+        run: |
+          cd /tmp
+          git clone -b sbcl-2.3.0 https://github.com/sbcl/sbcl \
+                && cd sbcl                                     \
+                && sh make.sh --fancy --prefix=/tmp/sbcl       \
+                && sh install.sh
+
+      - name: quicklisp
+        run: |
+          cd /tmp
+          curl -O https://beta.quicklisp.org/quicklisp.lisp                     \
+            && /tmp/sbcl/bin/sbcl                                               \
+                 --noinform --no-userinit --disable-debugger                    \
+                 --load quicklisp.lisp                                          \
+                 --eval '(quicklisp-quickstart:install :path "/tmp/quicklisp")' \
+                 --quit
+
+      - name: checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          path: dpans-conversion
+
+      - name: local-projects
+        run: |
+          mv dpans-conversion /tmp/quicklisp/local-projects/
+          cd /tmp/quicklisp/local-projects                                                               \
+            && git clone -b online-lisp-meeting https://github.com/s-expressionists/eclector             \
+            && git clone -b master              https://github.com/scymtym/architecture.builder-protocol \
+            && git clone -b future              https://github.com/scymtym/text.source-location          \
+            && git clone -b future              https://github.com/scymtym/computation.environment       \
+            && git clone -b future              https://github.com/scymtym/parser.packrat
+
+      - name: build
+        run: |
+          /tmp/sbcl/bin/sbcl                                                     \
+            --noinform --dynamic-space-size 8Gb --no-userinit --disable-debugger \
+            --load /tmp/quicklisp/setup.lisp                                     \
+            --eval '(ql:quickload :dpans-conversion/commandline-interface)'      \
+            --eval '(asdf:make "dpans-conversion/commandline-interface")'
+
+      - name: gather-artifacts
+        run: |
+          mkdir -p artifacts
+          mv -v /tmp/quicklisp/local-projects/dpans-conversion/dpans-converter artifacts/
+
+      - name: upload-artifacts
+        uses: actions/upload-artifact@v1
+        with:
+          name: dpans-converter
+          path: artifacts
